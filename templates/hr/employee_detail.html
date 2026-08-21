@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Employee {{ employee.employee_id }} - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>{{ employee.full_name }}</h1>
+            <div class="page-actions">
+                {% if can_manage_hr %}
+                <a href="{% url 'hr_employee_edit' employee.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                <a href="{% url 'hr_employee_delete' employee.pk %}" class="btn btn-danger btn-sm">Delete</a>
+                {% endif %}
+                <a href="{% url 'hr_employees' %}" class="btn btn-ghost btn-sm">← All Employees</a>
+            </div>
+        </div>
+
+        <div class="detail-grid" style="margin-bottom:20px;">
+            <div class="card">
+                <div class="detail-item"><div class="detail-label">Employee ID</div><div class="detail-value">{{ employee.employee_id }}</div></div>
+                <div class="detail-item"><div class="detail-label">Department</div><div class="detail-value">{{ employee.department.name|default:"-" }}</div></div>
+                <div class="detail-item"><div class="detail-label">Designation</div><div class="detail-value">{{ employee.designation.title|default:"-" }}</div></div>
+                <div class="detail-item"><div class="detail-label">Status</div><div class="detail-value"><span class="badge badge-{% if employee.status == 'active' %}success{% elif employee.status == 'on_leave' %}warning{% else %}danger{% endif %}">{{ employee.get_status_display }}</span></div></div>
+            </div>
+            <div class="card">
+                <div class="detail-item"><div class="detail-label">Joining Date</div><div class="detail-value">{{ employee.joining_date|date:"d M Y" }}</div></div>
+                <div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">{{ employee.phone|default:"-" }}</div></div>
+                <div class="detail-item"><div class="detail-label">Email</div><div class="detail-value">{{ employee.email|default:"-" }}</div></div>
+                <div class="detail-item"><div class="detail-label">CNIC</div><div class="detail-value">{{ employee.cnic|default:"-" }}</div></div>
+            </div>
+            <div class="card">
+                <div class="detail-item"><div class="detail-label">Monthly Gross</div><div class="detail-value" style="color:var(--accent-green);">Rs. {{ monthly_gross|floatformat:0 }}</div></div>
+                <div class="detail-item"><div class="detail-label">Salary Slips</div><div class="detail-value">{{ slips|length }}</div></div>
+            </div>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header">
+                <h3>Salary Structure</h3>
+                {% if can_manage_hr %}
+                <a href="{% url 'hr_employee_salary_add' employee.pk %}" class="btn btn-primary btn-sm">+ Add Component</a>
+                {% endif %}
+            </div>
+            <div class="table-container">
+                {% if salaries %}
+                <table>
+                    <thead><tr><th>Component</th><th>Type</th><th>Amount</th>{% if can_manage_hr %}<th class="no-sort">Action</th>{% endif %}</tr></thead>
+                    <tbody>
+                        {% for es in salaries %}
+                        <tr>
+                            <td><strong>{{ es.component.name }}</strong></td>
+                            <td><span class="badge badge-{% if es.component.component_type == 'earning' %}success{% else %}warning{% endif %}">{{ es.component.get_component_type_display }}</span></td>
+                            <td>Rs. {{ es.amount|floatformat:0 }}</td>
+                            {% if can_manage_hr %}
+                            <td><form method="post" action="{% url 'hr_employee_salary_delete' es.pk %}" onsubmit="return confirm('Remove this component?');">{% csrf_token %}<button type="submit" class="btn btn-danger btn-sm">Remove</button></form></td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state"><div class="empty-icon">📊</div><h3>No Salary Structure</h3><p>Add salary components to define this employee's monthly pay.</p></div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>Salary History</h3></div>
+            <div class="table-container">
+                {% if slips %}
+                <table>
+                    <thead><tr><th>Period</th><th>Gross</th><th>Deductions</th><th>Net</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for slip in slips %}
+                        <tr class="clickable" onclick="window.location='{% url 'hr_salary_slip_detail' slip.pk %}'">
+                            <td><strong>{{ slip.run.period_label }}</strong></td>
+                            <td>Rs. {{ slip.gross|floatformat:0 }}</td>
+                            <td>Rs. {{ slip.total_deductions|floatformat:0 }}</td>
+                            <td style="font-weight:600;">Rs. {{ slip.net|floatformat:0 }}</td>
+                            <td><span class="badge badge-{% if slip.status == 'paid' %}success{% elif slip.status == 'approved' %}info{% else %}secondary{% endif %}">{{ slip.get_status_display }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state"><div class="empty-icon">💰</div><h3>No Salary Slips</h3></div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

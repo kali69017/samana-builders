@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Project Finance - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Project Investment &amp; Finance</h1>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>Project-wise Budget, Costs &amp; Profit/Loss</h3></div>
+            <div class="table-container">
+                {% if rows %}
+                <table class="sortable">
+                    <thead>
+                        <tr>
+                            <th>Project</th>
+                            <th>Investment</th>
+                            <th>Budget</th>
+                            <th>Costs</th>
+                            <th>Remaining</th>
+                            <th>Revenue</th>
+                            <th>Profit / Loss</th>
+                            <th class="no-sort">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in rows %}
+                        <tr>
+                            <td><strong>{{ row.project.name }}</strong></td>
+                            <td>{% if row.investment %}Rs. {{ row.investment.total_investment|floatformat:0 }}{% else %}—{% endif %}</td>
+                            <td>{% if row.budget %}Rs. {{ row.budget.total_budget|floatformat:0 }}{% else %}—{% endif %}</td>
+                            <td style="font-weight:600;">Rs. {{ row.total_cost|floatformat:0 }}</td>
+                            <td>{% if row.remaining_budget is not None %}<span class="badge badge-{% if row.remaining_budget >= 0 %}success{% else %}danger{% endif %}">Rs. {{ row.remaining_budget|floatformat:0 }}</span>{% else %}—{% endif %}</td>
+                            <td>Rs. {{ row.revenue|floatformat:0 }}</td>
+                            <td style="font-weight:700; color:{% if row.profit >= 0 %}var(--accent-green){% else %}var(--accent-red){% endif %};">Rs. {{ row.profit|floatformat:0 }}</td>
+                            <td>
+                                <div class="table-actions">
+                                    <a href="{% url 'finance_project_budget' row.project.pk %}" class="btn btn-secondary btn-sm">Budget</a>
+                                    <a href="{% url 'finance_project_investment' row.project.pk %}" class="btn btn-secondary btn-sm">Investment</a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state"><div class="empty-icon">📊</div><h3>No Projects</h3><p>Add projects to track their investment, budget and costs.</p></div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

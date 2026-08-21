@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -226,10 +228,24 @@ class InstallmentViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def mark_paid(self, request, pk=None):
         installment = self.get_object()
-        installment.status = 'paid'
+        booking = installment.plan.booking
+
+        total = installment.amount + installment.late_fee
+        new_paid = Decimal(str(request.data.get('paid_amount', total)))
+        delta = new_paid - installment.paid_amount
+
+        installment.paid_amount = new_paid
+        installment.status = 'paid' if new_paid >= total else 'partial'
         installment.paid_date = request.data.get('paid_date', timezone.now().date())
-        installment.paid_amount = request.data.get('paid_amount', installment.amount)
         installment.save()
+
+        # Keep booking revenue (advance_paid) consistent with the adjustment.
+        if delta > 0:
+            booking.advance_paid = min(booking.advance_paid + delta, booking.total_amount)
+            if booking.remaining_balance <= 0:
+                booking.status = 'completed'
+            booking.save()
+
         return Response(InstallmentSerializer(installment).data)
 
 

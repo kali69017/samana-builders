@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Lead Detail - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    <div class="top-bar">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <span class="top-bar-title">Lead Detail</span>
+        <div class="top-bar-actions"></div>
+    </div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>{{ lead.display_name }}</h1>
+            <div class="page-actions">
+                {% if lead.status != 'converted' %}
+                <a href="{% url 'lead_convert' lead.pk %}" class="btn btn-success btn-sm">Convert to Customer</a>
+                {% endif %}
+                <a href="{% url 'lead_edit' lead.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                {% if can_delete %}
+                <a href="{% url 'lead_delete' lead.pk %}" class="btn btn-danger btn-sm">Delete</a>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="detail-grid" style="margin-bottom:24px;">
+            <div class="card">
+                <div class="detail-item"><div class="detail-label">Status</div><div class="detail-value">
+                    <span class="badge badge-{% if lead.status == 'converted' %}success{% elif lead.status == 'lost' %}danger{% elif lead.status == 'qualified' %}info{% elif lead.status == 'contacted' %}warning{% else %}secondary{% endif %}">{{ lead.get_status_display }}</span>
+                </div></div>
+                <div class="detail-item"><div class="detail-label">Source</div><div class="detail-value">{{ lead.get_source_display }}</div></div>
+                <div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">{{ lead.phone|default:"-" }}</div></div>
+                <div class="detail-item"><div class="detail-label">Email</div><div class="detail-value">{{ lead.email|default:"-" }}</div></div>
+            </div>
+            <div class="card">
+                <div class="detail-item"><div class="detail-label">Assigned To</div><div class="detail-value">{% if lead.assigned_to %}{{ lead.assigned_to.get_full_name|default:lead.assigned_to.username }}{% else %}-{% endif %}</div></div>
+                <div class="detail-item"><div class="detail-label">Interest Project</div><div class="detail-value">{{ lead.interest_project.name|default:"-" }}</div></div>
+                <div class="detail-item"><div class="detail-label">Budget</div><div class="detail-value">{% if lead.budget %}Rs. {{ lead.budget|floatformat:0 }}{% else %}-{% endif %}</div></div>
+                <div class="detail-item"><div class="detail-label">Created</div><div class="detail-value">{{ lead.created_at|date:"d M Y H:i" }}</div></div>
+            </div>
+            {% if lead.converted_customer %}
+            <div class="card" style="border-color:var(--accent-green);">
+                <div class="detail-item"><div class="detail-label">Converted To</div><div class="detail-value">
+                    <a href="{% url 'customer_detail' lead.converted_customer.pk %}">{{ lead.converted_customer.customer_id }} — {{ lead.converted_customer.full_name }}</a>
+                </div></div>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if lead.notes %}
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>Notes</h3></div>
+            <p style="white-space:pre-line;">{{ lead.notes }}</p>
+        </div>
+        {% endif %}
+
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>Quick Status Update</h3></div>
+            <form method="post" action="{% url 'lead_status_update' lead.pk %}" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{% url 'lead_detail' lead.pk %}">
+                <select name="status" class="form-control" style="width:auto; min-width:160px;">
+                    {% for key, label in lead.LEAD_STATUS_CHOICES %}
+                    <option value="{{ key }}" {% if lead.status == key %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary btn-sm">Update Status</button>
+            </form>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>Timeline / Notes</h3></div>
+            <form method="post" action="{% url 'lead_note_add' lead.pk %}">
+                {% csrf_token %}
+                <div class="form-group">
+                    {{ note_form.note }}
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm">Add Note</button>
+            </form>
+
+            {% if notes %}
+            <div class="timeline" style="margin-top:24px;">
+                {% for note in notes %}
+                <div class="timeline-item">
+                    <div class="timeline-date">{{ note.created_at|date:"d M Y H:i" }} · {{ note.created_by.username|default:"System" }}</div>
+                    <div class="timeline-title">{{ note.note }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </main>
+</div>
+{% endblock %}

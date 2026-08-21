@@ -87,6 +87,10 @@ class Booking(models.Model):
     advance_paid = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='walk_in')
+    agent = models.ForeignKey(
+        'core.Agent', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='bookings'
+    )
     cancellation_policy = models.ForeignKey(CancellationPolicy, on_delete=models.SET_NULL, null=True, blank=True)
     cancellation_fee = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     possession_date = models.DateField(null=True, blank=True)
@@ -125,13 +129,20 @@ class Booking(models.Model):
     @property
     def remaining_balance(self):
         return self.total_amount - self.advance_paid
-    
+
     @property
     def payment_progress(self):
         if self.total_amount > 0:
             return int((self.advance_paid / self.total_amount) * 100)
         return 0
-    
+
+    @property
+    def agent_commission(self):
+        """Commission earned by the sourcing agent on this booking."""
+        if self.agent and self.agent.commission_rate:
+            return (self.total_amount * self.agent.commission_rate) / 100
+        return 0
+
     class Meta:
         ordering = ['-created_at']
 

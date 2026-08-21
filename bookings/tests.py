@@ -49,20 +49,26 @@ class InstallmentPlanFormTest(TestCase):
         form_data = {
             'total_installments': '12',
             'installment_amount': '400000',
+            'down_payment_amount': '100000',
             'start_date': date.today().isoformat(),
+            'frequency': 'monthly',
             'due_day': '1',
-            'late_fee_per_day': '1000'
+            'late_fee_per_day': '1000',
+            'grace_period_days': '0',
         }
         form = InstallmentPlanForm(data=form_data)
         self.assertTrue(form.is_valid())
-    
+
     def test_invalid_due_day(self):
         form_data = {
             'total_installments': '12',
             'installment_amount': '400000',
+            'down_payment_amount': '100000',
             'start_date': date.today().isoformat(),
+            'frequency': 'monthly',
             'due_day': '32',
-            'late_fee_per_day': '1000'
+            'late_fee_per_day': '1000',
+            'grace_period_days': '0',
         }
         form = InstallmentPlanForm(data=form_data)
         self.assertFalse(form.is_valid())
@@ -72,7 +78,7 @@ class InstallmentPlanFormTest(TestCase):
 class BookingViewTest(TestCase):
     def setUp(self):
         self.client = Client()
-        self.user = User.objects.create_user('testuser', 'test@example.com', 'testpass123')
+        self.user = User.objects.create_superuser('testuser', 'test@example.com', 'testpass123')
         self.client.login(username='testuser', password='testpass123')
         self.customer = Customer.objects.create(
             first_name='Ahmed', last_name='Khan',

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Project, ProjectPhase, Plot, PlotFeature, PlotDocument, PriceHistory, PlotImport
+from .models import Project, ProjectPhase, Plot, PlotFeature, PlotDocument, PriceHistory, PlotImport, ProjectMilestone
 
 
 @admin.register(Project)
@@ -74,3 +74,11 @@ class PlotImportAdmin(admin.ModelAdmin):
     list_display = ['project', 'status', 'plots_created', 'plots_failed', 'uploaded_by', 'uploaded_at']
     list_filter = ['status', 'project']
     readonly_fields = ['uploaded_at', 'plots_created', 'plots_failed', 'error_log']
+
+
+@admin.register(ProjectMilestone)
+class ProjectMilestoneAdmin(admin.ModelAdmin):
+    list_display = ['project', 'title', 'status', 'target_date', 'completed_date', 'order']
+    list_filter = ['status', 'project']
+    search_fields = ['title', 'project__name']
+    readonly_fields = ['created_at', 'updated_at']

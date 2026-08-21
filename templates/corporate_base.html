@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'css/corporate.css' %}?v=4">
+  <link rel="stylesheet" href="{% static 'css/corporate.css' %}?v=6">
 </head>
 <body>
 
@@ -21,17 +21,15 @@
       <nav class="nav-links" aria-label="Primary">
         <a href="#home" data-section="home">Home</a>
         <a href="#about" data-section="about">About</a>
-        <a href="#services" data-section="services">Services</a>
         <a href="#projects" data-section="projects">Projects</a>
-        <a href="#gallery" data-section="gallery">Gallery</a>
+        <a href="#vision" data-section="vision">Vision &amp; Mission</a>
         <a href="#contact" data-section="contact">Contact</a>
       </nav>
 
       <div class="nav-actions">
-        <a class="nav-phone" href="tel:+923001234567">+92-300-1234567</a>
         <a class="nav-staff-login" href="{% url 'login' %}">Staff Login</a>
         <a href="#contact" class="btn btn-gold btn-book">Book Now</a>
-        <button class="hamburger" id="hamburger" aria-label="Open menu">
+        <button class="hamburger" id="hamburger" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
           <span></span><span></span><span></span>
         </button>
       </div>
@@ -39,16 +37,16 @@
   </header>
 
   <!-- ================= MOBILE MENU ================= -->
-  <div class="mobile-menu" id="mobile-menu">
+  <div class="mobile-menu" id="mobile-menu" aria-hidden="true">
+    <button class="mobile-menu-close" id="mobile-menu-close" aria-label="Close menu">&times;</button>
     <div class="mobile-menu-content">
       <a href="#home">Home</a>
       <a href="#about">About</a>
-      <a href="#services">Services</a>
       <a href="#projects">Projects</a>
+      <a href="#vision">Vision &amp; Mission</a>
       <a href="#contact">Contact</a>
-      <a href="tel:+923001234567">+92-300-1234567</a>
       <a class="btn btn-outline" href="{% url 'login' %}">Staff Login</a>
-      <a class="btn btn-gold" href="#contact">Book Now</a>
+      <a class="btn btn-gold" href="#contact">Book a Consultation</a>
     </div>
   </div>
 
@@ -62,7 +60,7 @@
 
       <div class="footer-about">
         <a href="#home" class="brand"><span class="samana">Samana</span> <span class="builders">Builders</span></a>
-        <p class="footer-tagline">Building Trust, Building the Life You Deserve &mdash; premium real estate developments across Pakistan since 2011.</p>
+        <p class="footer-tagline">Building Trust, Building the Life You Deserve. Premium real estate developments across Pakistan.</p>
         <div class="footer-social">
           <a href="#" aria-label="Facebook">
             <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
@@ -85,20 +83,20 @@
           <li><a href="#home">Home</a></li>
           <li><a href="#about">About Us</a></li>
           <li><a href="#projects">Projects</a></li>
-          <li><a href="#services">Services</a></li>
+          <li><a href="#vision">Vision &amp; Mission</a></li>
           <li><a href="#contact">Contact</a></li>
           <li><a href="{% url 'login' %}">Staff Login</a></li>
         </ul>
       </div>
 
       <div class="footer-col">
-        <h4 class="footer-heading">Our Services</h4>
+        <h4 class="footer-heading">Explore</h4>
         <ul class="footer-links">
-          <li><a href="#services">Residential</a></li>
-          <li><a href="#services">Commercial</a></li>
-          <li><a href="#services">Interior Design</a></li>
-          <li><a href="#services">Property Management</a></li>
-          <li><a href="#services">Investment Consulting</a></li>
+          <li><a href="#about">About Us</a></li>
+          <li><a href="#projects">Featured Projects</a></li>
+          <li><a href="#vision">Vision &amp; Mission</a></li>
+          <li><a href="#testimonials">Testimonials</a></li>
+          <li><a href="#location">Find Us</a></li>
         </ul>
       </div>
 
@@ -108,10 +106,6 @@
           <li>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 21s-7-5.4-7-11a7 7 0 0 1 14 0c0 5.6-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
             <span>Office No. 207, 2nd Floor, Shayan Iconic Tower, Plot No. 5-A, Delhi Mercantile Cooperative Society, Karachi, Pakistan</span>
-          </li>
-          <li>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .6 2.9a2 2 0 0 1-.4 1.8L8 9.6a16 16 0 0 0 6 6l1.2-1.3a2 2 0 0 1 1.8-.4c1 .3 1.9.5 2.9.6a2 2 0 0 1 1.7 2z"/></svg>
-            <a href="tel:+923001234567">+92-300-1234567</a>
           </li>
           <li>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
@@ -148,10 +142,14 @@
         if (!mobileMenu || !hamburger) return;
         var open = typeof force === 'boolean' ? force : !mobileMenu.classList.contains('open');
         mobileMenu.classList.toggle('open', open);
+        mobileMenu.setAttribute('aria-hidden', !open);
         hamburger.classList.toggle('open', open);
+        hamburger.setAttribute('aria-expanded', open);
         document.body.style.overflow = open ? 'hidden' : '';
       }
       if (hamburger) hamburger.addEventListener('click', function () { toggleMenu(); });
+      var menuClose = document.getElementById('mobile-menu-close');
+      if (menuClose) menuClose.addEventListener('click', function () { toggleMenu(false); });
 
       // Smooth scroll for in-page anchors (with fixed-navbar offset)
       document.querySelectorAll('a[href^="#"]').forEach(function (link) {
@@ -182,6 +180,20 @@
           });
         }, { rootMargin: '-45% 0px -50% 0px', threshold: 0 });
         sections.forEach(function (s) { io.observe(s); });
+      }
+
+      // Scroll-reveal animations
+      var revealEls = document.querySelectorAll('.reveal');
+      if ('IntersectionObserver' in window && revealEls.length) {
+        var rio = new IntersectionObserver(function (entries) {
+          entries.forEach(function (entry) {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('visible');
+              rio.unobserve(entry.target);
+            }
+          });
+        }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+        revealEls.forEach(function (el) { rio.observe(el); });
       }
     })();
   </script>

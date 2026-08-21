@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Attendance - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Attendance</h1>
+            <div class="page-actions">
+                {% if can_manage_hr %}
+                <a href="{% url 'hr_attendance_create' %}" class="btn btn-primary">+ Mark Attendance</a>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card animate-fade-up">
+            <form method="get">
+                <div class="filters">
+                    <input type="date" name="date" value="{{ date_filter }}" class="form-control" style="width:auto;">
+                    <button type="submit" class="btn btn-primary btn-sm">View</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>Attendance for {{ date_filter }}</h3><span class="badge badge-info">{{ records|length }} records</span></div>
+            <div class="table-container">
+                {% if records %}
+                <table class="sortable">
+                    <thead><tr><th>Employee</th><th>Status</th><th>Check In</th><th>Check Out</th><th>Notes</th></tr></thead>
+                    <tbody>
+                        {% for rec in records %}
+                        <tr>
+                            <td><strong>{{ rec.employee.full_name }}</strong><br><span style="font-size:12px;color:var(--text-2);">{{ rec.employee.employee_id }}</span></td>
+                            <td><span class="badge badge-{% if rec.status == 'present' %}success{% elif rec.status == 'absent' %}danger{% elif rec.status == 'leave' %}info{% else %}warning{% endif %}">{{ rec.get_status_display }}</span></td>
+                            <td>{{ rec.check_in|default:"-" }}</td>
+                            <td>{{ rec.check_out|default:"-" }}</td>
+                            <td>{{ rec.notes|default:"-" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state"><div class="empty-icon">📅</div><h3>No Attendance Records</h3><p>No attendance marked for this date.</p></div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

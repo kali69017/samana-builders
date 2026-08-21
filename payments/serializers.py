@@ -51,13 +51,18 @@ class RefundSerializer(serializers.ModelSerializer):
     approved_by_name = serializers.CharField(source='approved_by.username', read_only=True, allow_null=True)
     reason_display = serializers.CharField(source='get_reason_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = Refund
         fields = ['id', 'booking', 'booking_id_display', 'original_payment',
                   'amount', 'reason', 'reason_display', 'status', 'status_display',
                   'approved_by', 'approved_by_name', 'processed_date', 'notes', 'created_at']
         read_only_fields = ['id', 'processed_date', 'created_at']
+
+    def validate_amount(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError('Amount must be greater than 0')
+        return value
 
 
 # ─── PAYMENTS ────────────────────────────────────────────────────────────────────
@@ -87,7 +92,7 @@ class PaymentSerializer(serializers.ModelSerializer):
                             'created_by', 'verified_by', 'verified_at', 'receipt_generated']
     
     def validate_amount(self, value):
-        if value and value <= 0:
+        if value is not None and value <= 0:
             raise serializers.ValidationError('Amount must be greater than 0')
         return value
 
@@ -95,11 +100,12 @@ class PaymentSerializer(serializers.ModelSerializer):
 class PaymentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
-        fields = ['booking', 'installment', 'amount', 'payment_date', 'payment_method', 'payment_type',
+        fields = ['payment_id', 'booking', 'installment', 'amount', 'payment_date', 'payment_method', 'payment_type',
                   'reference_number', 'bank_name', 'cheque_number', 'cheque_date', 'notes', 'method_data']
-    
+        read_only_fields = ['payment_id']
+
     def validate_amount(self, value):
-        if value and value <= 0:
+        if value is not None and value <= 0:
             raise serializers.ValidationError('Amount must be greater than 0')
         return value
     

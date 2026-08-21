@@ -57,10 +57,11 @@ class CustomerSerializer(serializers.ModelSerializer):
 class CustomerCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
-        fields = ['first_name', 'last_name', 'email', 'phone', 'alternate_phone',
+        fields = ['customer_id', 'first_name', 'last_name', 'email', 'phone', 'alternate_phone',
                   'cnic', 'address', 'city', 'notes', 'is_active',
                   'document', 'image']
-    
+        read_only_fields = ['customer_id']
+
     def validate_cnic(self, value):
         import re
         pattern = r'^\d{5}-\d{7}-\d{1}$'

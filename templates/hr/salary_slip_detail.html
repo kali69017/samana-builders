@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Salary Slip - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Salary Slip — {{ slip.employee.full_name }}</h1>
+            <div class="page-actions">
+                <a href="{% url 'hr_payroll_run_detail' slip.run.pk %}" class="btn btn-secondary btn-sm">← Payroll</a>
+            </div>
+        </div>
+
+        <div class="detail-grid" style="margin-bottom:20px;">
+            <div class="card">
+                <div class="detail-item"><div class="detail-label">Employee</div><div class="detail-value">{{ slip.employee.full_name }} ({{ slip.employee.employee_id }})</div></div>
+                <div class="detail-item"><div class="detail-label">Period</div><div class="detail-value">{{ slip.run.period_label }}</div></div>
+                <div class="detail-item"><div class="detail-label">Status</div><div class="detail-value"><span class="badge badge-{% if slip.status == 'paid' %}success{% elif slip.status == 'approved' %}info{% else %}secondary{% endif %}">{{ slip.get_status_display }}</span></div></div>
+            </div>
+            <div class="card">
+                <div class="detail-item"><div class="detail-label">Gross</div><div class="detail-value">Rs. {{ slip.gross|floatformat:0 }}</div></div>
+                <div class="detail-item"><div class="detail-label">Deductions</div><div class="detail-value" style="color:var(--accent-red);">Rs. {{ slip.total_deductions|floatformat:0 }}</div></div>
+                <div class="detail-item"><div class="detail-label">Net Pay</div><div class="detail-value" style="color:var(--accent-green); font-size:18px;">Rs. {{ slip.net|floatformat:0 }}</div></div>
+            </div>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>Components</h3></div>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>Component</th><th>Type</th><th>Amount</th>{% if can_manage_hr and slip.status == 'draft' %}<th class="no-sort">Action</th>{% endif %}</tr></thead>
+                    <tbody>
+                        {% for item in items %}
+                        <tr>
+                            <td><strong>{{ item.component.name }}</strong></td>
+                            <td><span class="badge badge-{% if item.component.component_type == 'earning' %}success{% else %}warning{% endif %}">{{ item.component.get_component_type_display }}</span></td>
+                            <td>Rs. {{ item.amount|floatformat:0 }}</td>
+                            {% if can_manage_hr and slip.status == 'draft' %}
+                            <td><form method="post" action="{% url 'hr_salary_slip_remove_item' item.pk %}" onsubmit="return confirm('Remove this item?');">{% csrf_token %}<button type="submit" class="btn btn-danger btn-sm">Remove</button></form></td>
+                            {% endif %}
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4"><div class="empty-state"><h3>No components</h3></div></td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {% if can_manage_hr and slip.status == 'draft' %}
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>Add / Edit Component (overtime, bonus, deduction)</h3></div>
+            <form method="post" action="{% url 'hr_salary_slip_add_item' slip.pk %}">
+                {% csrf_token %}
+                <div class="filters">
+                    <select name="component" class="form-control">
+                        {% for comp in components %}
+                        <option value="{{ comp.pk }}">{{ comp.name }} ({{ comp.get_component_type_display }})</option>
+                        {% endfor %}
+                    </select>
+                    <input type="number" name="amount" step="0.01" class="form-control" placeholder="Amount" required style="width:auto;">
+                    <button type="submit" class="btn btn-primary btn-sm">Add / Update</button>
+                </div>
+            </form>
+        </div>
+        {% endif %}
+    </main>
+</div>
+{% endblock %}

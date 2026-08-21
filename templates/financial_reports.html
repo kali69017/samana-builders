@@ -62,7 +62,9 @@
             <div class="card animate-fade-up stagger-3">
                 <div class="card-header"><h3>Monthly Revenue Trend</h3></div>
                 <div class="card-body">
-                    <div id="revenue-chart" style="height:300px;"></div>
+                    <div style="position:relative; height:300px;">
+                        <canvas id="revenue-chart"></canvas>
+                    </div>
                 </div>
             </div>
 
@@ -130,8 +132,7 @@
             </div>
         </div>
 
-        <!-- Charts JS -->
-        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+        <!-- Charts JS (chart.js is already loaded by base.html) -->
         <script>
         document.addEventListener('DOMContentLoaded', function() {
             const chartData = {{ monthly_chart_data|safe }};

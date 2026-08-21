@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}HR Overview - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>HR &amp; Payroll</h1>
+            <div class="page-actions">
+                <a href="{% url 'hr_employee_create' %}" class="btn btn-primary">+ Add Employee</a>
+                {% if can_manage_hr %}
+                <a href="{% url 'hr_payroll_run_create' %}" class="btn btn-secondary">+ New Payroll Run</a>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card animate-fade-up stagger-1">
+                <div class="stat-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
+                <div class="stat-value" data-target="{{ total_employees|default:0 }}">{{ total_employees|default:0 }}</div>
+                <div class="stat-label">Total Employees</div>
+            </div>
+            <div class="stat-card animate-fade-up stagger-2">
+                <div class="stat-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg></div>
+                <div class="stat-value" data-target="{{ active_employees|default:0 }}">{{ active_employees|default:0 }}</div>
+                <div class="stat-label">Active Employees</div>
+            </div>
+            <div class="stat-card animate-fade-up stagger-3">
+                <div class="stat-icon purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4"/></svg></div>
+                <div class="stat-value" data-target="{{ departments|default:0 }}">{{ departments|default:0 }}</div>
+                <div class="stat-label">Departments</div>
+            </div>
+            <div class="stat-card animate-fade-up stagger-4">
+                <div class="stat-icon amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg></div>
+                <div class="stat-value" data-target="{{ pending_leaves|default:0 }}">{{ pending_leaves|default:0 }}</div>
+                <div class="stat-label">Pending Leaves</div>
+            </div>
+        </div>
+
+        <div class="charts-grid-2col">
+            <div class="card animate-fade-up">
+                <div class="card-header"><h3>Recent Payroll Runs</h3>
+                    <a href="{% url 'hr_payroll_runs' %}" class="btn btn-sm btn-ghost">View All →</a>
+                </div>
+                <div class="table-container">
+                    {% if recent_runs %}
+                    <table>
+                        <thead><tr><th>Period</th><th>Status</th><th>Slips</th><th>Total Net</th></tr></thead>
+                        <tbody>
+                            {% for run in recent_runs %}
+                            <tr class="clickable" onclick="window.location='{% url 'hr_payroll_run_detail' run.pk %}'">
+                                <td><strong>{{ run.period_label }}</strong></td>
+                                <td><span class="badge badge-{% if run.status == 'paid' %}success{% elif run.status == 'processed' %}info{% else %}secondary{% endif %}">{{ run.get_status_display }}</span></td>
+                                <td>{{ run.slip_count }}</td>
+                                <td>Rs. {{ run.total_net|floatformat:0 }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <div class="empty-state"><div class="empty-icon">💰</div><h3>No Payroll Runs</h3><p>Create a payroll run to start.</p></div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card animate-fade-up">
+                <div class="card-header"><h3>Pending Leave Requests</h3>
+                    <a href="{% url 'hr_leaves' %}" class="btn btn-sm btn-ghost">View All →</a>
+                </div>
+                <div class="table-container">
+                    {% if pending_leave_list %}
+                    <table>
+                        <thead><tr><th>Employee</th><th>Type</th><th>Dates</th></tr></thead>
+                        <tbody>
+                            {% for leave in pending_leave_list %}
+                            <tr>
+                                <td><strong>{{ leave.employee.full_name }}</strong></td>
+                                <td>{{ leave.get_leave_type_display }}</td>
+                                <td>{{ leave.start_date|date:"d M" }} → {{ leave.end_date|date:"d M" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <div class="empty-state"><div class="empty-icon">✅</div><h3>No Pending Leaves</h3></div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

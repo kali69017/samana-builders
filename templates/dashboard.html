@@ -8,14 +8,6 @@
     <!-- Sidebar Overlay (mobile) -->
     <div class="sidebar-overlay" onclick="closeSidebar()"></div>
 
-    <!-- Mobile Top Bar -->
-    <div class="top-bar">
-        <button class="hamburger" onclick="toggleSidebar()">☰</button>
-        <span class="top-bar-title">Dashboard</span>
-        <div class="top-bar-actions">
-        </div>
-    </div>
-
     <!-- Sidebar -->
     {% include 'includes/sidebar.html' %}
 
@@ -24,10 +16,8 @@
         <div class="page-header">
             <h1>Dashboard</h1>
             <div class="page-actions">
-                <div class="user-info">
-                    <span class="user-name">{{ request.user.get_full_name|default:request.user.username }}</span>
-                    <div class="user-avatar">{{ request.user.first_name.0|default:request.user.username.0|upper }}</div>
-                </div>
+                <a href="{% url 'booking_create' %}" class="btn btn-primary">+ New Booking</a>
+                <a href="{% url 'customer_create' %}" class="btn btn-secondary">+ Add Customer</a>
             </div>
         </div>
 
@@ -441,10 +431,12 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     var c = {
-        blue: '#3b82f6', emerald: '#10b981', violet: '#8b5cf6',
-        amber: '#f59e0b', rose: '#f43f5e', cyan: '#06b6d4',
-        orange: '#f97316', indigo: '#6366f1', teal: '#14b8a6',
-        pink: '#ec4899', slate: '#64748b',
+        blue: '#2a78d6', orange: '#eb6834', aqua: '#1baf7a',
+        yellow: '#eda100', magenta: '#e87ba4', green: '#008300',
+        violet: '#4a3aa7', red: '#e34948',
+        emerald: '#0ca30c', amber: '#fab219', rose: '#d03b3b', cyan: '#1baf7a',
+        teal: '#1baf7a', pink: '#e87ba4', indigo: '#4a3aa7', slate: '#64748b',
+        good: '#0ca30c', warning: '#fab219', serious: '#ec835a', critical: '#d03b3b',
     };
 
     var anim = {
@@ -614,7 +606,7 @@ document.addEventListener('DOMContentLoaded', function() {
             labels: [{% for p in payment_method_data %}'{{ p.method }}'{% if not forloop.last %},{% endif %}{% endfor %}],
             datasets: [{
                 data: [{% for p in payment_method_data %}{{ p.total|floatformat:0 }}{% if not forloop.last %},{% endif %}{% endfor %}],
-                backgroundColor: [c.blue, c.emerald, c.amber, c.rose, c.violet, c.cyan, c.orange, c.teal, c.pink, c.indigo],
+                backgroundColor: [c.blue, c.orange, c.aqua, c.yellow, c.magenta, c.green, c.violet, c.red],
                 borderWidth: 0,
                 hoverOffset: 10,
             }]
@@ -644,7 +636,7 @@ document.addEventListener('DOMContentLoaded', function() {
     {% endif %}
 
     {% if can_view_payments and payment_type_data %}
-    var typeColors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899', '#ef4444'];
+    var typeColors = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'];
     new Chart(document.getElementById('paymentTypeChart'), {
         type: 'doughnut',
         data: {
@@ -740,7 +732,7 @@ document.addEventListener('DOMContentLoaded', function() {
             datasets: [{
                 data: [{% for p in plots_by_project_data %}{{ p.count }}{% if not forloop.last %},{% endif %}{% endfor %}],
                 backgroundColor: function(ctx) {
-                    var colors = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#06b6d4','#f97316','#ec4899','#ef4444'];
+                    var colors = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#4a3aa7','#e34948'];
                     var idx = ctx.dataIndex % colors.length;
                     if (!ctx.chart.chartArea) return colors[idx];
                     var g = ctx.chart.ctx.createLinearGradient(0, ctx.chart.chartArea.bottom, 0, ctx.chart.chartArea.top);
@@ -782,13 +774,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     {% if can_view_payments and payment_status_data %}
     var paymentStatusColors = {
-        'Verified': '#10b981',
-        'Pending Verification': '#f59e0b',
-        'Under Clearing': '#3b82f6',
-        'Rejected': '#ef4444',
-        'Bounced': '#f43f5e',
-        'Reversed': '#64748b',
-        'Partially Applied': '#8b5cf6',
+        'Verified': '#0ca30c',
+        'Pending Verification': '#fab219',
+        'Under Clearing': '#2a78d6',
+        'Rejected': '#d03b3b',
+        'Bounced': '#ec835a',
+        'Reversed': '#898781',
+        'Partially Applied': '#4a3aa7',
         'Draft': '#94a3b8',
     };
     new Chart(document.getElementById('paymentStatusChart'), {

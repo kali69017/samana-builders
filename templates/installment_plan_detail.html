@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Installment Plan - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    <div class="top-bar">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <span class="top-bar-title">Installment Plan</span>
+        <div class="top-bar-actions"></div>
+    </div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Plan — {{ plan.booking.booking_id }}</h1>
+            <div class="page-actions">
+                <a href="{% url 'booking_detail' plan.booking.pk %}" class="btn btn-secondary btn-sm">Booking</a>
+                <a href="{% url 'installment_plans' %}" class="btn btn-ghost btn-sm">← All Plans</a>
+            </div>
+        </div>
+
+        <div class="detail-grid" style="margin-bottom:24px;">
+            <div class="card">
+                <div class="detail-item"><div class="detail-label">Customer</div><div class="detail-value">{{ plan.booking.customer.full_name }}</div></div>
+                <div class="detail-item"><div class="detail-label">Plot</div><div class="detail-value">{{ plan.booking.plot.plot_number }} — {{ plan.booking.plot.project.name }}</div></div>
+                <div class="detail-item"><div class="detail-label">Frequency</div><div class="detail-value">{{ plan.get_frequency_display }}</div></div>
+            </div>
+            <div class="card">
+                <div class="detail-item"><div class="detail-label">Total Installments</div><div class="detail-value">{{ plan.total_installments }}</div></div>
+                <div class="detail-item"><div class="detail-label">Down Payment</div><div class="detail-value">Rs. {{ plan.down_payment_amount|floatformat:0 }}</div></div>
+                <div class="detail-item"><div class="detail-label">Per Installment</div><div class="detail-value">Rs. {{ plan.installment_amount|floatformat:0 }}</div></div>
+            </div>
+            <div class="card">
+                <div class="detail-item"><div class="detail-label">Total Due</div><div class="detail-value">Rs. {{ total_amount|floatformat:0 }}</div></div>
+                <div class="detail-item"><div class="detail-label">Total Paid</div><div class="detail-value" style="color:var(--accent-green);">Rs. {{ total_paid|floatformat:0 }}</div></div>
+                <div class="detail-item"><div class="detail-label">Late Fee / Day</div><div class="detail-value">Rs. {{ plan.late_fee_per_day|floatformat:0 }}</div></div>
+            </div>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>Installments</h3><span class="badge badge-info">{{ installments|length }} entries</span></div>
+            <div class="table-container">
+                <table class="sortable">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Due Date</th>
+                            <th>Amount</th>
+                            <th>Late Fee</th>
+                            <th>Paid</th>
+                            <th>Remaining</th>
+                            <th>Status</th>
+                            <th class="no-sort">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for inst in installments %}
+                        <tr>
+                            <td>{{ inst.installment_number }}</td>
+                            <td>{{ inst.due_date|date:"d M Y" }}</td>
+                            <td>Rs. {{ inst.amount|floatformat:0 }}</td>
+                            <td>Rs. {{ inst.late_fee|floatformat:0 }}</td>
+                            <td>Rs. {{ inst.paid_amount|floatformat:0 }}</td>
+                            <td>Rs. {{ inst.remaining_amount|floatformat:0 }}</td>
+                            <td>
+                                <span class="badge badge-{% if inst.status == 'paid' %}success{% elif inst.status == 'overdue' %}danger{% elif inst.status == 'partial' %}warning{% else %}secondary{% endif %}">
+                                    {{ inst.get_status_display }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="table-actions">
+                                    {% if inst.status != 'paid' %}
+                                    <form method="post" action="{% url 'installment_mark_paid' inst.pk %}" onsubmit="return confirm('Mark installment #{{ inst.installment_number }} as paid?');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-success btn-sm">Mark Paid</button>
+                                    </form>
+                                    {% endif %}
+                                    <button class="btn btn-secondary btn-sm" onclick="document.getElementById('reschedule-{{ inst.pk }}').style.display='block';">Reschedule</button>
+                                </div>
+                                <form id="reschedule-{{ inst.pk }}" method="post" action="{% url 'installment_reschedule' inst.pk %}" style="display:none; margin-top:8px; gap:6px; align-items:center;">
+                                    {% csrf_token %}
+                                    <input type="date" name="new_due_date" class="form-control" value="{{ inst.due_date|date:'Y-m-d' }}" style="width:auto;">
+                                    <select name="reason" class="form-control" style="width:auto;">
+                                        {% for key, label in inst.plan.reschedules.model.REASONS %}
+                                        <option value="{{ key }}">{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {% if reschedules %}
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>Reschedule History</h3></div>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>Original</th><th>New</th><th>Reason</th><th>Approved By</th></tr></thead>
+                    <tbody>
+                        {% for r in reschedules %}
+                        <tr>
+                            <td>{{ r.original_due_date|date:"d M Y" }}</td>
+                            <td>{{ r.new_due_date|date:"d M Y" }}</td>
+                            <td>{{ r.get_reason_display }}</td>
+                            <td>{{ r.approved_by.username|default:"-" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </main>
+</div>
+{% endblock %}

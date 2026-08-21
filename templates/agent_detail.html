@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Agent Detail - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    <div class="top-bar">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <span class="top-bar-title">Agent Detail</span>
+        <div class="top-bar-actions"></div>
+    </div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>{{ agent.name }}</h1>
+            <div class="page-actions">
+                <a href="{% url 'agent_edit' agent.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                <a href="{% url 'agents' %}" class="btn btn-ghost btn-sm">← All Agents</a>
+            </div>
+        </div>
+
+        <div class="detail-grid" style="margin-bottom:24px;">
+            <div class="card">
+                <div class="detail-item"><div class="detail-label">Agent ID</div><div class="detail-value">{{ agent.agent_id }}</div></div>
+                <div class="detail-item"><div class="detail-label">Commission Rate</div><div class="detail-value">{{ agent.commission_rate }}%</div></div>
+                <div class="detail-item"><div class="detail-label">Status</div><div class="detail-value">
+                    <span class="badge badge-{% if agent.is_active %}success{% else %}danger{% endif %}">{% if agent.is_active %}Active{% else %}Inactive{% endif %}</span>
+                </div></div>
+            </div>
+            <div class="card">
+                <div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">{{ agent.phone|default:"-" }}</div></div>
+                <div class="detail-item"><div class="detail-label">Email</div><div class="detail-value">{{ agent.email|default:"-" }}</div></div>
+                <div class="detail-item"><div class="detail-label">CNIC</div><div class="detail-value">{{ agent.cnic|default:"-" }}</div></div>
+            </div>
+            <div class="card">
+                <div class="detail-item"><div class="detail-label">Total Bookings</div><div class="detail-value">{{ bookings|length }}</div></div>
+                <div class="detail-item"><div class="detail-label">Total Commission</div><div class="detail-value" style="color:var(--accent-green);">Rs. {{ total_commission|floatformat:0 }}</div></div>
+            </div>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>Bookings by this Agent</h3></div>
+            <div class="table-container">
+                {% if bookings %}
+                <table class="sortable">
+                    <thead>
+                        <tr>
+                            <th>Booking ID</th>
+                            <th>Customer</th>
+                            <th>Plot</th>
+                            <th>Total</th>
+                            <th>Commission</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for booking in bookings %}
+                        <tr class="clickable" onclick="window.location='{% url 'booking_detail' booking.pk %}'">
+                            <td><strong>{{ booking.booking_id }}</strong></td>
+                            <td>{{ booking.customer.full_name }}</td>
+                            <td>{{ booking.plot.plot_number }} ({{ booking.plot.project.name }})</td>
+                            <td>Rs. {{ booking.total_amount|floatformat:0 }}</td>
+                            <td>Rs. {{ booking.agent_commission|floatformat:0 }}</td>
+                            <td><span class="badge badge-info">{{ booking.get_status_display }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state"><div class="empty-icon">📋</div><h3>No Bookings</h3><p>No bookings are linked to this agent yet.</p></div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

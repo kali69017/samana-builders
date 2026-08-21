@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Office Expenses - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Company Expenses</h1>
+            <div class="page-actions">
+                <a href="{% url 'finance_office_expense_create' %}" class="btn btn-primary">+ Add Expense</a>
+                <a href="{% url 'finance_office_expense_report' %}" class="btn btn-secondary">Report</a>
+            </div>
+        </div>
+
+        <div class="stat-card animate-fade-up" style="margin-bottom:20px;">
+            <div class="stat-icon red">🧾</div>
+            <div class="stat-meta">
+                <div class="stat-value">Rs. {{ total_amount|floatformat:0 }}</div>
+                <div class="stat-label">Total (filtered)</div>
+            </div>
+        </div>
+
+        <div class="card animate-fade-up">
+            <form method="get">
+                <div class="filters">
+                    <select name="office" class="form-control">
+                        <option value="">All Offices</option>
+                        {% for office in offices %}
+                        <option value="{{ office.pk }}" {% if office_filter == office.pk|stringformat:'s' %}selected{% endif %}>{{ office.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <select name="status" class="form-control">
+                        <option value="">All Statuses</option>
+                        <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+                        <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>Approved</option>
+                        <option value="paid" {% if status_filter == 'paid' %}selected{% endif %}>Paid</option>
+                        <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
+                    </select>
+                    <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>All Office Expenses</h3><span class="badge badge-info">{{ expenses|length }} records</span></div>
+            <div class="table-container">
+                {% if expenses %}
+                <table class="sortable">
+                    <thead>
+                        <tr><th>Date</th><th>Office</th><th>Category</th><th>Paid To</th><th>Amount</th><th>Status</th><th class="no-sort">Actions</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for expense in expenses %}
+                        <tr>
+                            <td>{{ expense.expense_date|date:"d M Y" }}</td>
+                            <td>{{ expense.office.name }}</td>
+                            <td>{{ expense.category.name|default:"-" }}</td>
+                            <td>{{ expense.paid_to|default:"-" }}</td>
+                            <td style="font-weight:600;">Rs. {{ expense.amount|floatformat:0 }}</td>
+                            <td><span class="badge badge-{% if expense.status == 'paid' %}success{% elif expense.status == 'approved' %}info{% else %}warning{% endif %}">{{ expense.get_status_display }}</span></td>
+                            <td>
+                                <div class="table-actions">
+                                    <a href="{% url 'finance_office_expense_edit' expense.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                                    {% if can_delete and expense.status == 'pending' %}
+                                    <form method="post" action="{% url 'finance_office_expense_approve' expense.pk %}" style="display:inline;">{% csrf_token %}<input type="hidden" name="action" value="approve"><button type="submit" class="btn btn-success btn-sm">Approve</button></form>
+                                    {% endif %}
+                                    {% if can_delete and expense.status != 'paid' %}
+                                    <form method="post" action="{% url 'finance_office_expense_pay' expense.pk %}" onsubmit="return confirm('Mark paid and post to ledger?');" style="display:inline;">{% csrf_token %}<button type="submit" class="btn btn-success btn-sm">Pay</button></form>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state"><div class="empty-icon">🧾</div><h3>No Office Expenses</h3><p>Record rent, utilities, internet, maintenance, etc.</p></div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

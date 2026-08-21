@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Agents - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    <div class="top-bar">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <span class="top-bar-title">Agents</span>
+        <div class="top-bar-actions"></div>
+    </div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Sales Agents &amp; Dealers</h1>
+            <div class="page-actions">
+                <a href="{% url 'agent_create' %}" class="btn btn-primary btn-sm">+ Add Agent</a>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card animate-fade-up stagger-1">
+                <div class="stat-icon blue">🤝</div>
+                <div class="stat-value" data-target="{{ total_count|default:0 }}">{{ total_count|default:0 }}</div>
+                <div class="stat-label">Total Agents</div>
+            </div>
+            <div class="stat-card animate-fade-up stagger-2">
+                <div class="stat-icon green">✅</div>
+                <div class="stat-value" data-target="{{ active_count|default:0 }}">{{ active_count|default:0 }}</div>
+                <div class="stat-label">Active Agents</div>
+            </div>
+        </div>
+
+        <div class="card animate-fade-up stagger-2">
+            <div class="card-header">
+                <h3>All Agents</h3>
+                <span class="badge badge-info">{{ agents|length }} records</span>
+            </div>
+            <div class="table-container">
+                {% if agents %}
+                <table class="sortable">
+                    <thead>
+                        <tr>
+                            <th>Agent ID</th>
+                            <th>Name</th>
+                            <th>Phone</th>
+                            <th>Commission %</th>
+                            <th>Bookings</th>
+                            <th>Commission Earned</th>
+                            <th>Status</th>
+                            <th class="no-sort">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for agent in agents %}
+                        <tr>
+                            <td><strong>{{ agent.agent_id }}</strong></td>
+                            <td>{{ agent.name }}</td>
+                            <td>{{ agent.phone|default:"-" }}</td>
+                            <td>{{ agent.commission_rate }}%</td>
+                            <td>{{ agent.booking_count }}</td>
+                            <td style="font-weight:600;">Rs. {{ agent.total_commission|floatformat:0 }}</td>
+                            <td>
+                                <span class="badge badge-{% if agent.is_active %}success{% else %}danger{% endif %}">
+                                    {% if agent.is_active %}Active{% else %}Inactive{% endif %}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="table-actions">
+                                    <a href="{% url 'agent_detail' agent.pk %}" class="btn btn-primary btn-sm">View</a>
+                                    <a href="{% url 'agent_edit' agent.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                                    {% if can_delete %}
+                                    <a href="{% url 'agent_delete' agent.pk %}" class="btn btn-danger btn-sm">Delete</a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state">
+                    <div class="empty-icon">🤝</div>
+                    <h3>No Agents Yet</h3>
+                    <p>Add sales agents or dealer partners to track commissions.</p>
+                    <a href="{% url 'agent_create' %}" class="btn btn-primary btn-sm">+ Add Agent</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

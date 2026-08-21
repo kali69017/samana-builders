@@ -8,6 +8,10 @@ ADMIN = 'admin'
 MANAGEMENT = 'management'
 ACCOUNTS = 'accounts'
 SALES = 'sales'
+HR = 'hr'
+PROJECT_MANAGER = 'project_manager'
+CONTRACTOR = 'contractor'
+STAFF = 'staff'
 
 # super_admin + admin + management: full module access (except user management/backup)
 MANAGEMENT_ROLES = (SUPER_ADMIN, ADMIN, MANAGEMENT)
@@ -17,6 +21,10 @@ FINANCE_ROLES = (SUPER_ADMIN, ADMIN, MANAGEMENT, ACCOUNTS)
 ADMIN_ROLES = (SUPER_ADMIN, ADMIN)
 # Payments view/create (sales is excluded)
 PAYMENTS_ACCESS_ROLES = (SUPER_ADMIN, ADMIN, MANAGEMENT, ACCOUNTS)
+# HR management (employees, salary, attendance, leave, payroll)
+HR_MANAGEMENT_ROLES = (SUPER_ADMIN, ADMIN, MANAGEMENT, HR)
+# Payroll viewing + processing (accounts can record salary payments)
+PAYROLL_ROLES = (SUPER_ADMIN, ADMIN, MANAGEMENT, HR, ACCOUNTS)
 
 
 def get_user_role(request):
@@ -149,6 +157,41 @@ def payments_access(view_func):
             return view_func(request, *args, **kwargs)
 
         if hasattr(request.user, 'profile') and request.user.profile.role in PAYMENTS_ACCESS_ROLES:
+            return view_func(request, *args, **kwargs)
+
+        messages.error(request, 'You do not have permission to access this page.')
+        return redirect('dashboard')
+    return wrapper
+
+def hr_required(view_func):
+    """Allow HR management: super_admin, admin, management and HR roles."""
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect('login')
+
+        if request.user.is_superuser:
+            return view_func(request, *args, **kwargs)
+
+        if hasattr(request.user, 'profile') and request.user.profile.role in HR_MANAGEMENT_ROLES:
+            return view_func(request, *args, **kwargs)
+
+        messages.error(request, 'You do not have permission to access this page.')
+        return redirect('dashboard')
+    return wrapper
+
+
+def payroll_access(view_func):
+    """Allow payroll view/process: super_admin, admin, management, HR and accounts."""
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect('login')
+
+        if request.user.is_superuser:
+            return view_func(request, *args, **kwargs)
+
+        if hasattr(request.user, 'profile') and request.user.profile.role in PAYROLL_ROLES:
             return view_func(request, *args, **kwargs)
 
         messages.error(request, 'You do not have permission to access this page.')

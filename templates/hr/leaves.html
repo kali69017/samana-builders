@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Leave - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Leave Management</h1>
+            <div class="page-actions">
+                {% if can_manage_hr %}
+                <a href="{% url 'hr_leave_create' %}" class="btn btn-primary">+ Apply Leave</a>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header">
+                <h3>Leave Requests</h3>
+                <form method="get">
+                    <select name="status" class="form-control" onchange="this.form.submit()" style="width:auto;">
+                        <option value="">All Statuses</option>
+                        <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+                        <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>Approved</option>
+                        <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>Rejected</option>
+                    </select>
+                </form>
+            </div>
+            <div class="table-container">
+                {% if leaves %}
+                <table class="sortable">
+                    <thead><tr><th>Employee</th><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Status</th><th class="no-sort">Actions</th></tr></thead>
+                    <tbody>
+                        {% for leave in leaves %}
+                        <tr>
+                            <td><strong>{{ leave.employee.full_name }}</strong></td>
+                            <td>{{ leave.get_leave_type_display }}</td>
+                            <td>{{ leave.start_date|date:"d M Y" }}</td>
+                            <td>{{ leave.end_date|date:"d M Y" }}</td>
+                            <td>{{ leave.days }}</td>
+                            <td><span class="badge badge-{% if leave.status == 'approved' %}success{% elif leave.status == 'rejected' %}danger{% else %}warning{% endif %}">{{ leave.get_status_display }}</span></td>
+                            <td>
+                                {% if leave.status == 'pending' and can_manage_hr %}
+                                <div class="table-actions">
+                                    <form method="post" action="{% url 'hr_leave_approve' leave.pk %}" style="display:inline;">
+                                        {% csrf_token %}<input type="hidden" name="action" value="approve">
+                                        <button type="submit" class="btn btn-success btn-sm">Approve</button>
+                                    </form>
+                                    <form method="post" action="{% url 'hr_leave_approve' leave.pk %}" style="display:inline;">
+                                        {% csrf_token %}<input type="hidden" name="action" value="reject">
+                                        <button type="submit" class="btn btn-danger btn-sm">Reject</button>
+                                    </form>
+                                </div>
+                                {% else %}
+                                <span class="badge badge-secondary">—</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state"><div class="empty-icon">🌴</div><h3>No Leave Requests</h3><p>No leave requests found.</p></div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

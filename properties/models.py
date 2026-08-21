@@ -116,6 +116,31 @@ class Plot(models.Model):
         ]
 
 
+class ProjectMilestone(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+        ('delayed', 'Delayed'),
+    ]
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='milestones')
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    target_date = models.DateField(null=True, blank=True)
+    completed_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.project.name} — {self.title}"
+
+    class Meta:
+        ordering = ['order', 'target_date']
+
+
 class PriceHistory(models.Model):
     plot = models.ForeignKey(Plot, on_delete=models.CASCADE, related_name='price_history')
     old_price = models.DecimalField(max_digits=15, decimal_places=2)

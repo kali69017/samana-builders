@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Refunds - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    <div class="top-bar">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <span class="top-bar-title">Refunds</span>
+        <div class="top-bar-actions"></div>
+    </div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Refunds</h1>
+            <div class="page-actions">
+                <a href="{% url 'refund_create' %}" class="btn btn-primary btn-sm">+ New Refund</a>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card animate-fade-up stagger-1">
+                <div class="stat-icon blue">↩️</div>
+                <div class="stat-value" data-target="{{ total_count|default:0 }}">{{ total_count|default:0 }}</div>
+                <div class="stat-label">Total Refunds</div>
+            </div>
+            <div class="stat-card animate-fade-up stagger-2">
+                <div class="stat-icon amber">⏳</div>
+                <div class="stat-value" data-target="{{ pending_count|default:0 }}">{{ pending_count|default:0 }}</div>
+                <div class="stat-label">Pending</div>
+            </div>
+            <div class="stat-card animate-fade-up stagger-3">
+                <div class="stat-icon red">💰</div>
+                <div class="stat-value" style="font-size:22px;">Rs. {{ total_amount|floatformat:0 }}</div>
+                <div class="stat-label">Total Amount</div>
+            </div>
+        </div>
+
+        <div class="card animate-fade-up stagger-2">
+            <div class="card-header">
+                <h3>All Refunds</h3>
+                <form method="get">
+                    <select name="status" class="form-control" onchange="this.form.submit()" style="width:auto;">
+                        <option value="">All Statuses</option>
+                        {% for key, label in status_choices %}
+                        <option value="{{ key }}" {% if status_filter == key %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </div>
+            <div class="table-container">
+                {% if refunds %}
+                <table class="sortable">
+                    <thead>
+                        <tr>
+                            <th>Booking</th>
+                            <th>Customer</th>
+                            <th>Amount</th>
+                            <th>Reason</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th class="no-sort">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for refund in refunds %}
+                        <tr>
+                            <td><strong>{{ refund.booking.booking_id }}</strong></td>
+                            <td>{{ refund.booking.customer.full_name }}</td>
+                            <td style="font-weight:600;">Rs. {{ refund.amount|floatformat:0 }}</td>
+                            <td>{{ refund.get_reason_display }}</td>
+                            <td>
+                                <span class="badge badge-{% if refund.status == 'approved' or refund.status == 'processed' %}success{% elif refund.status == 'rejected' %}danger{% else %}warning{% endif %}">
+                                    {{ refund.get_status_display }}
+                                </span>
+                            </td>
+                            <td>{{ refund.created_at|date:"d M Y" }}</td>
+                            <td>
+                                {% if refund.status == 'pending' %}
+                                <div class="table-actions">
+                                    <form method="post" action="{% url 'refund_approve' refund.pk %}" style="display:inline;">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="approve">
+                                        <button type="submit" class="btn btn-success btn-sm">Approve</button>
+                                    </form>
+                                    <form method="post" action="{% url 'refund_approve' refund.pk %}" style="display:inline;">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="reject">
+                                        <button type="submit" class="btn btn-danger btn-sm">Reject</button>
+                                    </form>
+                                </div>
+                                {% else %}
+                                <span class="badge badge-secondary">—</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state">
+                    <div class="empty-icon">↩️</div>
+                    <h3>No Refunds</h3>
+                    <p>Refund requests appear here when created against a booking.</p>
+                    <a href="{% url 'refund_create' %}" class="btn btn-primary btn-sm">+ New Refund</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

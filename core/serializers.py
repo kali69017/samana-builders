@@ -1,6 +1,9 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import UserProfile, AuditLog, LoginAttempt, ApprovalChain, ApprovalStep, ApprovalRequest
+from .models import (
+    UserProfile, AuditLog, LoginAttempt, ApprovalChain, ApprovalStep, ApprovalRequest,
+    Lead, LeadNote, Agent, CompanySettings,
+)
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -89,8 +92,61 @@ class ApprovalRequestSerializer(serializers.ModelSerializer):
     requested_by_name = serializers.CharField(source='requested_by.username', read_only=True)
     reviewed_by_name = serializers.CharField(source='reviewed_by.username', read_only=True, allow_null=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
     class Meta:
         model = ApprovalRequest
         fields = '__all__'
         read_only_fields = ['created_at', 'reviewed_at']
+
+
+class LeadSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    source_display = serializers.CharField(source='get_source_display', read_only=True)
+    assigned_to_name = serializers.CharField(source='assigned_to.username', read_only=True, allow_null=True)
+    interest_project_name = serializers.CharField(source='interest_project.name', read_only=True, allow_null=True)
+
+    class Meta:
+        model = Lead
+        fields = ['id', 'name', 'email', 'phone', 'source', 'source_display', 'status',
+                  'status_display', 'assigned_to', 'assigned_to_name', 'interest_project',
+                  'interest_project_name', 'budget', 'is_contacted', 'notes',
+                  'converted_customer', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'converted_customer']
+
+    def validate(self, attrs):
+        if not any([attrs.get('name'), attrs.get('email'), attrs.get('phone')]):
+            raise serializers.ValidationError('At least a name, email, or phone is required.')
+        return attrs
+
+
+class LeadNoteSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
+
+    class Meta:
+        model = LeadNote
+        fields = ['id', 'lead', 'note', 'created_by', 'created_by_name', 'created_at']
+        read_only_fields = ['id', 'created_at', 'created_by']
+
+
+class AgentSerializer(serializers.ModelSerializer):
+    booking_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Agent
+        fields = ['id', 'agent_id', 'name', 'phone', 'email', 'cnic',
+                  'commission_rate', 'is_active', 'notes', 'booking_count', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'agent_id', 'created_at', 'updated_at']
+
+    def validate_commission_rate(self, value):
+        if value is not None and (value < 0 or value > 100):
+            raise serializers.ValidationError('Commission rate must be between 0 and 100.')
+        return value
+
+
+class CompanySettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CompanySettings
+        fields = ['id', 'company_name', 'tagline', 'phone', 'email', 'address',
+                  'website', 'logo', 'currency', 'currency_symbol', 'tax_rate',
+                  'receipt_footer', 'facebook', 'instagram', 'twitter', 'updated_at']
+        read_only_fields = ['id', 'updated_at']

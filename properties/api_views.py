@@ -3,11 +3,12 @@ from rest_framework.decorators import api_view, action, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from django.db import models as db_models
-from .models import Project, ProjectPhase, Plot, PriceHistory, PlotFeature
+from .models import Project, ProjectPhase, Plot, PriceHistory, PlotFeature, ProjectMilestone
 from .serializers import (
     ProjectSerializer, ProjectPhaseSerializer,
     PlotSerializer, PlotDetailSerializer,
     PriceHistorySerializer, PlotFeatureSerializer,
+    ProjectMilestoneSerializer,
 )
 
 
@@ -164,3 +165,28 @@ def projects_locations_api(request):
     projects = Project.objects.exclude(latitude__isnull=True).exclude(longitude__isnull=True)
     serializer = ProjectSerializer(projects, many=True)
     return Response(serializer.data)
+
+class ProjectMilestoneViewSet(viewsets.ModelViewSet):
+    queryset = ProjectMilestone.objects.select_related('project').all()
+    serializer_class = ProjectMilestoneSerializer
+    permission_classes = [ReadOnlyForLowerRoles]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        project_id = self.request.query_params.get('project')
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+        return qs
+
+    @action(detail=True, methods=['post'])
+    def set_status(self, request, pk=None):
+        from datetime import date
+        milestone = self.get_object()
+        new_status = request.data.get('status')
+        if new_status not in dict(ProjectMilestone.STATUS_CHOICES):
+            return Response({'error': f'Invalid status. Must be one of {list(dict(ProjectMilestone.STATUS_CHOICES).keys())}'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        milestone.status = new_status
+        milestone.completed_date = date.today() if new_status == 'completed' else None
+        milestone.save()
+        return Response(ProjectMilestoneSerializer(milestone).data)

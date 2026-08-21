@@ -2,9 +2,12 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.contrib.auth.models import User
-from .models import UserProfile, AuditLog
+from django.db.models import Count, Sum
+from .models import UserProfile, AuditLog, Lead, LeadNote, Agent, CompanySettings
 from .serializers import (UserSerializer, UserCreateSerializer,
-                           UserProfileSerializer, AuditLogSerializer)
+                           UserProfileSerializer, AuditLogSerializer,
+                           LeadSerializer, LeadNoteSerializer,
+                           AgentSerializer, CompanySettingsSerializer)
 
 
 class IsAdminOrReadOnly(permissions.BasePermission):
@@ -133,3 +136,150 @@ class ProfileViewSet(viewsets.GenericViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+class LeadViewSet(viewsets.ModelViewSet):
+    """CRM lead management with status transitions and conversion."""
+    queryset = Lead.objects.select_related('assigned_to', 'interest_project', 'converted_customer').all()
+    serializer_class = LeadSerializer
+    permission_classes = [IsAdminOrReadOnly]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        status_filter = self.request.query_params.get('status')
+        source_filter = self.request.query_params.get('source')
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        if source_filter:
+            qs = qs.filter(source=source_filter)
+        return qs
+
+    def perform_create(self, serializer):
+        lead = serializer.save()
+        AuditLog.objects.create(
+            user=self.request.user, action='create', model_name='Lead',
+            object_id=str(lead.pk), description=f'Created lead {lead.display_name} via API'
+        )
+
+    @action(detail=True, methods=['post'])
+    def set_status(self, request, pk=None):
+        lead = self.get_object()
+        new_status = request.data.get('status')
+        if new_status not in dict(Lead.LEAD_STATUS_CHOICES):
+            return Response({'error': f'Invalid status. Must be one of {list(dict(Lead.LEAD_STATUS_CHOICES).keys())}'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        lead.status = new_status
+        if new_status == 'contacted':
+            lead.is_contacted = True
+        lead.save()
+        AuditLog.objects.create(
+            user=request.user, action='update', model_name='Lead',
+            object_id=str(lead.pk), description=f'Updated lead {lead.display_name} status to {new_status}'
+        )
+        return Response(LeadSerializer(lead).data)
+
+    @action(detail=True, methods=['post'])
+    def convert(self, request, pk=None):
+        """Convert a lead into a customer."""
+        from customers.models import Customer
+        lead = self.get_object()
+        if lead.converted_customer_id:
+            return Response({'error': 'Lead is already converted.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        name = (request.data.get('name') or lead.name or '').strip()
+        parts = name.split(' ', 1)
+        first_name = request.data.get('first_name') or (parts[0] if parts else '')
+        last_name = request.data.get('last_name') or (parts[1] if len(parts) > 1 else '')
+
+        customer = Customer.objects.create(
+            first_name=first_name or lead.name or 'Lead',
+            last_name=last_name,
+            email=request.data.get('email') or lead.email or None,
+            phone=request.data.get('phone') or lead.phone,
+            cnic=request.data.get('cnic', ''),
+            city=request.data.get('city', ''),
+            created_by=request.user,
+        )
+        lead.status = 'converted'
+        lead.converted_customer = customer
+        lead.save()
+
+        AuditLog.objects.create(
+            user=request.user, action='update', model_name='Lead',
+            object_id=str(lead.pk), description=f'Converted lead {lead.display_name} to {customer.customer_id}'
+        )
+        return Response({
+            'lead': LeadSerializer(lead).data,
+            'customer_id': customer.customer_id,
+            'customer_pk': customer.pk,
+        }, status=status.HTTP_201_CREATED)
+
+
+class LeadNoteViewSet(viewsets.ModelViewSet):
+    queryset = LeadNote.objects.select_related('lead', 'created_by').all()
+    serializer_class = LeadNoteSerializer
+    permission_classes = [IsAdminOrReadOnly]
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+class AgentViewSet(viewsets.ModelViewSet):
+    queryset = Agent.objects.annotate(
+        booking_count=Count('bookings'),
+    ).all()
+    serializer_class = AgentSerializer
+    permission_classes = [IsAdminOrReadOnly]
+
+    def perform_create(self, serializer):
+        agent = serializer.save()
+        AuditLog.objects.create(
+            user=self.request.user, action='create', model_name='Agent',
+            object_id=agent.agent_id, description=f'Created agent {agent.name} via API'
+        )
+
+    @action(detail=True, methods=['get'])
+    def bookings(self, request, pk=None):
+        from bookings.serializers import BookingSerializer
+        agent = self.get_object()
+        bookings = agent.bookings.select_related('customer', 'plot', 'plot__project').all()
+        return Response(BookingSerializer(bookings, many=True).data)
+
+
+class CompanySettingsViewSet(viewsets.GenericViewSet):
+    """Singleton company settings (retrieve + partial update)."""
+    serializer_class = CompanySettingsSerializer
+    permission_classes = [IsAdminOrReadOnly]
+
+    def list(self, request):
+        return Response(self.get_serializer(CompanySettings.load()).data)
+
+    def update(self, request, *args, **kwargs):
+        instance = CompanySettings.load()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def summary(self, request):
+        """A small dashboard summary exposed over the API."""
+        from bookings.models import Booking
+        from customers.models import Customer
+        from properties.models import Plot, Project
+        from payments.models import Payment
+        from expenses.models import Expense
+
+        revenue = Booking.objects.aggregate(t=Sum('advance_paid'))['t'] or 0
+        expenses = Expense.objects.aggregate(t=Sum('amount'))['t'] or 0
+
+        return Response({
+            'total_customers': Customer.objects.count(),
+            'total_projects': Project.objects.exclude(status='inactive').count(),
+            'total_plots': Plot.objects.count(),
+            'available_plots': Plot.objects.filter(status='available').count(),
+            'total_bookings': Booking.objects.count(),
+            'active_bookings': Booking.objects.filter(status='active').count(),
+            'pending_payments': Payment.objects.filter(status='pending').count(),
+            'revenue': float(revenue),
+            'expenses': float(expenses),
+            'net_profit': float(revenue) - float(expenses),
+        })

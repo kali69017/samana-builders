@@ -93,9 +93,18 @@ class PaymentViewSet(viewsets.ModelViewSet):
             )
         
         payment = self.get_object()
+
+        # Guard against re-verifying/rejecting an already-finalized payment,
+        # which would double-count the booking advance and installment amounts.
+        if payment.status in ['verified', 'rejected', 'reversed']:
+            return Response(
+                {'error': f'Payment is already {payment.get_status_display()}.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         serializer = PaymentVerificationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
+
         action_type = serializer.validated_data['action']
         notes = serializer.validated_data.get('notes', '')
         

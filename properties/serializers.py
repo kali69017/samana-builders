@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Project, ProjectPhase, Plot, PriceHistory, PlotFeature
+from .models import Project, ProjectPhase, Plot, PriceHistory, PlotFeature, ProjectMilestone
 
 
 class PlotFeatureSerializer(serializers.ModelSerializer):
@@ -86,10 +86,22 @@ class ProjectSerializer(serializers.ModelSerializer):
     booked_plots = serializers.ReadOnlyField()
     sold_plots = serializers.ReadOnlyField()
     phases = ProjectPhaseSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = Project
         fields = ['id', 'name', 'description', 'location', 'total_plots',
                   'status', 'status_display', 'available_plots', 'booked_plots', 'sold_plots',
                   'latitude', 'longitude', 'phases', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class ProjectMilestoneSerializer(serializers.ModelSerializer):
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = ProjectMilestone
+        fields = ['id', 'project', 'project_name', 'title', 'description',
+                  'target_date', 'completed_date', 'status', 'status_display',
+                  'order', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']

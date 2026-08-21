@@ -1,5 +1,5 @@
 from django import forms
-from .models import Project, ProjectPhase, Plot, PlotFeature
+from .models import Project, ProjectPhase, Plot, PlotFeature, ProjectMilestone
 
 
 class ProjectForm(forms.ModelForm):
@@ -116,3 +116,17 @@ class PlotBulkCreateForm(forms.Form):
         if start and end and start > end:
             raise forms.ValidationError('Start number must be less than or equal to end number')
         return cleaned
+
+
+class ProjectMilestoneForm(forms.ModelForm):
+    class Meta:
+        model = ProjectMilestone
+        fields = ['project', 'title', 'description', 'target_date', 'status', 'order']
+        widgets = {
+            'project': forms.Select(attrs={'class': 'form-control'}),
+            'title': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': ' '}),
+            'target_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'status': forms.Select(attrs={'class': 'form-control'}),
+            'order': forms.NumberInput(attrs={'class': 'form-control'}),
+        }

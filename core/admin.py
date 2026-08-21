@@ -1,7 +1,10 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
-from .models import UserProfile, AuditLog, LoginAttempt, ApprovalChain, ApprovalStep, ApprovalRequest
+from .models import (
+    UserProfile, AuditLog, LoginAttempt, ApprovalChain, ApprovalStep, ApprovalRequest,
+    Lead, LeadNote, Agent, CompanySettings,
+)
 
 
 class UserProfileInline(admin.StackedInline):
@@ -81,3 +84,37 @@ class ApprovalRequestAdmin(admin.ModelAdmin):
     list_filter = ['status', 'object_type']
     search_fields = ['object_id', 'requested_by__username']
     readonly_fields = ['created_at', 'reviewed_at']
+
+
+@admin.register(Lead)
+class LeadAdmin(admin.ModelAdmin):
+    list_display = ['display_name', 'phone', 'source', 'status', 'assigned_to', 'interest_project', 'created_at']
+    list_filter = ['source', 'status', 'created_at']
+    search_fields = ['name', 'email', 'phone']
+    readonly_fields = ['created_at', 'updated_at']
+
+
+@admin.register(LeadNote)
+class LeadNoteAdmin(admin.ModelAdmin):
+    list_display = ['lead', 'created_by', 'created_at']
+    search_fields = ['lead__name', 'lead__email', 'note']
+    readonly_fields = ['created_at']
+
+
+@admin.register(Agent)
+class AgentAdmin(admin.ModelAdmin):
+    list_display = ['agent_id', 'name', 'phone', 'email', 'commission_rate', 'is_active']
+    list_filter = ['is_active']
+    search_fields = ['agent_id', 'name', 'phone', 'email']
+    readonly_fields = ['agent_id', 'created_at', 'updated_at']
+
+
+@admin.register(CompanySettings)
+class CompanySettingsAdmin(admin.ModelAdmin):
+    list_display = ['company_name', 'phone', 'email', 'currency', 'tax_rate']
+    fieldsets = (
+        ('Company', {'fields': ('company_name', 'tagline', 'logo')}),
+        ('Contact', {'fields': ('phone', 'email', 'address', 'website')}),
+        ('Finance', {'fields': ('currency', 'currency_symbol', 'tax_rate', 'receipt_footer')}),
+        ('Social', {'fields': ('facebook', 'instagram', 'twitter')}),
+    )

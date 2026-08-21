@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Installment Plans - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    <div class="top-bar">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <span class="top-bar-title">Installment Plans</span>
+        <div class="top-bar-actions"></div>
+    </div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Installment Plans</h1>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card animate-fade-up stagger-1">
+                <div class="stat-icon blue">📅</div>
+                <div class="stat-value" data-target="{{ total_count|default:0 }}">{{ total_count|default:0 }}</div>
+                <div class="stat-label">Total Plans</div>
+            </div>
+            <div class="stat-card animate-fade-up stagger-2">
+                <div class="stat-icon green">✅</div>
+                <div class="stat-value" data-target="{{ active_count|default:0 }}">{{ active_count|default:0 }}</div>
+                <div class="stat-label">Active Plans</div>
+            </div>
+        </div>
+
+        <div class="card animate-fade-up stagger-2">
+            <form method="get">
+                <div class="filters">
+                    <div class="search-box" style="flex:1; min-width:240px;">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" name="search" value="{{ search }}" class="form-control" placeholder="Search booking ID or customer..." style="padding-left:40px;">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm">Search</button>
+                    {% if search %}<a href="{% url 'installment_plans' %}" class="btn btn-secondary btn-sm">Clear</a>{% endif %}
+                </div>
+            </form>
+        </div>
+
+        <div class="card animate-fade-up stagger-3">
+            <div class="card-header">
+                <h3>All Plans</h3>
+                <span class="badge badge-info">{{ plans|length }} records</span>
+            </div>
+            <div class="table-container">
+                {% if plans %}
+                <table class="sortable">
+                    <thead>
+                        <tr>
+                            <th>Booking</th>
+                            <th>Customer</th>
+                            <th>Plot</th>
+                            <th>Installments</th>
+                            <th>Frequency</th>
+                            <th>Amount / Installment</th>
+                            <th>Paid</th>
+                            <th>Overdue</th>
+                            <th class="no-sort">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for plan in plans %}
+                        <tr>
+                            <td><strong>{{ plan.booking.booking_id }}</strong></td>
+                            <td>{{ plan.booking.customer.full_name }}</td>
+                            <td>{{ plan.booking.plot.plot_number }}</td>
+                            <td>{{ plan.total_installments }}</td>
+                            <td>{{ plan.get_frequency_display }}</td>
+                            <td>Rs. {{ plan.installment_amount|floatformat:0 }}</td>
+                            <td><span class="badge badge-success">{{ plan.paid_count }}</span></td>
+                            <td><span class="badge badge-danger">{{ plan.overdue_count }}</span></td>
+                            <td><a href="{% url 'installment_plan_detail' plan.pk %}" class="btn btn-primary btn-sm">View</a></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state">
+                    <div class="empty-icon">📅</div>
+                    <h3>No Installment Plans</h3>
+                    <p>Installment plans are generated when a booking is created with a plan template.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

@@ -3,6 +3,9 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from core import views as core_views
+from core import views_crm, views_settings
+from bookings import views_installments
+from payments import views_workflow
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -72,6 +75,55 @@ urlpatterns = [
 
     # Expenses
     path('expenses/', include('expenses.urls')),
+
+    # HR & Payroll
+    path('hr/', include('hr.urls')),
+
+    # Finance
+    path('finance/', include('finance.urls')),
+
+    # Leads (CRM)
+    path('leads/', views_crm.leads_view, name='leads'),
+    path('leads/create/', views_crm.lead_create_view, name='lead_create'),
+    path('leads/<int:pk>/', views_crm.lead_detail_view, name='lead_detail'),
+    path('leads/<int:pk>/edit/', views_crm.lead_edit_view, name='lead_edit'),
+    path('leads/<int:pk>/delete/', views_crm.lead_delete_view, name='lead_delete'),
+    path('leads/<int:pk>/status/', views_crm.lead_status_update_view, name='lead_status_update'),
+    path('leads/<int:pk>/note/', views_crm.lead_note_add_view, name='lead_note_add'),
+    path('leads/<int:pk>/convert/', views_crm.lead_convert_view, name='lead_convert'),
+
+    # Agents
+    path('agents/', views_crm.agents_view, name='agents'),
+    path('agents/create/', views_crm.agent_create_view, name='agent_create'),
+    path('agents/<int:pk>/', views_crm.agent_detail_view, name='agent_detail'),
+    path('agents/<int:pk>/edit/', views_crm.agent_edit_view, name='agent_edit'),
+    path('agents/<int:pk>/delete/', views_crm.agent_delete_view, name='agent_delete'),
+
+    # Installment plans
+    path('installment-plans/', views_installments.installment_plans_view, name='installment_plans'),
+    path('installment-plans/<int:pk>/', views_installments.installment_plan_detail_view, name='installment_plan_detail'),
+    path('installments/<int:pk>/mark-paid/', views_installments.installment_mark_paid_view, name='installment_mark_paid'),
+    path('installments/<int:pk>/reschedule/', views_installments.installment_reschedule_view, name='installment_reschedule'),
+
+    # Payment verification workflow
+    path('payments/<int:pk>/verify/', views_workflow.payment_verify_view, name='payment_verify'),
+    path('payments/<int:pk>/reject/', views_workflow.payment_reject_view, name='payment_reject'),
+    path('payments/<int:pk>/bounce/', views_workflow.payment_bounce_view, name='payment_bounce'),
+    path('payments/<int:pk>/reverse/', views_workflow.payment_reverse_view, name='payment_reverse'),
+
+    # Refunds
+    path('refunds/', views_workflow.refunds_view, name='refunds'),
+    path('refunds/create/', views_workflow.refund_create_view, name='refund_create'),
+    path('refunds/<int:pk>/approve/', views_workflow.refund_approve_view, name='refund_approve'),
+
+    # Reports & settings
+    path('reports/receivables/', views_settings.receivables_aging_view, name='receivables_aging'),
+    path('reports/sales/', views_settings.sales_report_view, name='sales_report'),
+    path('settings/company/', views_settings.company_settings_view, name='company_settings'),
+    path('projects/milestones/', views_settings.milestones_view, name='milestones'),
+    path('projects/milestones/create/', views_settings.milestone_create_view, name='milestone_create'),
+    path('projects/milestones/<int:pk>/edit/', views_settings.milestone_edit_view, name='milestone_edit'),
+    path('projects/milestones/<int:pk>/delete/', views_settings.milestone_delete_view, name='milestone_delete'),
 
     # Backup
     path('backup/', core_views.backup_view, name='backup'),

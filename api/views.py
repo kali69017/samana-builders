@@ -1,6 +1,7 @@
 from django.contrib.auth import authenticate
 from django.contrib.auth import login as auth_login
 from django.contrib.auth import logout as auth_logout
+from django.contrib.auth.models import User
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -48,11 +49,14 @@ def api_login(request):
     user = authenticate(request, username=username, password=password)
 
     if user is None:
+        # Distinguish a deactivated account from bad credentials. ``authenticate``
+        # returns None for inactive users, so check explicitly.
+        existing = User.objects.filter(username=username).first()
+        if existing is not None and not existing.is_active:
+            return Response({'detail': 'Your account has been deactivated. Contact an administrator.'},
+                            status=status.HTTP_403_FORBIDDEN)
         return Response({'detail': 'Invalid username or password.'},
                         status=status.HTTP_400_BAD_REQUEST)
-    if not user.is_active:
-        return Response({'detail': 'Your account has been deactivated. Contact an administrator.'},
-                        status=status.HTTP_403_FORBIDDEN)
 
     auth_login(request, user)
     from core.models import AuditLog

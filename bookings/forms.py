@@ -12,13 +12,14 @@ from properties.models import Plot
 class BookingForm(forms.ModelForm):
     class Meta:
         model = Booking
-        fields = ['customer', 'plot', 'total_amount', 'advance_paid', 'source', 'notes']
+        fields = ['customer', 'plot', 'total_amount', 'advance_paid', 'source', 'agent', 'notes']
         widgets = {
             'customer': forms.Select(attrs={'class': 'form-control'}),
             'plot': forms.Select(attrs={'class': 'form-control'}),
             'total_amount': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': ' ', 'step': '0.01'}),
             'advance_paid': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': ' ', 'step': '0.01'}),
             'source': forms.Select(attrs={'class': 'form-control'}),
+            'agent': forms.Select(attrs={'class': 'form-control'}),
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': ' '}),
         }
 
@@ -28,6 +29,7 @@ class BookingForm(forms.ModelForm):
         self.fields['plot'].queryset = Plot.objects.filter(status='available')
         self.fields['advance_paid'].initial = 0
         self.fields['source'].required = False
+        self.fields['agent'].required = False
         self.fields['notes'].required = False
 
     def clean_total_amount(self):

@@ -207,9 +207,9 @@ def dashboard_view(request):
     sold_plots = Plot.objects.filter(status='sold').count()
     
     plot_status_data = [
-        {'label': 'Available', 'count': available_plots, 'color': '#10b981'},
-        {'label': 'Booked', 'count': booked_plots, 'color': '#3b82f6'},
-        {'label': 'Sold', 'count': sold_plots, 'color': '#f59e0b'},
+        {'label': 'Available', 'count': available_plots, 'color': '#0ca30c'},
+        {'label': 'Booked', 'count': booked_plots, 'color': '#2a78d6'},
+        {'label': 'Sold', 'count': sold_plots, 'color': '#fab219'},
     ]
     
     # Installment stats
@@ -219,10 +219,10 @@ def dashboard_view(request):
     partial_installments = Installment.objects.filter(status='partial').count()
     
     installment_status_data = [
-        {'label': 'Paid', 'count': paid_installments, 'color': '#10b981'},
-        {'label': 'Overdue', 'count': overdue_installments, 'color': '#ef4444'},
-        {'label': 'Pending', 'count': pending_installments, 'color': '#f59e0b'},
-        {'label': 'Partial', 'count': partial_installments, 'color': '#3b82f6'},
+        {'label': 'Paid', 'count': paid_installments, 'color': '#0ca30c'},
+        {'label': 'Overdue', 'count': overdue_installments, 'color': '#d03b3b'},
+        {'label': 'Pending', 'count': pending_installments, 'color': '#fab219'},
+        {'label': 'Partial', 'count': partial_installments, 'color': '#2a78d6'},
     ]
     
     # Collection rate
@@ -257,10 +257,10 @@ def dashboard_view(request):
     
     # Booking status for doughnut
     booking_status_data = [
-        {'label': 'Completed', 'count': completed_bookings, 'color': '#10b981'},
-        {'label': 'Active', 'count': active_bookings, 'color': '#3b82f6'},
-        {'label': 'Pending', 'count': pending_bookings, 'color': '#f59e0b'},
-        {'label': 'Cancelled', 'count': cancelled_bookings, 'color': '#ef4444'},
+        {'label': 'Completed', 'count': completed_bookings, 'color': '#0ca30c'},
+        {'label': 'Active', 'count': active_bookings, 'color': '#2a78d6'},
+        {'label': 'Pending', 'count': pending_bookings, 'color': '#fab219'},
+        {'label': 'Cancelled', 'count': cancelled_bookings, 'color': '#d03b3b'},
     ]
     
     # Booking sources
@@ -1889,53 +1889,17 @@ def lead_submit_view(request):
         return redirect('corporate_home')
 
     # Create Lead record
-    Lead.objects.create(name=name, email=email, phone=phone, source=source)
+    interest = request.POST.get('interest', '').strip()
+    message = request.POST.get('message', '').strip()
+    notes_parts = []
+    if interest:
+        notes_parts.append(f'Interest: {interest}')
+    if message:
+        notes_parts.append(f'Message: {message}')
+    lead = Lead.objects.create(name=name, email=email, phone=phone, source=source,
+                               notes='\n'.join(notes_parts))
 
-    # Also create a Customer inquiry record in ERP Customer Management
-    # Split name into first_name and last_name
-    name_parts = name.split(' ', 1)
-    first_name = name_parts[0] if name_parts else ''
-    last_name = name_parts[1] if len(name_parts) > 1 else ''
-
-    from customers.models import Customer
-    from django.contrib.auth.models import User
-
-    # Generate customer ID
-    last_customer = Customer.objects.order_by('-id').first()
-    if last_customer:
-        last_num = int(last_customer.customer_id.split('-')[1])
-        customer_id = f'CUS-{str(last_num + 1).zfill(5)}'
-    else:
-        customer_id = 'CUS-00001'
-
-    # Get or create a user account for the lead
-    user, user_created = User.objects.get_or_create(
-        username=email or phone or f'lead_{source}_{last_num}',
-        defaults={'email': email or ''}
-    )
-
-    customer = Customer.objects.create(
-        customer_id=customer_id,
-        user=user,
-        first_name=first_name,
-        last_name=last_name,
-        email=email or '',
-        phone=phone or '',
-        is_active=True,
-        created_by=user if user_created else None,
-    )
-
-    # Link the lead to the customer by updating the lead if needed
-    # (Lead model doesn't have customer FK, so we just create both records)
-
-    if request.user.is_authenticated:
-        from core.models import AuditLog
-        AuditLog.objects.create(
-            user=request.user, action='create', model_name='Lead',
-            description=f'{source} lead received from website, customer {customer.customer_id} created'
-        )
-
-    messages.success(request, f'Thank you! We have created customer inquiry {customer.customer_id} and our team will get in touch with you soon.')
+    messages.success(request, 'Thank you! Your enquiry has been received. Our team will contact you soon.')
     return redirect('corporate_home')
 
 

@@ -31,6 +31,7 @@ class NotificationLog(models.Model):
     message = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     error_message = models.TextField(blank=True)
+    provider_message_id = models.CharField(max_length=50, blank=True, help_text="Gateway message/delivery ID (e.g. SendPK messageid)")
     related_customer_id = models.CharField(max_length=20, blank=True)
     related_booking_id = models.CharField(max_length=20, blank=True)
     sent_at = models.DateTimeField(null=True, blank=True)

@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Offices - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Offices &amp; Branches</h1>
+            <div class="page-actions">
+                <a href="{% url 'finance_office_create' %}" class="btn btn-primary">+ Add Office</a>
+            </div>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>All Offices</h3><span class="badge badge-info">{{ offices|length }} records</span></div>
+            <div class="table-container">
+                {% if offices %}
+                <table class="sortable">
+                    <thead><tr><th>Name</th><th>Type</th><th>Address</th><th>Status</th><th class="no-sort">Actions</th></tr></thead>
+                    <tbody>
+                        {% for office in offices %}
+                        <tr>
+                            <td><strong>{{ office.name }}</strong></td>
+                            <td><span class="badge badge-info">{{ office.get_office_type_display }}</span></td>
+                            <td>{{ office.address|default:"-" }}</td>
+                            <td><span class="badge badge-{% if office.is_active %}success{% else %}secondary{% endif %}">{% if office.is_active %}Active{% else %}Inactive{% endif %}</span></td>
+                            <td>
+                                <div class="table-actions">
+                                    <a href="{% url 'finance_office_edit' office.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                                    {% if can_delete %}
+                                    <a href="{% url 'finance_office_delete' office.pk %}" class="btn btn-danger btn-sm">Delete</a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state"><div class="empty-icon">🏢</div><h3>No Offices</h3><p>Add your head office and branches.</p></div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

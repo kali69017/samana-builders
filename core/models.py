@@ -14,9 +14,13 @@ class UserProfile(models.Model):
     ROLE_CHOICES = [
         ('super_admin', 'Super Admin'),
         ('admin', 'Admin'),
-        ('sales', 'Sales'),
-        ('accounts', 'Accounts'),
         ('management', 'Management'),
+        ('accounts', 'Accounts'),
+        ('sales', 'Sales'),
+        ('hr', 'HR'),
+        ('project_manager', 'Project Manager'),
+        ('contractor', 'Contractor'),
+        ('staff', 'Staff'),
     ]
     
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
@@ -95,19 +99,133 @@ class Lead(models.Model):
         ('hero', 'Hero Enquiry'),
         ('strip', 'Launch Strip'),
         ('newsletter', 'Newsletter Subscribe'),
+        ('referral', 'Referral'),
+        ('walk_in', 'Walk-In'),
+        ('agent', 'Agent'),
+        ('other', 'Other'),
     ]
+    LEAD_STATUS_CHOICES = [
+        ('new', 'New'),
+        ('contacted', 'Contacted'),
+        ('qualified', 'Qualified'),
+        ('converted', 'Converted'),
+        ('lost', 'Lost'),
+    ]
+
     name = models.CharField(max_length=100, blank=True)
     email = models.EmailField(blank=True)
     phone = models.CharField(max_length=20, blank=True)
     source = models.CharField(max_length=20, choices=LEAD_SOURCE_CHOICES, default='hero')
+    status = models.CharField(max_length=20, choices=LEAD_STATUS_CHOICES, default='new')
+    assigned_to = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='leads_assigned'
+    )
+    interest_project = models.ForeignKey(
+        'properties.Project', on_delete=models.SET_NULL, null=True, blank=True, related_name='leads'
+    )
+    budget = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
     is_contacted = models.BooleanField(default=False)
+    notes = models.TextField(blank=True)
+    converted_customer = models.ForeignKey(
+        'customers.Customer', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='converted_leads'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.name or self.email or self.phone} - {self.get_source_display()}"
 
+    @property
+    def display_name(self):
+        return self.name or self.email or self.phone or f'Lead #{self.pk}'
+
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status']),
+            models.Index(fields=['source']),
+        ]
+
+
+class LeadNote(models.Model):
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name='lead_notes')
+    note = models.TextField()
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Note for {self.lead.display_name}"
+
+    class Meta:
+        ordering = ['-created_at']
+
+
+class Agent(models.Model):
+    """Sales agent / dealer / channel partner who sources bookings."""
+    agent_id = models.CharField(max_length=20, unique=True, editable=False)
+    name = models.CharField(max_length=150)
+    phone = models.CharField(max_length=20, blank=True)
+    email = models.EmailField(blank=True)
+    cnic = models.CharField(max_length=15, blank=True)
+    commission_rate = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0,
+        help_text='Commission percentage paid to the agent per booking'
+    )
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        if not self.agent_id:
+            last = Agent.objects.order_by('-id').first()
+            num = int(last.agent_id.split('-')[1]) + 1 if last else 1
+            self.agent_id = f'AGT-{str(num).zfill(5)}'
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.agent_id} - {self.name}"
+
+    class Meta:
+        ordering = ['name']
+
+
+class CompanySettings(models.Model):
+    """Singleton holding company-wide branding and finance settings."""
+
+    company_name = models.CharField(max_length=200, default='Samana Builders & Developers')
+    tagline = models.CharField(max_length=300, blank=True, default='Real Estate Developers')
+    phone = models.CharField(max_length=30, blank=True)
+    email = models.EmailField(blank=True)
+    address = models.TextField(blank=True)
+    website = models.URLField(blank=True)
+    logo = models.ImageField(upload_to='company/', blank=True, null=True)
+    currency = models.CharField(max_length=10, default='PKR')
+    currency_symbol = models.CharField(max_length=5, default='Rs.')
+    tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0, help_text='Default tax %')
+    receipt_footer = models.TextField(blank=True, help_text='Footer text printed on receipts/invoices')
+    facebook = models.URLField(blank=True)
+    instagram = models.URLField(blank=True)
+    twitter = models.URLField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.company_name
+
+    def save(self, *args, **kwargs):
+        # Enforce singleton
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    class Meta:
+        verbose_name = 'Company Settings'
+        verbose_name_plural = 'Company Settings'
 
 
 class AuditLog(models.Model):

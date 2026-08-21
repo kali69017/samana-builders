@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -20,12 +21,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-8p9d-azk+swmhfi=ja66vm1^+@^^+e0wjjbg+0ff&9xv%17m54'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-dev-only-key-change-me')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() in ('1', 'true', 'yes')
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',') if h.strip()]
 
 
 # Application definition
@@ -47,10 +48,13 @@ INSTALLED_APPS = [
     'payments',
     'expenses',
     'notifications',
+    'finance',
+    'hr',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -74,6 +78,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'core.context_processors.user_theme_processor',
                 'core.context_processors.erp_context',
+                'core.context_processors.company_context',
             ],
         },
     },
@@ -84,13 +89,25 @@ WSGI_APPLICATION = 'samana_erp.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# Uses PostgreSQL when DB_ENGINE=postgres (production), otherwise SQLite (dev).
+if os.environ.get('DB_ENGINE', 'sqlite') == 'postgres':
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ.get('DB_NAME', 'samana'),
+            'USER': os.environ.get('DB_USER', 'samana'),
+            'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+            'HOST': os.environ.get('DB_HOST', 'db'),
+            'PORT': os.environ.get('DB_PORT', '5432'),
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
@@ -131,6 +148,15 @@ STATIC_URL = 'static/'
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 # CORS: allows the React dev server (5173) to talk to the Django API.
 # Same-origin requests (single-server build) do not need CORS.
@@ -156,23 +182,32 @@ REST_FRAMEWORK = {
 }
 
 # Email Configuration
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # For development - logs to console
-# For production, use:
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-# EMAIL_HOST = 'smtp.gmail.com'
-# EMAIL_PORT = 587
-# EMAIL_USE_TLS = True
-# EMAIL_HOST_USER = 'your-email@gmail.com'
-# EMAIL_HOST_PASSWORD = 'your-app-password'
+# Toggle for email notifications. Set EMAIL_ENABLED=true to enable.
+EMAIL_ENABLED = os.environ.get('EMAIL_ENABLED', 'False').lower() in ('1', 'true', 'yes')
 
-DEFAULT_FROM_EMAIL = 'Samana Builders <noreply@samanabuilders.com>'
+# SMTP settings (Brevo / Sendinblue / etc.) — supplied via environment variables.
+EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() in ('1', 'true', 'yes')
+
+if EMAIL_HOST and EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'Samana Builders <noreply@samanabuilders.com>')
 
 # WhatsApp Configuration
 WHATSAPP_PHONE_NUMBER = '+923001234567'  # Company WhatsApp number
 WHATSAPP_API_URL = 'https://graph.facebook.com/v17.0/YOUR_PHONE_ID/messages'
 WHATSAPP_API_TOKEN = ''  # Add your WhatsApp Business API token
 
-# SMS Configuration (Twilio)
-TWILIO_ACCOUNT_SID = ''
-TWILIO_AUTH_TOKEN = ''
-TWILIO_PHONE_NUMBER = ''
+# SMS Configuration (SendPK) — supplied via environment variables.
+SENDPK_ENABLED = os.environ.get('SENDPK_ENABLED', 'False').lower() in ('1', 'true', 'yes')
+SENDPK_API_KEY = os.environ.get('SENDPK_API_KEY', '')
+# "SMS Alert" is SendPK's pre-approved shared/semi-branded sender (instant approval).
+# Switch to "SAMANA" once the branded mask is PTA-approved on the account.
+SENDPK_SENDER_ID = os.environ.get('SENDPK_SENDER_ID', 'SMS Alert')
+SENDPK_BASE_URL = os.environ.get('SENDPK_BASE_URL', 'https://sendpk.com/api/sms.php')

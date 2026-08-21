@@ -1,4 +1,4 @@
-from django.test import TestCase, Client
+from django.test import TestCase, Client, override_settings
 from django.contrib.auth.models import User
 from decimal import Decimal
 from datetime import date
@@ -50,6 +50,7 @@ class PaymentFormTest(TestCase):
         self.assertIn('amount', form.errors)
 
 
+@override_settings(SENDPK_ENABLED=False)
 class PaymentViewTest(TestCase):
     def setUp(self):
         self.client = Client()

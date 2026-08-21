@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Leads - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    <div class="top-bar">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <span class="top-bar-title">Leads</span>
+        <div class="top-bar-actions"></div>
+    </div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Leads &amp; Enquiries</h1>
+            <div class="page-actions">
+                <a href="{% url 'lead_create' %}" class="btn btn-primary btn-sm">+ Add Lead</a>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card animate-fade-up stagger-1">
+                <div class="stat-icon blue">🎯</div>
+                <div class="stat-value" data-target="{{ total_count|default:0 }}">{{ total_count|default:0 }}</div>
+                <div class="stat-label">Total Leads</div>
+            </div>
+            <div class="stat-card animate-fade-up stagger-2">
+                <div class="stat-icon amber">🕐</div>
+                <div class="stat-value" data-target="{{ status_counts.new|default:0 }}">{{ status_counts.new|default:0 }}</div>
+                <div class="stat-label">New</div>
+            </div>
+            <div class="stat-card animate-fade-up stagger-3">
+                <div class="stat-icon green">✅</div>
+                <div class="stat-value" data-target="{{ status_counts.converted|default:0 }}">{{ status_counts.converted|default:0 }}</div>
+                <div class="stat-label">Converted</div>
+            </div>
+            <div class="stat-card animate-fade-up stagger-4">
+                <div class="stat-icon red">❌</div>
+                <div class="stat-value" data-target="{{ status_counts.lost|default:0 }}">{{ status_counts.lost|default:0 }}</div>
+                <div class="stat-label">Lost</div>
+            </div>
+        </div>
+
+        <div class="card animate-fade-up stagger-2">
+            <form method="get">
+                <div class="filters">
+                    <div class="search-box" style="flex:1; min-width:240px;">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" name="search" value="{{ search }}" class="form-control" placeholder="Search name, email, phone..." style="padding-left:40px;">
+                    </div>
+                    <select name="status" class="form-control">
+                        <option value="">All Statuses</option>
+                        {% for key, label in status_choices %}
+                        <option value="{{ key }}" {% if status_filter == key %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <select name="source" class="form-control">
+                        <option value="">All Sources</option>
+                        {% for key, label in source_choices %}
+                        <option value="{{ key }}" {% if source_filter == key %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+                    {% if status_filter or source_filter or search %}
+                    <a href="{% url 'leads' %}" class="btn btn-secondary btn-sm">Clear</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+
+        <div class="card animate-fade-up stagger-3">
+            <div class="card-header">
+                <h3>All Leads</h3>
+                <span class="badge badge-info">{{ leads|length }} records</span>
+            </div>
+            <div class="table-container">
+                {% if leads %}
+                <table class="sortable">
+                    <thead>
+                        <tr>
+                            <th>Lead</th>
+                            <th>Contact</th>
+                            <th>Source</th>
+                            <th>Project</th>
+                            <th>Assigned To</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th class="no-sort">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lead in leads %}
+                        <tr>
+                            <td>
+                                <strong>{{ lead.display_name }}</strong>
+                                {% if lead.converted_customer %}
+                                <br><span style="font-size:12px; color:var(--text-secondary);">→ {{ lead.converted_customer.customer_id }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {{ lead.phone|default:"-" }}
+                                {% if lead.email %}<br><span style="font-size:12px; color:var(--text-secondary);">{{ lead.email }}</span>{% endif %}
+                            </td>
+                            <td>{{ lead.get_source_display }}</td>
+                            <td>{{ lead.interest_project.name|default:"-" }}</td>
+                            <td>{% if lead.assigned_to %}{{ lead.assigned_to.get_full_name|default:lead.assigned_to.username }}{% else %}-{% endif %}</td>
+                            <td>
+                                <span class="badge badge-{% if lead.status == 'converted' %}success{% elif lead.status == 'lost' %}danger{% elif lead.status == 'qualified' %}info{% elif lead.status == 'contacted' %}warning{% else %}secondary{% endif %}">
+                                    {{ lead.get_status_display }}
+                                </span>
+                            </td>
+                            <td>{{ lead.created_at|date:"d M Y" }}</td>
+                            <td>
+                                <div class="table-actions">
+                                    <a href="{% url 'lead_detail' lead.pk %}" class="btn btn-primary btn-sm">View</a>
+                                    {% if lead.status != 'converted' %}
+                                    <a href="{% url 'lead_convert' lead.pk %}" class="btn btn-success btn-sm">Convert</a>
+                                    {% endif %}
+                                    <a href="{% url 'lead_edit' lead.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state">
+                    <div class="empty-icon">🎯</div>
+                    <h3>No Leads Found</h3>
+                    <p>{% if search or status_filter or source_filter %}No leads match your filters.{% else %}Leads from the website enquiry form appear here.{% endif %}</p>
+                    <a href="{% url 'lead_create' %}" class="btn btn-primary btn-sm">+ Add Lead</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

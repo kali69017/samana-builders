@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-samana}
+      POSTGRES_USER: ${DB_USER:-samana}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  web:
+    build: .
+    command: sh -c "python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn samana_erp.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120"
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_DEBUG: "False"
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
+      DB_ENGINE: postgres
+      DB_NAME: ${DB_NAME:-samana}
+      DB_USER: ${DB_USER:-samana}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: db
+      DB_PORT: "5432"
+      SENDPK_ENABLED: ${SENDPK_ENABLED:-False}
+      SENDPK_API_KEY: ${SENDPK_API_KEY:-}
+      SENDPK_SENDER_ID: ${SENDPK_SENDER_ID:-SMS Alert}
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-False}
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-Samana Builders <noreply@samanabuilders.com>}
+    depends_on:
+      - db
+    volumes:
+      - media:/app/media
+    ports:
+      - "80:8000"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  media:

@@ -1,41 +1,290 @@
 {% with url_name=request.resolver_match.url_name %}
 <aside class="sidebar{% if sidebar_class %} {{ sidebar_class }}{% endif %}">
-    <div class="sidebar-brand"><div class="brand-text"><h2>Samana Builders</h2><p>Real Estate ERP</p></div></div>
+    <div class="sidebar-brand">
+        <div class="brand-mark">S</div>
+        <div class="brand-text">
+            <h2>{{ company_name }}</h2>
+            <p>Real Estate ERP</p>
+        </div>
+    </div>
+
     <nav class="sidebar-nav">
-        <div class="nav-section">Main Menu</div>
+        <div class="nav-section">Main</div>
         <ul class="nav-menu">
-            <li class="nav-item"><a href="{% url 'dashboard' %}" class="nav-link{% if url_name == 'dashboard' %} active{% endif %}"><span class="nav-icon">📊</span> Dashboard</a></li>
-            <li class="nav-item"><a href="{% url 'customers' %}" class="nav-link{% if url_name == 'customers' or url_name == 'customer_create' or url_name == 'customer_edit' or url_name == 'customer_detail' %} active{% endif %}"><span class="nav-icon">👥</span> Customers</a></li>
-            <li class="nav-item"><a href="{% url 'properties' %}" class="nav-link{% if url_name == 'properties' or url_name == 'project_create' or url_name == 'project_edit' or url_name == 'plot_create' or url_name == 'plot_edit' or url_name == 'reservation_create' %} active{% endif %}"><span class="nav-icon">🏗️</span> Properties</a></li>
-            <li class="nav-item"><a href="{% url 'bookings' %}" class="nav-link{% if url_name == 'bookings' or url_name == 'booking_create' or url_name == 'booking_edit' or url_name == 'booking_detail' or url_name == 'booking_transfer' %} active{% endif %}"><span class="nav-icon">📋</span> Bookings</a></li>
+            <li>
+                <a href="{% url 'dashboard' %}" class="nav-link{% if url_name == 'dashboard' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg></span>
+                    Dashboard
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'customers' %}" class="nav-link{% if url_name == 'customers' or url_name == 'customer_create' or url_name == 'customer_edit' or url_name == 'customer_detail' or url_name == 'customer_profile_create' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+                    Customers
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'properties' %}" class="nav-link{% if url_name == 'properties' or url_name == 'project_create' or url_name == 'project_edit' or url_name == 'plot_create' or url_name == 'plot_edit' or url_name == 'reservation_create' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg></span>
+                    Properties
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'bookings' %}" class="nav-link{% if url_name == 'bookings' or url_name == 'booking_create' or url_name == 'booking_edit' or url_name == 'booking_detail' or url_name == 'booking_transfer' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></span>
+                    Bookings
+                </a>
+            </li>
             {% if can_view_payments %}
-            <li class="nav-item"><a href="{% url 'payments' %}" class="nav-link{% if url_name == 'payments' or url_name == 'payment_create' or url_name == 'payment_detail' or url_name == 'receipt_detail' %} active{% endif %}"><span class="nav-icon">💰</span> Payments</a></li>
+            <li>
+                <a href="{% url 'payments' %}" class="nav-link{% if url_name == 'payments' or url_name == 'payment_create' or url_name == 'payment_detail' or url_name == 'receipt_detail' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg></span>
+                    Payments
+                </a>
+            </li>
             {% endif %}
             {% if can_view_expenses %}
-            <li class="nav-item"><a href="{% url 'expenses' %}" class="nav-link{% if url_name == 'expenses' or url_name == 'expense_create' or url_name == 'expense_edit' or url_name == 'expense_delete' %} active{% endif %}"><span class="nav-icon">🧾</span> Expenses</a></li>
-            {% endif %}
-            {% if can_view_expenses %}
-            <li class="nav-item"><a href="{% url 'financial_reports' %}" class="nav-link{% if url_name == 'financial_reports' %} active{% endif %}"><span class="nav-icon">📊</span> Financial Reports</a></li>
+            <li>
+                <a href="{% url 'expenses' %}" class="nav-link{% if url_name == 'expenses' or url_name == 'expense_create' or url_name == 'expense_edit' or url_name == 'expense_delete' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/></svg></span>
+                    Expenses
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'financial_reports' %}" class="nav-link{% if url_name == 'financial_reports' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></span>
+                    Financial Reports
+                </a>
+            </li>
             {% endif %}
         </ul>
+
+        <div class="nav-divider"></div>
+        <div class="nav-section">CRM</div>
+        <ul class="nav-menu">
+            {% if can_view_leads %}
+            <li>
+                <a href="{% url 'leads' %}" class="nav-link{% if url_name == 'leads' or url_name == 'lead_create' or url_name == 'lead_detail' or url_name == 'lead_edit' or url_name == 'lead_convert' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>
+                    Leads
+                </a>
+            </li>
+            {% endif %}
+            <li>
+                <a href="{% url 'agents' %}" class="nav-link{% if url_name == 'agents' or url_name == 'agent_create' or url_name == 'agent_detail' or url_name == 'agent_edit' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="7" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></span>
+                    Agents
+                </a>
+            </li>
+        </ul>
+
+        {% if can_view_payments %}
+        <div class="nav-divider"></div>
+        <div class="nav-section">Finance</div>
+        <ul class="nav-menu">
+            <li>
+                <a href="{% url 'installment_plans' %}" class="nav-link{% if url_name == 'installment_plans' or url_name == 'installment_plan_detail' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h5"/><circle cx="17" cy="15" r="5"/><path d="M17 13v2l1.5 1.5"/></svg></span>
+                    Installment Plans
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'refunds' %}" class="nav-link{% if url_name == 'refunds' or url_name == 'refund_create' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></span>
+                    Refunds
+                </a>
+            </li>
+            {% if can_view_reports %}
+            <li>
+                <a href="{% url 'receivables_aging' %}" class="nav-link{% if url_name == 'receivables_aging' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01"/><path d="M18 12h.01"/></svg></span>
+                    Receivables
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'sales_report' %}" class="nav-link{% if url_name == 'sales_report' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></span>
+                    Sales Report
+                </a>
+            </li>
+            {% endif %}
+        </ul>
+        {% endif %}
+
+        <div class="nav-divider"></div>
+        <div class="nav-section">Projects</div>
+        <ul class="nav-menu">
+            <li>
+                <a href="{% url 'milestones' %}" class="nav-link{% if url_name == 'milestones' or url_name == 'milestone_create' or url_name == 'milestone_edit' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg></span>
+                    Milestones
+                </a>
+            </li>
+        </ul>
+
+        {% if can_view_expenses %}
+        <div class="nav-divider"></div>
+        <div class="nav-section">Finance &amp; Accounts</div>
+        <ul class="nav-menu">
+            <li>
+                <a href="{% url 'finance_ledger' %}" class="nav-link{% if url_name == 'finance_ledger' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
+                    Ledger
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'finance_office_expenses' %}" class="nav-link{% if url_name == 'finance_office_expenses' or url_name == 'finance_office_expense_create' or url_name == 'finance_office_expense_edit' or url_name == 'finance_office_expense_report' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/></svg></span>
+                    Company Expenses
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'finance_project_costs' %}" class="nav-link{% if url_name == 'finance_project_costs' or url_name == 'finance_project_cost_create' or url_name == 'finance_project_cost_edit' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M17 18h1"/><path d="M12 18h1"/><path d="M7 18h1"/></svg></span>
+                    Project Costs
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'finance_project_finance' %}" class="nav-link{% if url_name == 'finance_project_finance' or url_name == 'finance_project_budget' or url_name == 'finance_project_investment' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></span>
+                    Project Finance
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'finance_offices' %}" class="nav-link{% if url_name == 'finance_offices' or url_name == 'finance_office_create' or url_name == 'finance_office_edit' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/></svg></span>
+                    Offices
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'finance_expense_categories' %}" class="nav-link{% if url_name == 'finance_expense_categories' or url_name == 'finance_expense_category_create' or url_name == 'finance_expense_category_edit' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg></span>
+                    Categories
+                </a>
+            </li>
+        </ul>
+        {% endif %}
+
+        {% if can_view_payroll %}
+        <div class="nav-divider"></div>
+        <div class="nav-section">HR &amp; Payroll</div>
+        <ul class="nav-menu">
+            <li>
+                <a href="{% url 'hr_home' %}" class="nav-link{% if url_name == 'hr_home' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="7" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></span>
+                    HR Overview
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'hr_employees' %}" class="nav-link{% if url_name == 'hr_employees' or url_name == 'hr_employee_create' or url_name == 'hr_employee_detail' or url_name == 'hr_employee_edit' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+                    Employees
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'hr_payroll_runs' %}" class="nav-link{% if url_name == 'hr_payroll_runs' or url_name == 'hr_payroll_run_create' or url_name == 'hr_payroll_run_detail' or url_name == 'hr_payroll_report' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01"/><path d="M18 12h.01"/></svg></span>
+                    Payroll
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'hr_attendance' %}" class="nav-link{% if url_name == 'hr_attendance' or url_name == 'hr_attendance_create' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="m9 16 2 2 4-4"/></svg></span>
+                    Attendance
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'hr_leaves' %}" class="nav-link{% if url_name == 'hr_leaves' or url_name == 'hr_leave_create' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg></span>
+                    Leave
+                </a>
+            </li>
+            {% if can_manage_hr %}
+            <li>
+                <a href="{% url 'hr_departments' %}" class="nav-link{% if url_name == 'hr_departments' or url_name == 'hr_department_create' or url_name == 'hr_department_edit' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/></svg></span>
+                    Departments
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'hr_designations' %}" class="nav-link{% if url_name == 'hr_designations' or url_name == 'hr_designation_create' or url_name == 'hr_designation_edit' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg></span>
+                    Designations
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'hr_salary_components' %}" class="nav-link{% if url_name == 'hr_salary_components' or url_name == 'hr_salary_component_create' or url_name == 'hr_salary_component_edit' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></span>
+                    Salary Components
+                </a>
+            </li>
+            {% endif %}
+        </ul>
+        {% endif %}
+
         <div class="nav-divider"></div>
         <div class="nav-section">Administration</div>
         <ul class="nav-menu">
             {% if can_view_users %}
-            <li class="nav-item"><a href="{% url 'users' %}" class="nav-link{% if url_name == 'users' or url_name == 'user_create' or url_name == 'user_edit' or url_name == 'user_role_update' %} active{% endif %}"><span class="nav-icon">👤</span> Manage Users</a></li>
+            <li>
+                <a href="{% url 'users' %}" class="nav-link{% if url_name == 'users' or url_name == 'user_create' or url_name == 'user_edit' or url_name == 'user_role_update' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg></span>
+                    Manage Users
+                </a>
+            </li>
             {% endif %}
             {% if can_audit %}
-            <li class="nav-item"><a href="{% url 'notifications' %}" class="nav-link{% if url_name == 'notifications' or url_name == 'send_notification' %} active{% endif %}"><span class="nav-icon">🔔</span> Notifications</a></li>
+            <li>
+                <a href="{% url 'notifications' %}" class="nav-link{% if url_name == 'notifications' or url_name == 'send_notification' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
+                    Notifications
+                </a>
+            </li>
             {% endif %}
             {% if can_backup %}
-            <li class="nav-item"><a href="{% url 'backup' %}" class="nav-link{% if url_name == 'backup' %} active{% endif %}"><span class="nav-icon">💾</span> DB Backup</a></li>
+            <li>
+                <a href="{% url 'backup' %}" class="nav-link{% if url_name == 'backup' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg></span>
+                    DB Backup
+                </a>
+            </li>
             {% endif %}
             {% if can_audit %}
-            <li class="nav-item"><a href="{% url 'audit_logs' %}" class="nav-link{% if url_name == 'audit_logs' %} active{% endif %}"><span class="nav-icon">📝</span> Audit Logs</a></li>
+            <li>
+                <a href="{% url 'audit_logs' %}" class="nav-link{% if url_name == 'audit_logs' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h12a2 2 0 0 0 2-2v-2H10v2a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v3h4"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M15 8h-5"/><path d="M15 12h-5"/></svg></span>
+                    Audit Logs
+                </a>
+            </li>
             {% endif %}
-            <li class="nav-item"><a href="{% url 'profile' %}" class="nav-link{% if url_name == 'profile' %} active{% endif %}"><span class="nav-icon">⚙️</span> Preferences</a></li>
+            {% if can_manage_settings %}
+            <li>
+                <a href="{% url 'company_settings' %}" class="nav-link{% if url_name == 'company_settings' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/></svg></span>
+                    Company Settings
+                </a>
+            </li>
+            {% endif %}
+            <li>
+                <a href="{% url 'profile' %}" class="nav-link{% if url_name == 'profile' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span>
+                    Preferences
+                </a>
+            </li>
         </ul>
     </nav>
-    <div class="sidebar-footer"><a href="{% url 'logout' %}" class="nav-link" style="padding:8px 0;"><span class="nav-icon">🚪</span> Logout</a></div>
+
+    <div class="sidebar-footer">
+        <div class="sidebar-user">
+            <div class="user-avatar">{{ user_initials }}</div>
+            <div style="min-width:0;">
+                <div style="font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ user_display_name }}</div>
+                <div style="font-size:11px; color:var(--text-3);">{% if request.user.profile %}{{ request.user.profile.get_role_display }}{% else %}Super Admin{% endif %}</div>
+            </div>
+            <a href="{% url 'logout' %}" class="icon-btn" style="margin-left:auto;" title="Sign out">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+            </a>
+        </div>
+    </div>
 </aside>
 {% endwith %}

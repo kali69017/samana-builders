@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Project Costs - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Project Costs</h1>
+            <div class="page-actions">
+                <a href="{% url 'finance_project_cost_create' %}" class="btn btn-primary">+ Add Cost</a>
+            </div>
+        </div>
+
+        <div class="stat-card animate-fade-up" style="margin-bottom:20px;">
+            <div class="stat-icon amber">🏗️</div>
+            <div class="stat-meta"><div class="stat-value">Rs. {{ total_amount|floatformat:0 }}</div><div class="stat-label">Total (filtered)</div></div>
+        </div>
+
+        <div class="card animate-fade-up">
+            <form method="get">
+                <div class="filters">
+                    <select name="project" class="form-control">
+                        <option value="">All Projects</option>
+                        {% for project in projects %}
+                        <option value="{{ project.pk }}" {% if project_filter == project.pk|stringformat:'s' %}selected{% endif %}>{{ project.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <select name="category" class="form-control">
+                        <option value="">All Categories</option>
+                        <option value="material" {% if category_filter == 'material' %}selected{% endif %}>Material</option>
+                        <option value="labor" {% if category_filter == 'labor' %}selected{% endif %}>Labor</option>
+                        <option value="contractor" {% if category_filter == 'contractor' %}selected{% endif %}>Contractor</option>
+                        <option value="transportation" {% if category_filter == 'transportation' %}selected{% endif %}>Transportation</option>
+                        <option value="other" {% if category_filter == 'other' %}selected{% endif %}>Other</option>
+                    </select>
+                    <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>All Project Costs</h3><span class="badge badge-info">{{ costs|length }} records</span></div>
+            <div class="table-container">
+                {% if costs %}
+                <table class="sortable">
+                    <thead>
+                        <tr><th>Date</th><th>Project</th><th>Category</th><th>Vendor</th><th>Amount</th><th>Status</th><th class="no-sort">Actions</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for cost in costs %}
+                        <tr>
+                            <td>{{ cost.cost_date|date:"d M Y" }}</td>
+                            <td><strong>{{ cost.project.name }}</strong></td>
+                            <td><span class="badge badge-info">{{ cost.get_cost_category_display }}</span></td>
+                            <td>{{ cost.vendor|default:"-" }}</td>
+                            <td style="font-weight:600;">Rs. {{ cost.amount|floatformat:0 }}</td>
+                            <td><span class="badge badge-{% if cost.status == 'paid' %}success{% else %}secondary{% endif %}">{{ cost.get_status_display }}</span></td>
+                            <td>
+                                <div class="table-actions">
+                                    <a href="{% url 'finance_project_cost_edit' cost.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                                    {% if can_delete %}
+                                    <a href="{% url 'finance_project_cost_delete' cost.pk %}" class="btn btn-danger btn-sm">Delete</a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state"><div class="empty-icon">🏗️</div><h3>No Project Costs</h3><p>Record material, labor, contractor and transportation costs.</p></div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 *.pyo
 venv/
+.venv/
+.venv312/
 .env
 db.sqlite3
 *.log
@@ -15,4 +17,10 @@ frontend/node_modules/
 frontend/dist/
 backups/
 media/
+staticfiles/
+test_run_output.txt
+test_report.md
+samana-builders-deploy.zip
+sendpk_documentation.md
+goldcity.jpeg
 

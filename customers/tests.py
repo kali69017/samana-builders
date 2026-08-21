@@ -45,7 +45,7 @@ class CustomerFormTest(TestCase):
 class CustomerViewTest(TestCase):
     def setUp(self):
         self.client = Client()
-        self.user = User.objects.create_user('testuser', 'test@example.com', 'testpass123')
+        self.user = User.objects.create_superuser('testuser', 'test@example.com', 'testpass123')
         self.client.login(username='testuser', password='testpass123')
     
     def test_customer_list_view(self):

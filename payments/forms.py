@@ -1,5 +1,5 @@
 from django import forms
-from .models import Payment
+from .models import Payment, Refund
 from bookings.models import Booking, Installment
 
 
@@ -70,6 +70,29 @@ class PaymentForm(forms.ModelForm):
                 pass
         
         return cleaned
+
+
+class RefundForm(forms.ModelForm):
+    class Meta:
+        model = Refund
+        fields = ['booking', 'amount', 'reason', 'notes']
+        widgets = {
+            'booking': forms.Select(attrs={'class': 'form-control'}),
+            'amount': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': ' '}),
+            'reason': forms.Select(attrs={'class': 'form-control'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': ' '}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['booking'].queryset = Booking.objects.select_related('customer').all()
+        self.fields['notes'].required = False
+
+    def clean_amount(self):
+        amount = self.cleaned_data.get('amount')
+        if amount is not None and amount <= 0:
+            raise forms.ValidationError('Amount must be greater than 0')
+        return amount
 
 
 class PaymentFilterForm(forms.Form):

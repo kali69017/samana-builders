@@ -42,6 +42,34 @@
             </div>
         </div>
 
+        {% if can_manage_users and payment.status in 'pending,draft,under_clearing,partially_applied' %}
+        <!-- Verification Workflow -->
+        <div class="card animate-fade-up" style="padding:16px 24px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:16px;">
+            <strong style="font-size:14px;">Verification Actions:</strong>
+            <form method="post" action="{% url 'payment_verify' payment.pk %}" style="margin:0;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('Verify this payment of Rs. {{ payment.amount|floatformat:0 }}?');">✓ Verify</button>
+            </form>
+            <form method="post" action="{% url 'payment_reject' payment.pk %}" style="margin:0;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Reject this payment?');">✕ Reject</button>
+            </form>
+            <form method="post" action="{% url 'payment_bounce' payment.pk %}" style="margin:0; display:flex; gap:6px; align-items:center;">
+                {% csrf_token %}
+                <input type="text" name="bounce_reason" placeholder="Bounce reason" class="form-control" style="width:auto; height:34px; font-size:12px;">
+                <button type="submit" class="btn btn-warning btn-sm" onclick="return confirm('Mark this payment as bounced?');">↩ Bounce</button>
+            </form>
+        </div>
+        {% elif can_manage_users and payment.status == 'verified' %}
+        <div class="card animate-fade-up" style="padding:16px 24px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:16px;">
+            <strong style="font-size:14px;">This payment is verified.</strong>
+            <form method="post" action="{% url 'payment_reverse' payment.pk %}" style="margin:0;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Reverse this verified payment? This will reduce the booking advance.');">⟲ Reverse Payment</button>
+            </form>
+        </div>
+        {% endif %}
+
         <div style="display:grid; grid-template-columns:2fr 1fr; gap:20px; margin-top:20px;">
             <!-- Left Column -->
             <div style="display:flex; flex-direction:column; gap:20px;">

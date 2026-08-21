@@ -1,6 +1,6 @@
 {% extends "corporate_base.html" %}
 
-{% block title %}Samana Builders & Developers | Building Trust, Building the Life You Deserve{% endblock %}
+{% block title %}Samana Builders &amp; Developers | Building Trust, Building the Life You Deserve{% endblock %}
 
 {% block content %}
 
@@ -10,368 +10,152 @@
     <div class="hero-overlay" aria-hidden="true"></div>
 
     <div class="hero-content">
-      <div class="hero-left">
-        <span class="hero-badge">Now Accepting Bookings</span>
-        <h1 class="hero-title">Building Trust, <span class="line-2">Building the Life You Deserve.</span></h1>
-        <p class="hero-tagline">Samana Builders &mdash; premium real estate in Pakistan since 2011.</p>
-        <a href="#projects" class="btn btn-navy btn-explore">Explore Properties</a>
+      <div>
+        <span class="hero-badge">Samana Builders &amp; Developers</span>
+        <h1 class="hero-title">Building Trust, <br><span class="accent">Building the Life</span> You Deserve.</h1>
+        <p class="hero-tagline">We build quality homes and commercial projects across Pakistan, with a focus on safety, sustainability, and trust.</p>
+        <div class="hero-ctas">
+          <a href="#projects" class="btn btn-gold">Explore Projects</a>
+          <a href="#about" class="btn btn-light">Learn More</a>
+        </div>
       </div>
-
-      <aside class="hero-form-card">
-        <h3>Register Your Interest</h3>
-        <p class="hero-form-sub">Tell us what you're looking for and our team will get back to you.</p>
-        <form method="post" action="{% url 'lead_submit' %}">
-          {% csrf_token %}
-          <input type="hidden" name="lead_type" value="hero">
-          <div class="form-group">
-            <input class="form-input" type="text" name="full_name" placeholder="Full Name" required>
-          </div>
-          <div class="form-group">
-            <input class="form-input" type="email" name="email" placeholder="Email Address" required>
-          </div>
-          <div class="form-group">
-            <input class="form-input" type="tel" name="phone" placeholder="Phone Number" required>
-          </div>
-          <button type="submit" class="btn btn-gold btn-block">Submit</button>
-        </form>
-      </aside>
     </div>
 
-    <a href="#launches" class="hero-chevron" aria-label="Scroll to latest launches">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    <a href="#about" class="hero-scroll" aria-label="Scroll down">
+      <span class="mouse"></span>
+      Scroll
     </a>
   </section>
 
-  <!-- ================= GALLERY ================= -->
-  <section class="gallery" id="gallery">
-    <div class="container">
-      <div class="section-heading">
-        <span class="section-eyebrow">Image Gallery</span>
-        <h2 class="section-title">Our Projects in Pictures</h2>
-      </div>
-
-      <div class="gallery-grid">
-        <div class="gallery-item">
-          <div class="gallery-img">
-            <img src="https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=800&q=80" alt="Samana Green Valley" loading="lazy" />
-          </div>
-          <div class="gallery-caption">Samana Green Valley</div>
-        </div>
-        <div class="gallery-item">
-          <div class="gallery-img">
-            <img src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&q=80" alt="Samana Sky Residences" loading="lazy" />
-          </div>
-          <div class="gallery-caption">Samana Sky Residences</div>
-        </div>
-        <div class="gallery-item">
-          <div class="gallery-img">
-            <img src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&q=80" alt="Samana Gold City" loading="lazy" />
-          </div>
-          <div class="gallery-caption">Samana Gold City</div>
-        </div>
-        <div class="gallery-item">
-          <div class="gallery-img">
-            <img src="https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&q=80" alt="Samana Projects" loading="lazy" />
-          </div>
-          <div class="gallery-caption">Luxury Villas</div>
-        </div>
-        <div class="gallery-item">
-          <div class="gallery-img">
-            <img src="https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&q=80" alt="Samana Projects" loading="lazy" />
-          </div>
-          <div class="gallery-caption">Luxury Apartments</div>
-        </div>
-        <div class="gallery-item">
-          <div class="gallery-img">
-            <img src="https://images.unsplash.com/photo-1449844908441-8829872d2607?w=800&q=80" alt="Samana Projects" loading="lazy" />
-          </div>
-          <div class="gallery-caption">Gated Communities</div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ================= LATEST LAUNCHES ================= -->
-  <section class="launches" id="launches">
-    <div class="container">
-      <div class="section-heading">
-        <span class="section-eyebrow">New &amp; Emerging</span>
-        <h2 class="section-title">Latest Launches</h2>
-        <p>Discover our newest communities and pre-launch opportunities across Pakistan.</p>
-      </div>
-
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-number">150<span>+</span></div>
-          <div class="stat-label">Projects Completed</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-number">2,000<span>+</span></div>
-          <div class="stat-label">Happy Families</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-number">15<span>+</span></div>
-          <div class="stat-label">Years of Excellence</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-number">10M<span>+</span></div>
-          <div class="stat-label">Sq. Ft. Developed</div>
-        </div>
-      </div>
-
-      <!-- Launches carousel -->
-      <div class="carousel">
-        <div class="slide active">
-          <div class="slide-img">
-            <img src="https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=1600&q=80" alt="Park Grand">
-          </div>
-          <div class="slide-overlay"></div>
-          <div class="slide-content">
-            <span class="slide-badge">New Launch</span>
-            <div class="slide-community">Samana Green Valley &middot; Islamabad</div>
-            <h3 class="slide-name">Park Grand</h3>
-            <p class="slide-tagline">&ldquo;A Quiet Certainty, For the Few&rdquo;</p>
-            <a href="#contact" class="btn btn-gold">View Development</a>
-          </div>
-        </div>
-
-        <div class="slide">
-          <div class="slide-img">
-            <img src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1600&q=80" alt="Sky Residences">
-          </div>
-          <div class="slide-overlay"></div>
-          <div class="slide-content">
-            <span class="slide-badge">Coming Soon</span>
-            <div class="slide-community">Samana Oceanfront &middot; Lahore</div>
-            <h3 class="slide-name">Sky Residences</h3>
-            <p class="slide-tagline">&ldquo;Elevated Living. Lahore Address.&rdquo;</p>
-            <a href="#contact" class="btn btn-gold">View Development</a>
-          </div>
-        </div>
-
-        <div class="slide">
-          <div class="slide-img">
-            <img src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1600&q=80" alt="Panorama">
-          </div>
-          <div class="slide-overlay"></div>
-          <div class="slide-content">
-            <span class="slide-badge">New Launch</span>
-            <div class="slide-community">Samana Green Valley &middot; Islamabad</div>
-            <h3 class="slide-name">Panorama</h3>
-            <p class="slide-tagline">&ldquo;Scenic Lifestyle. Islamabad Address.&rdquo;</p>
-            <a href="#contact" class="btn btn-gold">View Development</a>
-          </div>
-        </div>
-
-        <div class="slide">
-          <div class="slide-img">
-            <img src="https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=1600&q=80" alt="Samana Gold City">
-          </div>
-          <div class="slide-overlay"></div>
-          <div class="slide-content">
-            <span class="slide-badge">Coming Soon</span>
-            <div class="slide-community">Lahore</div>
-            <h3 class="slide-name">Samana Gold City</h3>
-            <p class="slide-tagline">&ldquo;A Landmark Destination&rdquo;</p>
-            <a href="#contact" class="btn btn-gold">View Development</a>
-          </div>
-        </div>
-
-        <button class="carousel-btn prev" aria-label="Previous launch">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
-        </button>
-        <button class="carousel-btn next" aria-label="Next launch">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
-        </button>
-      </div>
-
-      <div class="slider-dots">
-        <button class="dot active" aria-label="Go to slide 1"></button>
-        <button class="dot" aria-label="Go to slide 2"></button>
-        <button class="dot" aria-label="Go to slide 3"></button>
-        <button class="dot" aria-label="Go to slide 4"></button>
-      </div>
-    </div>
-  </section>
-
   <!-- ================= ABOUT ================= -->
-  <section class="about" id="about">
-    <div class="about-video">
-      <video autoplay muted loop playsinline aria-hidden="true">
-        <source src="https://assets.mixkit.co/videos/43607/43607-720.mp4" type="video/mp4">
-      </video>
-    </div>
-    <div class="about-overlay" aria-hidden="true"></div>
-
-    <div class="about-grid">
-      <div class="about-left">
-        <span class="about-label">Welcome to Samana</span>
-        <h2 class="about-heading">Building Trust, Building the Life You Deserve.</h2>
-        <div class="about-copy">
-          <p>From innovative design to meticulous craftsmanship, every Samana development is grounded in decades of experience across construction, real estate, and project management. We don't just build properties &mdash; we build communities and legacies.</p>
-          <p>Our commitment to quality, safety, and sustainability runs through every project, ensuring that what we deliver today remains a source of pride for generations to come.</p>
-        </div>
-
-        <div class="reliability-card">
-          <h4 class="reliability-title">Reliability</h4>
-          <p>Trusted by thousands &mdash; every project delivered on time, with transparent pricing and uncompromising quality.</p>
-        </div>
-
-        <div class="about-buttons">
-          <a href="#projects" class="btn btn-gold">Explore Our Projects</a>
-          <a href="#contact" class="btn btn-outline">Get in Touch</a>
-        </div>
-      </div>
-
-      <div class="about-right">
-        <div class="about-card">
-          <div class="about-card-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
-          </div>
-          <h3 class="about-card-title">Vision Statement</h3>
-          <p class="about-card-text">To build not just for today, but for tomorrow's generations, crafting enduring landmarks that carry forward the values of quality, trust, and community.</p>
-        </div>
-
-        <div class="about-card">
-          <div class="about-card-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg>
-          </div>
-          <h3 class="about-card-title">Mission Statement</h3>
-          <p class="about-card-text">To earn the trust and pride of our clients by consistently delivering projects that reflect the highest standards of quality, reliability, and integrity, building a brand they are honored to be part of.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ================= LEAD STRIP ================= -->
-  <section class="leadstrip">
-    <div class="leadstrip-inner">
-      <h2 class="leadstrip-title">Stay Updated on New Launches</h2>
-      <p class="leadstrip-sub">Be the first to know about pre-launch offers, new communities, and special pricing.</p>
-      <form class="subscribe-form" method="post" action="{% url 'lead_submit' %}">
-        {% csrf_token %}
-        <input type="hidden" name="lead_type" value="strip">
-        <div class="form-group">
-          <input class="form-input" type="text" name="full_name" placeholder="Full Name" required>
-        </div>
-        <div class="form-group">
-          <input class="form-input" type="email" name="email" placeholder="Email Address" required>
-        </div>
-        <button type="submit" class="btn btn-gold">Subscribe</button>
-      </form>
-    </div>
-  </section>
-
-  <!-- ================= SERVICES ================= -->
-  <section class="services" id="services">
+  <section class="section" id="about">
     <div class="container">
-      <div class="section-heading">
-        <span class="section-eyebrow">What We Do</span>
-        <h2 class="section-title">Our Services</h2>
-        <p>End-to-end expertise across real estate development, sales, and after-sales support.</p>
+      <div class="about-grid">
+        <div class="about-image reveal">
+          <img src="https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=1000&q=80" alt="Samana Builders architectural development" loading="lazy">
+        </div>
+        <div class="about-copy reveal" data-delay="1">
+          <span class="section-eyebrow">About Us</span>
+          <h2 class="section-title">Crafting <span class="accent">Enduring Landmarks</span></h2>
+          <p>Samana Builders &amp; Developers (Pvt) Limited has years of hands-on experience in residential and commercial real estate development, construction, and project management.</p>
+          <p>From buying the land to handing over the keys, we manage every step with one simple rule: <strong>quality without compromise</strong>. Our projects are designed for how people actually live, work, and grow.</p>
+          <p>Every project reflects the values that define us: <strong>quality, reliability, and integrity</strong>.</p>
+
+          <div class="stat-strip">
+            <div class="stat">
+              <div class="num">25+</div>
+              <div class="label">Years of Experience <em>(placeholder)</em></div>
+            </div>
+            <div class="stat">
+              <div class="num">50+</div>
+              <div class="label">Projects Delivered <em>(placeholder)</em></div>
+            </div>
+            <div class="stat">
+              <div class="num">2M+</div>
+              <div class="label">Sq. Ft. Developed <em>(placeholder)</em></div>
+            </div>
+          </div>
+        </div>
       </div>
+    </div>
+  </section>
 
-      <div class="services-grid">
-        <div class="service-card">
-          <div class="service-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v10h12V10"/><path d="M10 20v-6h4v6"/></svg>
+  <!-- ================= VISION & MISSION ================= -->
+  <section class="section alt" id="vision">
+    <div class="container">
+      <div class="section-heading reveal">
+        <span class="section-eyebrow">Our Purpose</span>
+        <h2 class="section-title">Vision &amp; <span class="accent">Mission</span></h2>
+      </div>
+      <div class="vm-grid">
+        <div class="vm-card vision reveal">
+          <div class="vm-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
           </div>
-          <h3 class="service-title">Residential Development</h3>
-          <p class="service-desc">Premium homes and villas in prime locations across Pakistan.</p>
+          <h3>Our Vision</h3>
+          <p>To build not just for today, but for the generations of tomorrow. We create lasting landmarks that carry forward quality, trust, and community.</p>
         </div>
-
-        <div class="service-card">
-          <div class="service-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9"/><path d="M3 9v10a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9"/><path d="M9 20v-6h6v6"/></svg>
+        <div class="vm-card reveal" data-delay="1">
+          <div class="vm-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.5 13.5 17 22l-5-3-5 3 1.5-8.5"/></svg>
           </div>
-          <h3 class="service-title">Commercial Projects</h3>
-          <p class="service-desc">Modern retail and office spaces for thriving businesses.</p>
+          <h3>Our Mission</h3>
+          <p>To earn the trust and pride of clients by consistently delivering projects that reflect the highest standards of quality, reliability, and integrity.</p>
         </div>
+      </div>
+    </div>
+  </section>
 
-        <div class="service-card">
-          <div class="service-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4"/><path d="M10.5 12.5 20 3"/><path d="M16 7l3 3"/></svg>
-          </div>
-          <h3 class="service-title">Property Management</h3>
-          <p class="service-desc">End-to-end management for your real estate investments.</p>
+  <!-- ================= WHY SAMANA ================= -->
+  <section class="section" id="why">
+    <div class="container">
+      <div class="section-heading reveal">
+        <span class="section-eyebrow">Why Samana</span>
+        <h2 class="section-title">Reliability, <span class="accent">Built In</span></h2>
+        <p class="section-lead">Customer-Centric: every decision we make is with your needs and dreams in mind.</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature reveal">
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7v6c0 5 3.8 8 9 9 5.2-1 9-4 9-9V7z"/><path d="m9 12 2 2 4-4"/></svg></div>
+          <h3>Quality</h3>
+          <p>Premium materials and meticulous construction on every project, without exception.</p>
         </div>
-
-        <div class="service-card">
-          <div class="service-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m16 8-2.5 5.5L8 16l2.5-5.5z"/></svg>
-          </div>
-          <h3 class="service-title">Real Estate Advisory</h3>
-          <p class="service-desc">Expert guidance on property investment and development.</p>
+        <div class="feature reveal" data-delay="1">
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg></div>
+          <h3>Trust</h3>
+          <p>Transparent dealings and on-time delivery that our clients have relied on for decades.</p>
         </div>
-
-        <div class="service-card">
-          <div class="service-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3l4 4L7 21H3v-4z"/><path d="M13 7l4 4"/></svg>
-          </div>
-          <h3 class="service-title">Interior Design</h3>
-          <p class="service-desc">Award-winning design solutions for modern living.</p>
+        <div class="feature reveal" data-delay="2">
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg></div>
+          <h3>Sustainability</h3>
+          <p>Thoughtful, future-ready design that respects the environment and the community.</p>
         </div>
-
-        <div class="service-card">
-          <div class="service-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14v-3a8 8 0 0 1 16 0v3"/><path d="M3 14a2 2 0 0 1 2-2h1v6H5a2 2 0 0 1-2-2z"/><path d="M21 14a2 2 0 0 1-2-2h-1v6h1a2 2 0 0 0 2-2z"/></svg>
-          </div>
-          <h3 class="service-title">After-Sales Support</h3>
-          <p class="service-desc">Dedicated support long after your purchase is complete.</p>
+        <div class="feature reveal" data-delay="3">
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+          <h3>Customer-Centric</h3>
+          <p>Your needs and dreams guide every decision we make, from first meeting to handover.</p>
         </div>
       </div>
     </div>
   </section>
 
   <!-- ================= FEATURED PROJECTS ================= -->
-  <section class="projects" id="projects">
+  <section class="section alt" id="projects">
     <div class="container">
-      <div class="section-heading">
-        <span class="section-eyebrow">Featured Developments</span>
-        <h2 class="section-title">Our Developments</h2>
-        <p>Landmark communities designed for modern living, investment, and family.</p>
+      <div class="section-heading reveal">
+        <span class="section-eyebrow">Featured Projects</span>
+        <h2 class="section-title">Landmarks in <span class="accent">the Making</span></h2>
+        <p class="section-lead">A selection of our residential and commercial developments. <em>(Placeholder projects. Replace with your live listings.)</em></p>
       </div>
-
       <div class="projects-grid">
-        <div class="project-card">
-          <div class="project-media" style="background-image:url('https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=800&q=80');" aria-hidden="true"></div>
-          <div class="project-overlay" aria-hidden="true"></div>
-          <span class="project-badge">New Launch</span>
-          <div class="project-content">
-            <div class="project-subtitle">Islamabad</div>
-            <h3 class="project-title">Samana Green Valley</h3>
-            <p class="project-tagline">A premium gated community with luxury villas, lush parks, and world-class amenities.</p>
-            <a href="#contact" class="project-link">View Details
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-            </a>
+        <div class="project-card reveal">
+          <div class="img-wrap">
+            <img src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&q=80" alt="Samana Green Valley" loading="lazy">
+            <span class="project-badge">Now Booking</span>
+          </div>
+          <div class="project-body">
+            <h3>Samana Green Valley</h3>
+            <div class="project-loc">📍 Islamabad</div>
           </div>
         </div>
-
-        <div class="project-card">
-          <div class="project-media" style="background-image:url('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&q=80');" aria-hidden="true"></div>
-          <div class="project-overlay" aria-hidden="true"></div>
-          <span class="project-badge">Coming Soon</span>
-          <div class="project-content">
-            <div class="project-subtitle">Lahore</div>
-            <h3 class="project-title">Samana Sky Residences</h3>
-            <p class="project-tagline">Iconic high-rise living with panoramic city views and modern infrastructure.</p>
-            <a href="#contact" class="project-link">View Details
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-            </a>
+        <div class="project-card reveal" data-delay="1">
+          <div class="img-wrap">
+            <img src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&q=80" alt="Samana Sky Residences" loading="lazy">
+            <span class="project-badge">Under Construction</span>
+          </div>
+          <div class="project-body">
+            <h3>Samana Sky Residences</h3>
+            <div class="project-loc">📍 Lahore</div>
           </div>
         </div>
-
-        <div class="project-card">
-          <div class="project-media" style="background-image:url('https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&q=80');" aria-hidden="true"></div>
-          <div class="project-overlay" aria-hidden="true"></div>
-          <span class="project-badge">Coming Soon</span>
-          <div class="project-content">
-            <div class="project-subtitle">Lahore</div>
-            <h3 class="project-title">Samana Gold City</h3>
-            <p class="project-tagline">A landmark residential community offering luxury apartments and villas.</p>
-            <a href="#contact" class="project-link">View Details
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-            </a>
+        <div class="project-card reveal" data-delay="2">
+          <div class="img-wrap">
+            <img src="https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&q=80" alt="Samana Gold City" loading="lazy">
+            <span class="project-badge">Completed</span>
+          </div>
+          <div class="project-body">
+            <h3>Samana Gold City</h3>
+            <div class="project-loc">📍 Karachi</div>
           </div>
         </div>
       </div>
@@ -379,211 +163,90 @@
   </section>
 
   <!-- ================= TESTIMONIALS ================= -->
-  <section class="testimonials" id="testimonials">
+  <section class="section" id="testimonials">
     <div class="container">
-      <div class="section-heading">
+      <div class="section-heading reveal" style="text-align:center; margin-left:auto; margin-right:auto;">
         <span class="section-eyebrow">Testimonials</span>
-        <h2 class="section-title">What Our Clients Say</h2>
+        <h2 class="section-title">What Our <span class="accent">Clients Say</span></h2>
       </div>
-
-      <div class="testimonial-slider">
-        <div class="testimonial-slide active">
-          <p class="testimonial-quote">Samana Builders delivered our dream home on time and beyond expectations. The quality of construction is outstanding.</p>
-          <div class="testimonial-name">Ahmed Khan</div>
-          <div class="testimonial-location">Lahore</div>
-        </div>
-
-        <div class="testimonial-slide">
-          <p class="testimonial-quote">Professional team, transparent pricing, and excellent after-sales support. Highly recommended.</p>
-          <div class="testimonial-name">Fatima Ali</div>
-          <div class="testimonial-location">Islamabad</div>
-        </div>
-
-        <div class="testimonial-slide">
-          <p class="testimonial-quote">From booking to possession, the entire process was smooth and well-managed. They truly care about their customers.</p>
-          <div class="testimonial-name">Muhammad Hassan</div>
-          <div class="testimonial-location">Karachi</div>
-        </div>
-
-        <div class="testimonial-slide">
-          <p class="testimonial-quote">Invested in their commercial project and the returns have been exceptional. A trusted partner.</p>
-          <div class="testimonial-name">Sara Ahmed</div>
-          <div class="testimonial-location">Rawalpindi</div>
-        </div>
-      </div>
-
-      <div class="slider-dots">
-        <button class="dot active" aria-label="Go to testimonial 1"></button>
-        <button class="dot" aria-label="Go to testimonial 2"></button>
-        <button class="dot" aria-label="Go to testimonial 3"></button>
-        <button class="dot" aria-label="Go to testimonial 4"></button>
+      <div class="testimonial reveal">
+        <blockquote>"Samana delivered our project on time and beyond expectation. Their transparency and attention to detail gave us complete peace of mind."</blockquote>
+        <div class="who">Ahmed Raza</div>
+        <div class="role">Residential Client, Lahore</div>
       </div>
     </div>
   </section>
 
-<!-- ================= GOOGLE MAPS ================= -->
-  <section class="google-maps" id="google-maps">
+  <!-- ================= LOCATION ================= -->
+  <section class="section alt" id="location">
     <div class="container">
-      <div class="section-heading">
-        <span class="section-eyebrow">Project Locations</span>
-        <h2 class="section-title">Where We Develop</h2>
+      <div class="section-heading reveal">
+        <span class="section-eyebrow">Find Us</span>
+        <h2 class="section-title">Our <span class="accent">Office</span></h2>
       </div>
-
-      <div class="maps-container" id="maps-container">
-        <!-- Maps will be populated by JavaScript -->
+      <div class="location-grid">
+        <div class="map-wrap reveal">
+          <iframe src="https://www.openstreetmap.org/export/embed.html?bbox=66.95%2C24.80%2C67.08%2C24.92&layer=mapnik&marker=24.86%2C67.01" loading="lazy" title="Samana Builders office location in Karachi"></iframe>
+        </div>
+        <div class="location-info reveal" data-delay="1">
+          <h3>Visit Our Head Office</h3>
+          <div class="location-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s-7-5.4-7-11a7 7 0 0 1 14 0c0 5.6-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+            <div><div class="label">Address</div><div class="val">Office No. 207, 2nd Floor, Shayan Iconic Tower, Plot No. 5-A, Delhi Mercantile Cooperative Society, Karachi, Pakistan</div></div>
+          </div>
+          <div class="location-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            <div><div class="label">Hours</div><div class="val">Mon to Sat: 9 AM to 6 PM</div></div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
-
-  <script>
-    // ---------- Dynamic Google Maps ----------
-    document.addEventListener('DOMContentLoaded', function () {
-      fetch('/api/projects/locations/')
-        .then(response => response.json())
-        .then(projects => {
-          const container = document.getElementById('maps-container');
-          if (!projects || projects.length === 0) {
-            container.innerHTML = '<p class="maps-empty">Project location maps coming soon.</p>';
-            return;
-          }
-
-          projects.forEach(project => {
-            const lat = project.latitude;
-            const lng = project.longitude;
-            if (!lat || !lng) return;
-
-            const mapCard = document.createElement('div');
-            mapCard.className = 'map-card';
-
-            const mapIframe = document.createElement('iframe');
-            mapIframe.src = `https://www.google.com/maps?q=${lat},${lng}&z=13&output=embed`;
-            mapIframe.title = project.name;
-            mapIframe.style.border = '0';
-            mapIframe.width = '100%';
-            mapIframe.height = '380px';
-            mapIframe.loading = 'lazy';
-            mapIframe.referrerpolicy = 'no-referrer-when-downgrade';
-
-            const mapCaption = document.createElement('div');
-            mapCaption.className = 'map-caption';
-            mapCaption.textContent = project.name;
-
-            mapCard.appendChild(mapIframe);
-            mapCard.appendChild(mapCaption);
-            container.appendChild(mapCard);
-          });
-        })
-        .catch(error => {
-          console.error('Error fetching project locations:', error);
-          document.getElementById('maps-container').innerHTML = '<p class="maps-empty">Project location maps coming soon.</p>';
-        });
-    });
-  </script>
 
   <!-- ================= CONTACT ================= -->
-  <section class="contact" id="contact">
-    <div class="contact-grid">
-      <div class="contact-left">
-        <span class="section-eyebrow">Contact Us</span>
-        <h2 class="contact-title">Get in Touch</h2>
-        <p class="contact-sub">Our dedicated sales and support team is ready to answer your questions.</p>
-
-        <div class="contact-item">
-          <div class="contact-item-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .6 2.9a2 2 0 0 1-.4 1.8L8 9.6a16 16 0 0 0 6 6l1.2-1.3a2 2 0 0 1 1.8-.4c1 .3 1.9.5 2.9.6a2 2 0 0 1 1.7 2z"/></svg>
-          </div>
-          <div>
-            <div class="contact-item-label">Phone</div>
-            <a class="contact-item-value" href="tel:+923001234567">+92-300-1234567</a>
-          </div>
+  <section class="section" id="contact">
+    <div class="container">
+      <div class="contact-grid">
+        <div class="reveal">
+          <span class="section-eyebrow">Get In Touch</span>
+          <h2 class="section-title">Let's Build <span class="accent">Together</span></h2>
+          <p class="section-lead">Whether you are buying your first home or planning a commercial project, our team is ready to guide you, honestly and personally.</p>
         </div>
-
-        <div class="contact-item">
-          <div class="contact-item-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
-          </div>
-          <div>
-            <div class="contact-item-label">Email</div>
-            <a class="contact-item-value" href="mailto:info@samanabuilders.com">info@samanabuilders.com</a>
-          </div>
-        </div>
-
-        <div class="contact-item">
-          <div class="contact-item-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-5.4-7-11a7 7 0 0 1 14 0c0 5.6-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
-          </div>
-          <div>
-            <div class="contact-item-label">Office</div>
-            <span class="contact-item-value">Office No. 207, 2nd Floor, Shayan Iconic Tower, Plot No. 5-A, Delhi Mercantile Cooperative Society, Karachi, Pakistan</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="contact-right">
-        <div class="contact-form-card">
-          <h3 class="contact-form-title">Join Our Mailing List</h3>
-          <p class="contact-form-sub">Receive project updates, news, and exclusive offers directly in your inbox.</p>
+        <div class="contact-card reveal" data-delay="1">
           <form method="post" action="{% url 'lead_submit' %}">
             {% csrf_token %}
-            <input type="hidden" name="lead_type" value="newsletter">
-            <div class="form-group">
-              <input class="form-input" type="email" name="email" placeholder="Email Address" required>
+            <input type="hidden" name="lead_type" value="strip">
+            <div class="form-row">
+              <div class="form-group">
+                <input class="form-input" type="text" name="name" placeholder="Full Name" required>
+              </div>
+              <div class="form-group">
+                <input class="form-input" type="email" name="email" placeholder="Email Address" required>
+              </div>
             </div>
-            <button type="submit" class="btn btn-gold btn-block">Subscribe</button>
+            <div class="form-row">
+              <div class="form-group">
+                <input class="form-input" type="tel" name="phone" placeholder="Phone Number" required>
+              </div>
+              <div class="form-group">
+                <select class="form-select" name="interest">
+                  <option value="">Project Interest</option>
+                  <option value="residential">Residential</option>
+                  <option value="commercial">Commercial</option>
+                  <option value="villa">Villa</option>
+                  <option value="investment">Investment</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <textarea class="form-textarea" name="message" placeholder="Your message…"></textarea>
+            </div>
+            <button type="submit" class="btn btn-gold btn-block">Send Message</button>
           </form>
+          <p class="contact-note">We'll get back to you within one business day.</p>
         </div>
       </div>
     </div>
   </section>
 
-{% endblock content %}
-
-{% block extra_js %}
-<script>
-  (function () {
-    // ---------- Launches carousel ----------
-    var slides = Array.prototype.slice.call(document.querySelectorAll('.carousel .slide'));
-    var dots = Array.prototype.slice.call(document.querySelectorAll('.carousel + .slider-dots .dot'));
-    var index = 0, timer = null;
-
-    function restart() {
-      if (timer) clearInterval(timer);
-      timer = setInterval(next, 6000);
-    }
-    function goTo(n) {
-      if (!slides.length) return;
-      index = (n + slides.length) % slides.length;
-      slides.forEach(function (s, i) { s.classList.toggle('active', i === index); });
-      dots.forEach(function (d, i) { d.classList.toggle('active', i === index); });
-      restart();
-    }
-    function next() { goTo(index + 1); }
-    function prev() { goTo(index - 1); }
-
-    Array.prototype.forEach.call(document.querySelectorAll('.carousel .prev'), function (b) {
-      b.addEventListener('click', function (e) { e.preventDefault(); prev(); });
-    });
-    Array.prototype.forEach.call(document.querySelectorAll('.carousel .next'), function (b) {
-      b.addEventListener('click', function (e) { e.preventDefault(); next(); });
-    });
-    dots.forEach(function (d, i) { d.addEventListener('click', function () { goTo(i); }); });
-    goTo(0);
-
-    // ---------- Testimonials slider ----------
-    var tx = Array.prototype.slice.call(document.querySelectorAll('.testimonial-slide'));
-    var tDots = Array.prototype.slice.call(document.querySelectorAll('.testimonial-slider + .slider-dots .dot'));
-    var tIndex = 0, tTimer = null;
-
-    function setT(n) {
-      if (!tx.length) return;
-      tIndex = (n + tx.length) % tx.length;
-      tx.forEach(function (s, i) { s.classList.toggle('active', i === tIndex); });
-      tDots.forEach(function (d, i) { d.classList.toggle('active', i === tIndex); });
-      if (tTimer) clearInterval(tTimer);
-      tTimer = setInterval(function () { setT(tIndex + 1); }, 5000);
-    }
-    tDots.forEach(function (d, i) { d.addEventListener('click', function () { setT(i); }); });
-    setT(0);
-  })();
-</script>
-{% endblock extra_js %}
+{% endblock %}

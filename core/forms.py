@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth.models import User
 from django.core.validators import FileExtensionValidator
-from .models import UserProfile
+from .models import UserProfile, Lead, LeadNote, Agent, CompanySettings
 
 
 class UserForm(forms.ModelForm):
@@ -179,3 +179,87 @@ class UserEditForm(forms.ModelForm):
             user.profile.cnic = self.cleaned_data['cnic']
             user.profile.save()
         return user
+
+class LeadForm(forms.ModelForm):
+    class Meta:
+        model = Lead
+        fields = ['name', 'email', 'phone', 'source', 'status', 'assigned_to',
+                  'interest_project', 'budget', 'notes']
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+            'email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+            'phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '+92-300-1234567'}),
+            'source': forms.Select(attrs={'class': 'form-control'}),
+            'status': forms.Select(attrs={'class': 'form-control'}),
+            'assigned_to': forms.Select(attrs={'class': 'form-control'}),
+            'interest_project': forms.Select(attrs={'class': 'form-control'}),
+            'budget': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': ' ', 'step': '0.01'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': ' '}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['assigned_to'].queryset = User.objects.filter(is_active=True).order_by('username')
+        self.fields['name'].required = False
+        self.fields['email'].required = False
+        self.fields['phone'].required = False
+
+    def clean(self):
+        cleaned = super().clean()
+        if not any([cleaned.get('name'), cleaned.get('email'), cleaned.get('phone')]):
+            raise forms.ValidationError('At least a name, email, or phone is required.')
+        return cleaned
+
+
+class LeadNoteForm(forms.ModelForm):
+    class Meta:
+        model = LeadNote
+        fields = ['note']
+        widgets = {
+            'note': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Add a note...'}),
+        }
+
+
+class AgentForm(forms.ModelForm):
+    class Meta:
+        model = Agent
+        fields = ['name', 'phone', 'email', 'cnic', 'commission_rate', 'is_active', 'notes']
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+            'phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '+92-300-1234567'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+            'cnic': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '37405-0235722-4'}),
+            'commission_rate': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': ' '}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': ' '}),
+        }
+
+    def clean_commission_rate(self):
+        rate = self.cleaned_data.get('commission_rate')
+        if rate is not None and (rate < 0 or rate > 100):
+            raise forms.ValidationError('Commission rate must be between 0 and 100.')
+        return rate
+
+
+class CompanySettingsForm(forms.ModelForm):
+    class Meta:
+        model = CompanySettings
+        fields = ['company_name', 'tagline', 'phone', 'email', 'address', 'website',
+                  'logo', 'currency', 'currency_symbol', 'tax_rate', 'receipt_footer',
+                  'facebook', 'instagram', 'twitter']
+        widgets = {
+            'company_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+            'tagline': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+            'phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+            'email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+            'address': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': ' '}),
+            'website': forms.URLInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+            'logo': forms.ClearableFileInput(attrs={'class': 'form-control'}),
+            'currency': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+            'currency_symbol': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+            'tax_rate': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': ' '}),
+            'receipt_footer': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': ' '}),
+            'facebook': forms.URLInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+            'instagram': forms.URLInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+            'twitter': forms.URLInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+        }

@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Project Milestones - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    <div class="top-bar">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <span class="top-bar-title">Project Milestones</span>
+        <div class="top-bar-actions"></div>
+    </div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Project Milestones</h1>
+            <div class="page-actions">
+                <a href="{% url 'milestone_create' %}" class="btn btn-primary btn-sm">+ Add Milestone</a>
+            </div>
+        </div>
+
+        <div class="card animate-fade-up stagger-2">
+            <form method="get">
+                <div class="filters">
+                    <select name="project" class="form-control" onchange="this.form.submit()">
+                        <option value="">All Projects</option>
+                        {% for project in projects %}
+                        <option value="{{ project.pk }}" {% if project_filter == project.pk|stringformat:'s' %}selected{% endif %}>{{ project.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+        </div>
+
+        <div class="card animate-fade-up stagger-3">
+            <div class="card-header"><h3>Milestones</h3><span class="badge badge-info">{{ milestones|length }} records</span></div>
+            <div class="table-container">
+                {% if milestones %}
+                <table class="sortable">
+                    <thead>
+                        <tr>
+                            <th>Project</th>
+                            <th>Milestone</th>
+                            <th>Target</th>
+                            <th>Completed</th>
+                            <th>Status</th>
+                            <th class="no-sort">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in milestones %}
+                        <tr>
+                            <td><strong>{{ m.project.name }}</strong></td>
+                            <td>{{ m.title }}</td>
+                            <td>{{ m.target_date|date:"d M Y"|default:"-" }}</td>
+                            <td>{{ m.completed_date|date:"d M Y"|default:"-" }}</td>
+                            <td>
+                                <span class="badge badge-{% if m.status == 'completed' %}success{% elif m.status == 'in_progress' %}info{% elif m.status == 'delayed' %}danger{% else %}secondary{% endif %}">
+                                    {{ m.get_status_display }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="table-actions">
+                                    <a href="{% url 'milestone_edit' m.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                                    {% if can_delete %}
+                                    <a href="{% url 'milestone_delete' m.pk %}" class="btn btn-danger btn-sm">Delete</a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state">
+                    <div class="empty-icon">🏗️</div>
+                    <h3>No Milestones</h3>
+                    <p>Track construction and delivery progress per project.</p>
+                    <a href="{% url 'milestone_create' %}" class="btn btn-primary btn-sm">+ Add Milestone</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}
