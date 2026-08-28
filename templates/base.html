@@ -26,13 +26,6 @@
             <span class="topbar-title">{% block page_title %}Dashboard{% endblock %}</span>
         </div>
         <div class="topbar-right">
-            <div class="theme-switcher" title="Theme">
-                <button type="button" class="theme-btn" data-theme="professional-blue" aria-label="Professional Blue"></button>
-                <button type="button" class="theme-btn" data-theme="modern-green" aria-label="Modern Green"></button>
-                <button type="button" class="theme-btn" data-theme="elegant-dark" aria-label="Elegant Dark"></button>
-                <button type="button" class="theme-btn" data-theme="warm-earth" aria-label="Warm Earth"></button>
-                <button type="button" class="theme-btn" data-theme="minimalist-purple" aria-label="Minimalist Purple"></button>
-            </div>
             {% if can_audit %}
             <a class="icon-btn" href="{% url 'notifications' %}" title="Notifications">
                 <span class="dot">

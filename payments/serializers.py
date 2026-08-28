@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.db.models import Sum
 from .models import Payment, Receipt, Refund, PaymentAllocation, PaymentAttachment
 
 
@@ -64,6 +65,18 @@ class RefundSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Amount must be greater than 0')
         return value
 
+    def validate(self, data):
+        booking = data.get('booking')
+        amount = data.get('amount')
+        if booking and amount is not None:
+            verified = booking.payments.filter(status='verified').aggregate(
+                total=Sum('amount'))['total'] or 0
+            if amount > verified:
+                raise serializers.ValidationError(
+                    {'amount': f'Refund amount cannot exceed the verified payments (Rs. {verified}) for this booking.'}
+                )
+        return data
+
 
 # ─── PAYMENTS ────────────────────────────────────────────────────────────────────
 
@@ -115,6 +128,15 @@ class PaymentCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({'cheque_number': 'Cheque number is required for cheque payments'})
             if not data.get('bank_name'):
                 raise serializers.ValidationError({'bank_name': 'Bank name is required for cheque payments'})
+
+        # The installment, when given, must belong to the payment's booking.
+        installment = data.get('installment')
+        booking = data.get('booking')
+        if installment is not None and booking is not None:
+            if installment.plan.booking_id != booking.id:
+                raise serializers.ValidationError(
+                    {'installment': 'Selected installment does not belong to this booking.'}
+                )
         return data
 
 

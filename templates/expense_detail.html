@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Expense Detail - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    <div class="top-bar">
+        <button class="hamburger" onclick="toggleSidebar()">&#9776;</button>
+        <span class="top-bar-title">Expense Detail</span>
+        <div class="top-bar-actions"></div>
+    </div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Expense Detail</h1>
+            <div class="page-actions">
+                <a href="{% url 'expense_edit' expense.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                <a href="{% url 'expenses' %}" class="btn btn-ghost btn-sm">← All Expenses</a>
+            </div>
+        </div>
+
+        <div class="detail-grid" style="margin-bottom:24px;">
+            <div class="card">
+                <div class="detail-item"><div class="detail-label">Amount</div><div class="detail-value" style="color:var(--accent-red); font-weight:700; font-size:22px;">Rs. {{ expense.amount|floatformat:0 }}</div></div>
+                <div class="detail-item"><div class="detail-label">Type</div><div class="detail-value"><span class="badge badge-info">{{ expense.get_expense_type_display }}</span></div></div>
+                <div class="detail-item"><div class="detail-label">Date</div><div class="detail-value">{{ expense.expense_date|date:"d M Y" }}</div></div>
+            </div>
+            <div class="card">
+                <div class="detail-item"><div class="detail-label">Project</div><div class="detail-value">{{ expense.project.name }}</div></div>
+                <div class="detail-item"><div class="detail-label">Paid To</div><div class="detail-value">{{ expense.paid_to|default:"—" }}</div></div>
+                <div class="detail-item"><div class="detail-label">Recorded By</div><div class="detail-value">{{ expense.created_by.username }}</div></div>
+            </div>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>Description</h3></div>
+            <div class="card-body">
+                <p style="color:var(--text-secondary); margin:0; white-space:pre-wrap;">{{ expense.description|default:"No description provided." }}</p>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

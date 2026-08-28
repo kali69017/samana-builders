@@ -57,7 +57,20 @@ class ReservationSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source='customer.full_name', read_only=True)
     plot_number = serializers.CharField(source='plot.plot_number', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+
+    def validate_token_amount(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError('Token amount must be greater than 0')
+        return value
+
+    def validate(self, data):
+        plot = data.get('plot')
+        if plot and plot.status in ('booked', 'sold'):
+            raise serializers.ValidationError(
+                {'plot': f'Plot {plot.plot_number} is already booked or sold.'}
+            )
+        return data
+
     class Meta:
         model = Reservation
         fields = ['id', 'customer', 'customer_name', 'plot', 'plot_number',
@@ -100,13 +113,13 @@ class BookingSerializer(serializers.ModelSerializer):
 class BookingCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Booking
-        fields = ['customer', 'plot', 'total_amount', 'advance_paid', 'source', 'notes']
-    
+        fields = ['customer', 'plot', 'total_amount', 'advance_paid', 'source', 'agent', 'notes']
+
     def validate_total_amount(self, value):
         if value and value <= 0:
             raise serializers.ValidationError('Total amount must be greater than 0')
         return value
-    
+
     def validate_advance_paid(self, value):
         if value and value < 0:
             raise serializers.ValidationError('Advance cannot be negative')
@@ -114,6 +127,35 @@ class BookingCreateSerializer(serializers.ModelSerializer):
         if value and total and value > float(total):
             raise serializers.ValidationError('Advance cannot exceed total amount')
         return value
+
+    def validate_agent(self, value):
+        if value and not value.is_active:
+            raise serializers.ValidationError(
+                {'agent': f'Agent {value.name} is inactive and cannot be assigned to bookings.'}
+            )
+        return value
+
+    def validate(self, data):
+        plot = data.get('plot')
+        if plot:
+            # A plot can only be booked if it is currently available or
+            # reserved for this same customer. This prevents double-booking.
+            if plot.status in ('booked', 'sold'):
+                raise serializers.ValidationError(
+                    {'plot': f'Plot {plot.plot_number} is already booked or sold.'}
+                )
+            if plot.status == 'cancelled':
+                raise serializers.ValidationError(
+                    {'plot': f'Plot {plot.plot_number} is cancelled and cannot be booked.'}
+                )
+            # Guard against a second active booking on the same plot.
+            if Booking.objects.filter(
+                plot=plot, status__in=['pending', 'confirmed', 'active']
+            ).exclude(pk=self.instance.pk if self.instance else None).exists():
+                raise serializers.ValidationError(
+                    {'plot': f'Plot {plot.plot_number} already has an active booking.'}
+                )
+        return data
 
 
 class BookingDetailSerializer(serializers.ModelSerializer):
@@ -144,7 +186,21 @@ class BookingTransferSerializer(serializers.ModelSerializer):
     to_customer_name = serializers.CharField(source='to_customer.full_name', read_only=True)
     booking_id_display = serializers.CharField(source='booking.booking_id', read_only=True)
     approved_by_name = serializers.CharField(source='approved_by.username', read_only=True, allow_null=True)
-    
+
+    def validate(self, attrs):
+        from_customer = attrs.get('from_customer')
+        to_customer = attrs.get('to_customer')
+        transfer_fee = attrs.get('transfer_fee')
+        if from_customer and to_customer and from_customer.pk == to_customer.pk:
+            raise serializers.ValidationError(
+                {'to_customer': 'The transfer target cannot be the same customer as the source.'}
+            )
+        if transfer_fee is not None and transfer_fee < 0:
+            raise serializers.ValidationError(
+                {'transfer_fee': 'Transfer fee cannot be negative.'}
+            )
+        return attrs
+
     class Meta:
         model = BookingTransfer
         fields = ['id', 'booking', 'booking_id_display', 'from_customer',

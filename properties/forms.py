@@ -5,17 +5,13 @@ from .models import Project, ProjectPhase, Plot, PlotFeature, ProjectMilestone
 class ProjectForm(forms.ModelForm):
     class Meta:
         model = Project
-        fields = ['name', 'description', 'location', 'total_plots', 'status',
-                  'latitude', 'longitude', 'google_maps_link']
+        fields = ['name', 'description', 'location', 'total_plots', 'status']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': ' '}),
             'location': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
             'total_plots': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': ' '}),
             'status': forms.Select(attrs={'class': 'form-control'}),
-            'latitude': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'e.g. 33.6844', 'step': '0.0000001'}),
-            'longitude': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'e.g. 73.0479', 'step': '0.0000001'}),
-            'google_maps_link': forms.URLInput(attrs={'class': 'form-control', 'placeholder': 'https://maps.app.goo.gl/...'}),
         }
 
 

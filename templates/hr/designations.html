@@ -20,19 +20,13 @@
             <div class="table-container">
                 {% if designations %}
                 <table class="sortable">
-                    <thead><tr><th>Title</th><th>Employees</th><th>Status</th><th class="no-sort">Actions</th></tr></thead>
+                    <thead><tr><th>Title</th><th>Employees</th><th>Status</th></tr></thead>
                     <tbody>
                         {% for des in designations %}
                         <tr>
                             <td><strong>{{ des.title }}</strong></td>
                             <td>{{ des.employee_count }}</td>
                             <td><span class="badge badge-{% if des.is_active %}success{% else %}secondary{% endif %}">{% if des.is_active %}Active{% else %}Inactive{% endif %}</span></td>
-                            <td>
-                                <div class="table-actions">
-                                    <a href="{% url 'hr_designation_edit' des.pk %}" class="btn btn-secondary btn-sm">Edit</a>
-                                    <a href="{% url 'hr_designation_delete' des.pk %}" class="btn btn-danger btn-sm">Delete</a>
-                                </div>
-                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>

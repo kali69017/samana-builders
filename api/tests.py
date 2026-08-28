@@ -108,9 +108,21 @@ class CustomerApiTests(ApiBaseTestCase):
         self.assertEqual(self.customer.city, 'Karachi')
 
     def test_delete_customer(self):
+        # Customer with bookings cannot be deleted (data protection).
         resp = self.client.delete(reverse('customer-detail', args=[self.customer.pk]))
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(Customer.objects.filter(pk=self.customer.pk).exists())
+
+    def test_delete_customer_without_history(self):
+        # A fresh customer with no bookings/ledger may be deleted.
+        fresh = Customer.objects.create(
+            first_name='Fresh', last_name='Customer',
+            phone='+92-300-1112233', cnic='35202-1111222-3',
+            email='fresh@example.com', created_by=self.admin,
+        )
+        resp = self.client.delete(reverse('customer-detail', args=[fresh.pk]))
         self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(Customer.objects.filter(pk=self.customer.pk).exists())
+        self.assertFalse(Customer.objects.filter(pk=fresh.pk).exists())
 
     def test_customer_search(self):
         resp = self.client.get(reverse('customer-list') + '?search=Ahmed')
@@ -280,6 +292,11 @@ class PaymentApiTests(ApiBaseTestCase):
 
 class RefundApiTests(ApiBaseTestCase):
     def test_create_refund(self):
+        # A refund must be backed by verified payments on the booking.
+        Payment.objects.create(
+            booking=self.booking, amount=Decimal('50000'),
+            payment_date=date.today(), status='verified', created_by=self.admin,
+        )
         resp = self.client.post(reverse('refund-list'), {
             'booking': self.booking.pk, 'amount': '50000', 'reason': 'overpayment',
         }, format='json')

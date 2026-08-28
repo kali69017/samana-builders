@@ -76,9 +76,11 @@ class Employee(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.employee_id:
-            last = Employee.objects.order_by('-id').first()
-            num = int(last.employee_id.split('-')[1]) + 1 if last else 1
-            self.employee_id = f'EMP-{str(num).zfill(5)}'
+            from django.db import transaction
+            with transaction.atomic():
+                last = Employee.objects.select_for_update().order_by('-id').first()
+                num = int(last.employee_id.split('-')[1]) + 1 if last else 1
+                self.employee_id = f'EMP-{str(num).zfill(5)}'
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -124,6 +126,12 @@ class EmployeeSalary(models.Model):
         ordering = ['employee', 'component']
         unique_together = ['employee', 'component']
         verbose_name_plural = 'Employee Salaries'
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(amount__gte=0),
+                name='employee_salary_amount_non_negative',
+            ),
+        ]
 
 
 class PayrollRun(models.Model):
@@ -279,8 +287,6 @@ class Attendance(models.Model):
 
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='attendance')
     date = models.DateField()
-    check_in = models.TimeField(null=True, blank=True)
-    check_out = models.TimeField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='present')
     notes = models.TextField(blank=True)
 

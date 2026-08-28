@@ -16,6 +16,16 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load environment variables from the repo's .env file (gitignored).
+# This is what makes DJANGO_SECRET_KEY, DB_*, EMAIL_*, SENDPK_*, DEEPSEEK_*
+# configuration from .env actually take effect in both dev and production.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(BASE_DIR / '.env')
+except ImportError:
+    # python-dotenv is optional; without it, env vars must come from the OS.
+    pass
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -27,6 +37,9 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-dev-only-key-c
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() in ('1', 'true', 'yes')
 
 ALLOWED_HOSTS = [h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',') if h.strip()]
+if DEBUG:
+    # Local development always needs loopback access regardless of .env.
+    ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS + ['localhost', '127.0.0.1', 'testserver']))
 
 
 # Application definition
@@ -50,6 +63,7 @@ INSTALLED_APPS = [
     'notifications',
     'finance',
     'hr',
+    'ai',
 ]
 
 MIDDLEWARE = [
@@ -134,7 +148,8 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+# Pakistan Standard Time (Samana Builders operates in PKT)
+TIME_ZONE = 'Asia/Karachi'
 
 USE_I18N = True
 
@@ -149,18 +164,39 @@ STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STORAGES = {
-    'default': {
-        'BACKEND': 'django.core.files.storage.FileSystemStorage',
-    },
-    'staticfiles': {
-        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
-    },
-}
+# In development AND during the test run `collectstatic` has not been run, so
+# the manifest storage backend would raise "Missing staticfiles manifest entry"
+# for every {% static %} tag. Use plain storage until we deploy.
+# Set STATICFILES_MANIFEST=1 to force the manifest backend (used to build
+# staticfiles.json via `collectstatic` before deploying).
+_RUNNING_TESTS = 'test' in [arg.lower() for arg in __import__('sys').argv]
+_MANIFEST_EXISTS = (BASE_DIR / 'staticfiles' / 'staticfiles.json').exists()
+_FORCE_MANIFEST = os.environ.get('STATICFILES_MANIFEST', '0').lower() in ('1', 'true', 'yes')
+if DEBUG or _RUNNING_TESTS or (not _MANIFEST_EXISTS and not _FORCE_MANIFEST):
+    STORAGES = {
+        'default': {
+            'BACKEND': 'django.core.files.storage.FileSystemStorage',
+        },
+        'staticfiles': {
+            'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+        },
+    }
+else:
+    STORAGES = {
+        'default': {
+            'BACKEND': 'django.core.files.storage.FileSystemStorage',
+        },
+        'staticfiles': {
+            'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+        },
+    }
 
 # CORS: allows the React dev server (5173) to talk to the Django API.
 # Same-origin requests (single-server build) do not need CORS.
-CORS_ALLOW_ALL_ORIGINS = True
+# Restrict in production via CORS_ALLOWED_ORIGINS env var (comma-separated).
+_cors_origins = [o.strip() for o in os.environ.get('CORS_ALLOWED_ORIGINS', '').split(',') if o.strip()]
+CORS_ALLOW_ALL_ORIGINS = not _cors_origins
+CORS_ALLOWED_ORIGINS = _cors_origins
 CORS_ALLOW_CREDENTIALS = True
 
 # Media files
@@ -211,3 +247,11 @@ SENDPK_API_KEY = os.environ.get('SENDPK_API_KEY', '')
 # Switch to "SAMANA" once the branded mask is PTA-approved on the account.
 SENDPK_SENDER_ID = os.environ.get('SENDPK_SENDER_ID', 'SMS Alert')
 SENDPK_BASE_URL = os.environ.get('SENDPK_BASE_URL', 'https://sendpk.com/api/sms.php')
+
+# ─── DeepSeek AI (LangChain) ──────────────────────────────────────────────
+# AI assistant features are powered by DeepSeek's chat models through the
+# langchain-deepseek integration (OpenAI-compatible API).
+AI_ENABLED = os.environ.get('AI_ENABLED', 'False').lower() in ('1', 'true', 'yes')
+DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', '')
+DEEPSEEK_MODEL = os.environ.get('DEEPSEEK_MODEL', 'deepseek-chat')
+DEEPSEEK_BASE_URL = os.environ.get('DEEPSEEK_BASE_URL', 'https://api.deepseek.com')

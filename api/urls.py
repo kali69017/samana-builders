@@ -11,7 +11,7 @@ from customers.api_views import (
 from properties.api_views import (
     ProjectViewSet, ProjectPhaseViewSet, PlotViewSet,
     PlotFeatureViewSet, PriceHistoryViewSet, ProjectMilestoneViewSet,
-    plots_list_api, projects_locations_api
+    plots_list_api
 )
 from bookings.api_views import (
     BookingViewSet, InstallmentPlanViewSet, InstallmentViewSet,
@@ -93,7 +93,6 @@ router.register(r'project-investments', ProjectInvestmentViewSet)
 urlpatterns = [
     # Public homepage endpoints (must come before the router's {pk} detail routes)
     path('plots/list/', plots_list_api, name='plots_list'),
-    path('projects/locations/', projects_locations_api, name='projects_locations'),
 
     # Company settings singleton (GET + PATCH/PUT on the list URL)
     path('company-settings/', CompanySettingsViewSet.as_view({
@@ -110,6 +109,9 @@ urlpatterns = [
     path('auth/login/', api_login, name='api_login'),
     path('auth/logout/', api_logout, name='api_logout'),
     path('auth/me/', current_user, name='api_me'),
+
+    # AI features (LangChain + DeepSeek)
+    path('ai/', include('ai.urls')),
 
     # Customer portal login creation + portal data
     path('customer-profiles/', CustomerProfileCreateView.as_view(), name='customer_profile_create'),

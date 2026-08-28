@@ -32,11 +32,21 @@
                 <div class="stat-label">New</div>
             </div>
             <div class="stat-card animate-fade-up stagger-3">
+                <div class="stat-icon cyan">📞</div>
+                <div class="stat-value" data-target="{{ status_counts.contacted|default:0 }}">{{ status_counts.contacted|default:0 }}</div>
+                <div class="stat-label">Contacted</div>
+            </div>
+            <div class="stat-card animate-fade-up stagger-4">
+                <div class="stat-icon violet">⭐</div>
+                <div class="stat-value" data-target="{{ status_counts.qualified|default:0 }}">{{ status_counts.qualified|default:0 }}</div>
+                <div class="stat-label">Qualified</div>
+            </div>
+            <div class="stat-card animate-fade-up stagger-5">
                 <div class="stat-icon green">✅</div>
                 <div class="stat-value" data-target="{{ status_counts.converted|default:0 }}">{{ status_counts.converted|default:0 }}</div>
                 <div class="stat-label">Converted</div>
             </div>
-            <div class="stat-card animate-fade-up stagger-4">
+            <div class="stat-card animate-fade-up stagger-6">
                 <div class="stat-icon red">❌</div>
                 <div class="stat-value" data-target="{{ status_counts.lost|default:0 }}">{{ status_counts.lost|default:0 }}</div>
                 <div class="stat-label">Lost</div>

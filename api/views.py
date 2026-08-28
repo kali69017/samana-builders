@@ -16,6 +16,34 @@ def _is_customer_user(user):
     return Customer.objects.filter(user=user).exists()
 
 
+MAX_LOGIN_ATTEMPTS = 5
+LOGIN_LOCKOUT_MINUTES = 15
+
+
+def _login_locked_out(username, ip):
+    """True if the account/IP has exceeded the failed-attempt threshold."""
+    from django.utils import timezone as tz
+    from datetime import timedelta
+    from core.models import LoginAttempt
+    cutoff = tz.now() - timedelta(minutes=LOGIN_LOCKOUT_MINUTES)
+    recent = LoginAttempt.objects.filter(
+        username=username, is_success=False, timestamp__gte=cutoff
+    ).count()
+    if recent >= MAX_LOGIN_ATTEMPTS:
+        return True
+    recent_ip = LoginAttempt.objects.filter(
+        ip_address=ip, is_success=False, timestamp__gte=cutoff
+    ).count()
+    return recent_ip >= MAX_LOGIN_ATTEMPTS * 3
+
+
+def _record_login_attempt(username, ip, success):
+    from core.models import LoginAttempt
+    LoginAttempt.objects.create(
+        username=username, ip_address=ip, is_success=success
+    )
+
+
 def _user_payload(user):
     is_customer = _is_customer_user(user)
     role = None
@@ -46,24 +74,35 @@ def csrf_token(request):
 def api_login(request):
     username = request.data.get('username', '')
     password = request.data.get('password', '')
+    ip = request.META.get('REMOTE_ADDR')
+
+    if _login_locked_out(username, ip):
+        _record_login_attempt(username, ip, False)
+        return Response(
+            {'detail': 'Too many failed attempts. Try again after 15 minutes.'},
+            status=status.HTTP_429_TOO_MANY_REQUESTS
+        )
+
     user = authenticate(request, username=username, password=password)
 
     if user is None:
         # Distinguish a deactivated account from bad credentials. ``authenticate``
         # returns None for inactive users, so check explicitly.
         existing = User.objects.filter(username=username).first()
+        _record_login_attempt(username, ip, False)
         if existing is not None and not existing.is_active:
             return Response({'detail': 'Your account has been deactivated. Contact an administrator.'},
                             status=status.HTTP_403_FORBIDDEN)
         return Response({'detail': 'Invalid username or password.'},
                         status=status.HTTP_400_BAD_REQUEST)
 
+    _record_login_attempt(username, ip, True)
     auth_login(request, user)
     from core.models import AuditLog
     AuditLog.objects.create(
         user=user, action='login', model_name='User',
         description=f'{user.username} logged in',
-        ip_address=request.META.get('REMOTE_ADDR'),
+        ip_address=ip,
     )
     return Response(_user_payload(user))
 

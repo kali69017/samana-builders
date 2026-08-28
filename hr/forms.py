@@ -1,3 +1,5 @@
+import re
+
 from django import forms
 from .models import (
     Department, Designation, SalaryComponent, Employee, EmployeeSalary,
@@ -48,7 +50,8 @@ class EmployeeForm(forms.ModelForm):
             'department': forms.Select(attrs={'class': 'form-control'}),
             'designation': forms.Select(attrs={'class': 'form-control'}),
             'joining_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'cnic': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '37405-0235722-4'}),
+            'cnic': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. 3740502357224',
+                                           'inputmode': 'numeric', 'autocomplete': 'off'}),
             'phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '+92-300-1234567'}),
             'email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': ' '}),
             'address': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': ' '}),
@@ -63,6 +66,24 @@ class EmployeeForm(forms.ModelForm):
         self.fields['email'].required = False
         self.fields['address'].required = False
         self.fields['notes'].required = False
+        # Hard-cap the CNIC input at 13 digits (model stores the canonical
+        # dashed form, 15 chars — override the model-derived maxlength).
+        self.fields['cnic'].widget.attrs['maxlength'] = '13'
+        self.fields['cnic'].widget.attrs['pattern'] = '[0-9]{13}'
+        # When editing, pre-fill the raw 13-digit value (strip dashes).
+        if self.instance and self.instance.pk and self.instance.cnic:
+            raw = re.sub(r'\D', '', self.instance.cnic or '')
+            self.initial['cnic'] = raw
+
+    def clean_cnic(self):
+        cnic = self.cleaned_data.get('cnic')
+        if cnic:
+            cnic = re.sub(r'\D', '', cnic)
+            if len(cnic) != 13:
+                raise forms.ValidationError('CNIC must be exactly 13 digits (numbers only, no dashes)')
+            # Store in the canonical display format (XXXXX-XXXXXXX-X).
+            return f'{cnic[:5]}-{cnic[5:12]}-{cnic[12:]}'
+        return cnic
 
 
 class EmployeeSalaryForm(forms.ModelForm):
@@ -89,21 +110,13 @@ class PayrollRunForm(forms.ModelForm):
 class AttendanceForm(forms.ModelForm):
     class Meta:
         model = Attendance
-        fields = ['employee', 'date', 'status', 'check_in', 'check_out', 'notes']
+        fields = ['employee', 'date', 'status', 'notes']
         widgets = {
             'employee': forms.Select(attrs={'class': 'form-control'}),
             'date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'status': forms.Select(attrs={'class': 'form-control'}),
-            'check_in': forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}),
-            'check_out': forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}),
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': ' '}),
         }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields['check_in'].required = False
-        self.fields['check_out'].required = False
-        self.fields['notes'].required = False
 
 
 class LeaveForm(forms.ModelForm):

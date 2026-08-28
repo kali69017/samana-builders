@@ -14,11 +14,30 @@
     {% include 'includes/sidebar.html' %}
     <main class="main-content">
         <div class="page-header">
-            <h1>Expenses</h1>
-            <div class="page-actions">
-                <a href="{% url 'expense_create' %}" class="btn btn-primary btn-sm">+ Add Expense</a>
-            </div>
-        </div>
+                    <h1>Expenses</h1>
+                    <div class="page-actions">
+                        <a href="{% url 'expense_create' %}" class="btn btn-primary btn-sm">+ Add Expense</a>
+                    </div>
+                </div>
+
+                <!-- User guide -->
+                <div class="card animate-fade-up" style="margin-bottom:20px;">
+                    <div class="card-body" style="padding:16px 20px;">
+                        <div style="display:flex; gap:12px; align-items:flex-start;">
+                            <span style="font-size:20px;">ℹ️</span>
+                            <div style="font-size:13px; color:var(--text-secondary); line-height:1.6;">
+                                <strong style="color:var(--text-primary);">What belongs here?</strong>
+                                This is for <strong>company / project overhead expenses</strong> — day-to-day running costs such as marketing, admin, utilities, procurement and miscellaneous spending. Each expense is linked to a project.<br>
+                                <strong style="color:var(--text-primary);">Not to be confused with:</strong>
+                                <ul style="margin:6px 0 0 18px; padding:0;">
+                                    <li><strong>Project Costs</strong> (Finance → Project Costs) — construction costs (materials, labor, contractors, transportation) that track against a project budget.</li>
+                                    <li><strong>Office Expenses</strong> (Finance → Company Expenses) — running costs of a physical office / branch location.</li>
+                                    <li>Sales commission and refunds are tracked separately under their own modules.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
         <!-- Stats -->
         <div class="stats-grid">
@@ -116,36 +135,29 @@
                 {% if expenses %}
                 <table class="sortable">
                     <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Project</th>
-                            <th>Description</th>
-                            <th>Type</th>
-                            <th>Amount</th>
-                            <th>Paid To</th>
-                            <th class="no-sort">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for expense in expenses %}
-                        <tr>
-                            <td>{{ expense.expense_date|date:"d M Y" }}</td>
-                            <td><strong>{{ expense.project.name }}</strong></td>
-                            <td>{{ expense.description|truncatechars:40 }}</td>
-                            <td><span class="badge badge-{% if expense.expense_type == 'internal' %}info{% elif expense.expense_type == 'external' %}success{% else %}secondary{% endif %}">{{ expense.get_expense_type_display }}</span></td>
-                            <td style="font-weight:600;">Rs. {{ expense.amount|floatformat:0 }}</td>
-                            <td>{{ expense.paid_to|default:"-" }}</td>
-                            <td>
-                                <div class="table-actions">
-                                    <a href="{% url 'expense_edit' expense.pk %}" class="btn btn-secondary btn-sm">Edit</a>
-                                    {% if can_delete %}
-                                    <a href="{% url 'expense_delete' expense.pk %}" class="btn btn-danger btn-sm">Delete</a>
-                                    {% endif %}
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Project</th>
+                                                <th>Description</th>
+                                                <th>Type</th>
+                                                <th>Amount</th>
+                                                <th>Paid To</th>
+                                                <th class="no-sort">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for expense in expenses %}
+                                            <tr>
+                                                <td>{{ expense.expense_date|date:"d M Y" }}</td>
+                                                <td><strong>{{ expense.project.name }}</strong></td>
+                                                <td>{{ expense.description|truncatechars:40 }}</td>
+                                                <td><span class="badge badge-{% if expense.expense_type == 'internal' %}info{% elif expense.expense_type == 'external' %}success{% else %}secondary{% endif %}">{{ expense.get_expense_type_display }}</span></td>
+                                                <td style="font-weight:600;">Rs. {{ expense.amount|floatformat:0 }}</td>
+                                                <td>{{ expense.paid_to|default:"-" }}</td>
+                                                <td><div class="table-actions"><a href="{% url 'expense_detail' expense.pk %}" class="btn btn-primary btn-sm">View</a></div></td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
                 </table>
                 {% else %}
                 <div class="empty-state">

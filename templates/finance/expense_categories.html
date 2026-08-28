@@ -20,21 +20,13 @@
             <div class="table-container">
                 {% if categories %}
                 <table class="sortable">
-                    <thead><tr><th>Name</th><th>Type</th><th>Status</th><th class="no-sort">Actions</th></tr></thead>
+                    <thead><tr><th>Name</th><th>Type</th><th>Status</th></tr></thead>
                     <tbody>
                         {% for cat in categories %}
                         <tr>
                             <td><strong>{{ cat.name }}</strong></td>
                             <td><span class="badge badge-info">{{ cat.get_category_type_display }}</span></td>
                             <td><span class="badge badge-{% if cat.is_active %}success{% else %}secondary{% endif %}">{% if cat.is_active %}Active{% else %}Inactive{% endif %}</span></td>
-                            <td>
-                                <div class="table-actions">
-                                    <a href="{% url 'finance_expense_category_edit' cat.pk %}" class="btn btn-secondary btn-sm">Edit</a>
-                                    {% if can_delete %}
-                                    <a href="{% url 'finance_expense_category_delete' cat.pk %}" class="btn btn-danger btn-sm">Delete</a>
-                                    {% endif %}
-                                </div>
-                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>

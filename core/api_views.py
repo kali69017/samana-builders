@@ -181,21 +181,36 @@ class LeadViewSet(viewsets.ModelViewSet):
     def convert(self, request, pk=None):
         """Convert a lead into a customer."""
         from customers.models import Customer
+        from customers.models import format_cnic
         lead = self.get_object()
         if lead.converted_customer_id:
             return Response({'error': 'Lead is already converted.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        cnic_raw = (request.data.get('cnic') or '').strip()
+        cnic = format_cnic(cnic_raw)
+        if len(cnic_raw) < 13:
+            return Response({'error': 'CNIC is required to convert a lead into a customer.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if Customer.objects.filter(cnic=cnic).exists():
+            return Response({'error': f'A customer with CNIC {cnic} already exists.'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         name = (request.data.get('name') or lead.name or '').strip()
         parts = name.split(' ', 1)
         first_name = request.data.get('first_name') or (parts[0] if parts else '')
         last_name = request.data.get('last_name') or (parts[1] if len(parts) > 1 else '')
 
+        phone = (request.data.get('phone') or lead.phone or '').strip()
+        if not phone:
+            return Response({'error': 'Phone number is required to convert a lead into a customer.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
         customer = Customer.objects.create(
             first_name=first_name or lead.name or 'Lead',
             last_name=last_name,
             email=request.data.get('email') or lead.email or None,
-            phone=request.data.get('phone') or lead.phone,
-            cnic=request.data.get('cnic', ''),
+            phone=phone,
+            cnic=cnic,
             city=request.data.get('city', ''),
             created_by=request.user,
         )

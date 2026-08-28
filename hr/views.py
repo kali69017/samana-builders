@@ -473,16 +473,86 @@ def attendance_view(request):
 @login_required
 @hr_required
 def attendance_create_view(request):
+    """Bulk attendance marking: all employees on one screen.
+
+    HR sees every employee with a status dropdown (Present / Absent / Leave,
+    defaulting to Present). Changing only the exceptions and clicking
+    'Mark Attendance' records attendance for the chosen date for everyone.
+    Re-marking the same date updates existing records instead of duplicating.
+    """
+    STATUS_OPTIONS = ['present', 'absent', 'leave']
+    employees = (
+        Employee.objects
+        .filter(status__in=['active', 'on_leave'])
+        .select_related('department', 'designation')
+        .order_by('first_name', 'last_name')
+    )
+
     if request.method == 'POST':
-        form = AttendanceForm(request.POST)
-        if form.is_valid():
-            att = form.save()
-            _log(request, 'create', 'Attendance', att.pk, f'Marked attendance for {att.employee.full_name}')
-            messages.success(request, 'Attendance recorded.')
-            return redirect('hr_attendance')
-    else:
-        form = AttendanceForm(initial={'date': date.today()})
-    return render(request, 'hr/attendance_form.html', {'form': form, 'title': 'Mark Attendance'})
+        att_date_str = request.POST.get('date', '')
+        try:
+            att_date = date.fromisoformat(att_date_str)
+        except ValueError:
+            att_date = date.today()
+
+        # Re-marking the same date updates existing rows (no duplicates).
+        created = updated = 0
+        with transaction.atomic():
+            for emp in employees:
+                status_value = request.POST.get(f'status_{emp.pk}', 'present')
+                if status_value not in STATUS_OPTIONS:
+                    status_value = 'present'
+                # Employees already on Leave default to 'leave' unless HR
+                # explicitly picks something else.
+                if status_value == 'present' and emp.status == 'on_leave':
+                    status_value = 'leave'
+                _, was_created = Attendance.objects.update_or_create(
+                    employee=emp,
+                    date=att_date,
+                    defaults={'status': status_value},
+                )
+                if was_created:
+                    created += 1
+                else:
+                    updated += 1
+
+        _log(request, 'bulk_create', 'Attendance', att_date.isoformat(),
+             f'Marked attendance for {att_date}: {created} created, {updated} updated '
+             f'across {employees.count()} employees')
+        messages.success(
+            request,
+            f'Attendance marked for {att_date.isoformat()}: '
+            f'{created} created, {updated} updated, {employees.count()} employees total.'
+        )
+        return redirect('hr_attendance')
+
+    # GET: pre-fill today's date and any existing attendance for that date.
+    att_date = date.today()
+    existing = {
+        a.employee_id: a
+        for a in Attendance.objects.filter(date=att_date)
+    }
+    employee_rows = []
+    for emp in employees:
+        att = existing.get(emp.pk)
+        employee_rows.append({
+            'employee': emp,
+            'status': att.status if att else 'present',
+        })
+
+    status_labels = [
+        (v, label)
+        for v, label in Attendance.STATUS_CHOICES
+        if v in STATUS_OPTIONS
+    ]
+
+    return render(request, 'hr/attendance_form.html', {
+        'title': 'Mark Attendance',
+        'employee_rows': employee_rows,
+        'att_date': att_date,
+        'status_labels': status_labels,
+        'employee_count': employees.count(),
+    })
 
 
 # ─── LEAVE ───────────────────────────────────────────────────────────────────

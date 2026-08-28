@@ -60,14 +60,7 @@
                                     {{ m.get_status_display }}
                                 </span>
                             </td>
-                            <td>
-                                <div class="table-actions">
-                                    <a href="{% url 'milestone_edit' m.pk %}" class="btn btn-secondary btn-sm">Edit</a>
-                                    {% if can_delete %}
-                                    <a href="{% url 'milestone_delete' m.pk %}" class="btn btn-danger btn-sm">Delete</a>
-                                    {% endif %}
-                                </div>
-                            </td>
+                            <td><div class="table-actions"><a href="{% url 'milestone_detail' m.pk %}" class="btn btn-primary btn-sm">View</a></div></td>
                         </tr>
                         {% endfor %}
                     </tbody>

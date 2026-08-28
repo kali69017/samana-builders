@@ -83,7 +83,6 @@
                             <th>Customer ID</th>
                             <th>Name</th>
                             <th>Phone</th>
-                            <th>CNIC</th>
                             <th>Occupation</th>
                             <th>City</th>
                             <th>Status</th>
@@ -97,7 +96,6 @@
                             <td><strong>{{ customer.customer_id }}</strong></td>
                             <td>{{ customer.full_name }}</td>
                             <td>{{ customer.formatted_phone }}</td>
-                            <td>{{ customer.formatted_cnic }}</td>
                             <td>{{ customer.occupation_display_value|default:"-" }}</td>
                             <td>{{ customer.city|default:"-" }}</td>
                             <td>
@@ -109,10 +107,6 @@
                             <td>
                                 <div class="table-actions">
                                     <a href="{% url 'customer_detail' customer.pk %}" class="btn btn-primary btn-sm">View</a>
-                                    <a href="{% url 'customer_edit' customer.pk %}" class="btn btn-secondary btn-sm">Edit</a>
-                                    {% if can_delete %}
-                                    <a href="{% url 'customer_delete' customer.pk %}" class="btn btn-danger btn-sm">Delete</a>
-                                    {% endif %}
                                 </div>
                             </td>
                         </tr>

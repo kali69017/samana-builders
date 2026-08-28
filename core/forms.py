@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth.models import User
 from django.core.validators import FileExtensionValidator
-from .models import UserProfile, Lead, LeadNote, Agent, CompanySettings
+from .models import UserProfile, Lead, LeadNote, Agent, AgentCommissionPayment, CompanySettings
 
 
 class UserForm(forms.ModelForm):
@@ -241,12 +241,30 @@ class AgentForm(forms.ModelForm):
         return rate
 
 
+class AgentCommissionPaymentForm(forms.ModelForm):
+    class Meta:
+        model = AgentCommissionPayment
+        fields = ['amount', 'payment_date', 'method', 'reference']
+        widgets = {
+            'amount': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': ' '}),
+            'payment_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'method': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Cash / Bank Transfer / Cheque'}),
+            'reference': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Cheque no. / tx id / notes'}),
+        }
+
+    def clean_amount(self):
+        amount = self.cleaned_data.get('amount')
+        if amount is not None and amount <= 0:
+            raise forms.ValidationError('Payment amount must be greater than 0.')
+        return amount
+
+
 class CompanySettingsForm(forms.ModelForm):
     class Meta:
         model = CompanySettings
         fields = ['company_name', 'tagline', 'phone', 'email', 'address', 'website',
                   'logo', 'currency', 'currency_symbol', 'tax_rate', 'receipt_footer',
-                  'facebook', 'instagram', 'twitter']
+                  'facebook', 'instagram', 'twitter', 'ai_language']
         widgets = {
             'company_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
             'tagline': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
@@ -262,4 +280,5 @@ class CompanySettingsForm(forms.ModelForm):
             'facebook': forms.URLInput(attrs={'class': 'form-control', 'placeholder': ' '}),
             'instagram': forms.URLInput(attrs={'class': 'form-control', 'placeholder': ' '}),
             'twitter': forms.URLInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+            'ai_language': forms.Select(attrs={'class': 'form-control'}),
         }

@@ -29,7 +29,7 @@
         {% endif %}
 
         <div class="card animate-fade-up">
-            <form method="post" novalidate>
+            <form method="post" novalidate class="form-grid">
                 {% csrf_token %}
 
                 {% for field in form %}
@@ -57,13 +57,26 @@
                     {% endif %}
                 </div>
                 {% elif field.field.widget.input_type == 'file' %}
-                <div class="form-group">
+                <div class="form-group form-grid-full">
                     <label style="display:block; font-size:13px; font-weight:600; color:var(--text-primary); margin-bottom:6px;">{{ field.label }}{% if field.field.required %} <span style="color:var(--accent-red);">*</span>{% endif %}</label>
                     {{ field }}
                     {% if field.errors %}
                     <div class="form-error">
                         {% for error in field.errors %}{{ error }}{% endfor %}
                     </div>
+                    {% endif %}
+                </div>
+                {% elif field.field.widget.input_type == 'textarea' %}
+                <div class="floating-group form-grid-full">
+                    {{ field }}
+                    <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span style="color:var(--accent-red);">*</span>{% endif %}</label>
+                    {% if field.errors %}
+                    <div class="form-error">
+                        {% for error in field.errors %}{{ error }}{% endfor %}
+                    </div>
+                    {% endif %}
+                    {% if field.help_text %}
+                    <div class="form-hint">{{ field.help_text }}</div>
                     {% endif %}
                 </div>
                 {% else %}
@@ -83,7 +96,7 @@
                 {% endfor %}
 
                 <!-- Installment Plan Template Selector -->
-                <div class="form-group" style="margin-top:20px; padding-top:20px; border-top:1px solid var(--border);">
+                <div class="form-group form-grid-full" style="margin-top:20px; padding-top:20px; border-top:1px solid var(--border);">
                     <label style="display:block; font-size:13px; font-weight:600; color:var(--text-primary); margin-bottom:6px;">Installment Plan Template <span style="color:var(--text-secondary); font-weight:400;">(Optional)</span></label>
                     <select name="installment_template" id="installment_template" class="form-control">
                         <option value="">-- No Template (Manual Setup) --</option>
@@ -95,7 +108,7 @@
                     <div class="form-hint">Select a template to auto-generate the installment plan for this booking.</div>
                 </div>
 
-                <div class="btn-group" style="margin-top:24px; padding-top:20px; border-top:1px solid var(--border);">
+                <div class="btn-group form-grid-full" style="margin-top:24px; padding-top:20px; border-top:1px solid var(--border);">
                     <button type="submit" class="btn btn-primary">
                         <span class="spinner"></span>
                         <span class="btn-text">{% if "Edit" in title %}Update{% else %}Create Booking{% endif %}</span>
@@ -117,6 +130,15 @@
     .form-check { margin-bottom: 10px !important; }
     .template-info { background: var(--primary-bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; margin-top: 8px; font-size: 13px; color: var(--text-secondary); display: none; }
     .template-info.visible { display: block; }
+    /* Compact 2-column form layout so forms fit on one screen. */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; align-items: start; }
+    .form-grid .form-group,
+    .form-grid .floating-group,
+    .form-grid .form-check { margin-bottom: 6px !important; }
+    .form-grid-full { grid-column: 1 / -1; }
+    @media (max-width: 768px) {
+        .form-grid { grid-template-columns: 1fr; }
+    }
 </style>
 
 <script>

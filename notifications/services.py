@@ -42,20 +42,27 @@ class SMSService:
         # 3001234567 -> 923001234567
         if len(digits) == 10:
             return '92' + digits
-        return digits
+        # Anything else is not a valid Pakistani mobile number
+        return ''
+
+    @staticmethod
+    def is_valid_mobile(phone):
+        """A valid mobile is exactly 92 followed by 10 digits (92XXXXXXXXXX)."""
+        mobile = SMSService.normalize_phone(phone)
+        return len(mobile) == 12 and mobile.startswith('92')
 
     @staticmethod
     def send(to_phone, message):
         if not to_phone:
             return False, "No phone number provided"
 
+        mobile = SMSService.normalize_phone(to_phone)
+        if not SMSService.is_valid_mobile(to_phone):
+            return False, "Invalid phone number"
+
         if not getattr(settings, 'SENDPK_ENABLED', True):
             logger.info(f"[SMS disabled] to {to_phone}: {message}")
             return True, "SMS disabled"
-
-        mobile = SMSService.normalize_phone(to_phone)
-        if not mobile:
-            return False, "Invalid phone number"
 
         try:
             payload = {

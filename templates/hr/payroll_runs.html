@@ -18,6 +18,26 @@
             </div>
         </div>
 
+        <!-- User guide -->
+        <div class="card animate-fade-up" style="margin-bottom:20px;">
+            <div class="card-body" style="padding:16px 20px;">
+                <div style="display:flex; gap:12px; align-items:flex-start;">
+                    <span style="font-size:20px;">ℹ️</span>
+                    <div style="font-size:13px; color:var(--text-secondary); line-height:1.6;">
+                        <strong style="color:var(--text-primary);">What is Payroll &amp; how does it work?</strong>
+                        Payroll turns each employee's salary components into <strong>pay slips</strong> for a given month. The flow is:
+                        <ul style="margin:6px 0 0 18px; padding:0;">
+                            <li><strong>1. Setup</strong> — each employee's salary is defined under HR → Salary Components (earnings like Basic salary and deductions like Tax).</li>
+                            <li><strong>2. Run</strong> — click "+ New Payroll Run", choose the month, and generate slips. The system computes gross, total deductions, and net for every active employee.</li>
+                            <li><strong>3. Process</strong> — approve the run; slips move from draft to approved.</li>
+                            <li><strong>4. Pay</strong> — marking the run "paid" records a SalaryPayment and posts it to the financial ledger.</li>
+                        </ul>
+                        <strong style="color:var(--text-primary);">Purpose:</strong> a single, auditable monthly salary cycle — every employee's pay and deductions in one place, feeding payroll reports and the accounts ledger.
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="card animate-fade-up">
             <div class="card-header"><h3>All Runs</h3><span class="badge badge-info">{{ runs|length }} records</span></div>
             <div class="table-container">

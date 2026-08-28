@@ -48,7 +48,9 @@
                             <th>Phone</th>
                             <th>Commission %</th>
                             <th>Bookings</th>
-                            <th>Commission Earned</th>
+                            <th>Earned</th>
+                            <th>Paid</th>
+                            <th>Balance Due</th>
                             <th>Status</th>
                             <th class="no-sort">Actions</th>
                         </tr>
@@ -62,6 +64,8 @@
                             <td>{{ agent.commission_rate }}%</td>
                             <td>{{ agent.booking_count }}</td>
                             <td style="font-weight:600;">Rs. {{ agent.total_commission|floatformat:0 }}</td>
+                            <td style="color:var(--accent-blue);">Rs. {{ agent.commission_paid|floatformat:0 }}</td>
+                            <td style="color:{% if agent.commission_balance > 0 %}var(--accent-amber); font-weight:700;{% else %}var(--accent-green);{% endif %}">Rs. {{ agent.commission_balance|floatformat:0 }}</td>
                             <td>
                                 <span class="badge badge-{% if agent.is_active %}success{% else %}danger{% endif %}">
                                     {% if agent.is_active %}Active{% else %}Inactive{% endif %}
@@ -70,10 +74,6 @@
                             <td>
                                 <div class="table-actions">
                                     <a href="{% url 'agent_detail' agent.pk %}" class="btn btn-primary btn-sm">View</a>
-                                    <a href="{% url 'agent_edit' agent.pk %}" class="btn btn-secondary btn-sm">Edit</a>
-                                    {% if can_delete %}
-                                    <a href="{% url 'agent_delete' agent.pk %}" class="btn btn-danger btn-sm">Delete</a>
-                                    {% endif %}
                                 </div>
                             </td>
                         </tr>

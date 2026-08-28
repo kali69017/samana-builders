@@ -125,41 +125,47 @@
                 </div>
             </div>
 
-            <!-- SECTION 3: Payment Plan -->
-            <div class="card animate-fade-up mb-4">
-                <div class="card-header">
-                    <h3>📅 Payment Plan</h3>
-                </div>
-                <div class="card-body" style="padding:20px;">
-                    <div style="display:flex; gap:12px; margin-bottom:16px;">
-                        <button type="button" class="plan-btn active" data-plan="full" onclick="selectPlan('full')">💰 Full Payment</button>
-                        <button type="button" class="plan-btn" data-plan="installment" onclick="selectPlan('installment')">📅 Installment Plan</button>
-                    </div>
-                    <div id="installmentOptions" style="display:none;">
-                        <label style="display:block; font-size:13px; font-weight:600; color:var(--text-primary); margin-bottom:8px;">Payment Duration</label>
-                        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
-                            <button type="button" class="duration-btn active" data-months="12" onclick="selectDuration(12)">12 Months</button>
-                            <button type="button" class="duration-btn" data-months="24" onclick="selectDuration(24)">24 Months</button>
-                            <button type="button" class="duration-btn" data-months="36" onclick="selectDuration(36)">36 Months</button>
-                            <button type="button" class="duration-btn" data-months="custom" onclick="selectDuration('custom')">Custom</button>
-                        </div>
-                        <div id="customMonths" style="display:none; margin-bottom:12px;">
-                            <div class="form-group">
-                                <label style="display:block; font-size:13px; font-weight:600; color:var(--text-primary); margin-bottom:6px;">Number of Months</label>
-                                <input type="number" id="customMonthsInput" class="form-control" min="1" placeholder="Enter months..." oninput="calcInstallment()">
+            <!-- SECTION 3: Payment Plan Calculator -->
+                        <div class="card animate-fade-up mb-4">
+                            <div class="card-header">
+                                <h3>🧮 Installment Plan Calculator</h3>
+                                <span style="font-size:12px; color:var(--text-secondary);">Optional helper — suggests a payment amount. You still set the Amount in the next section.</span>
+                            </div>
+                            <div class="card-body" style="padding:20px;">
+                                <div class="alert alert-info" style="margin-bottom:16px; padding:12px 16px;">
+                                    <span>ℹ️</span>
+                                    <span>Choose how you'd like to spread the <strong>remaining balance</strong> over time. Use the suggested monthly amount below, or skip this and just enter your own amount next.</span>
+                                </div>
+                                <div style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+                                    <button type="button" class="plan-btn active" data-plan="full" onclick="selectPlan('full')">💰 Pay Remaining in Full</button>
+                                    <button type="button" class="plan-btn" data-plan="installment" onclick="selectPlan('installment')">📅 Spread Over Months</button>
+                                </div>
+                                <div id="installmentOptions" style="display:none;">
+                                    <label style="display:block; font-size:13px; font-weight:600; color:var(--text-primary); margin-bottom:8px;">Payment Duration</label>
+                                    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+                                        <button type="button" class="duration-btn active" data-months="12" onclick="selectDuration(12)">12 Months</button>
+                                        <button type="button" class="duration-btn" data-months="24" onclick="selectDuration(24)">24 Months</button>
+                                        <button type="button" class="duration-btn" data-months="36" onclick="selectDuration(36)">36 Months</button>
+                                        <button type="button" class="duration-btn" data-months="custom" onclick="selectDuration('custom')">Custom</button>
+                                    </div>
+                                    <div id="customMonths" style="display:none; margin-bottom:12px;">
+                                        <div class="form-group">
+                                            <label style="display:block; font-size:13px; font-weight:600; color:var(--text-primary); margin-bottom:6px;">Number of Months</label>
+                                            <input type="number" id="customMonthsInput" class="form-control" min="1" placeholder="Enter months..." oninput="calcInstallment()">
+                                        </div>
+                                    </div>
+                                    <div id="installmentSummary" style="display:none; padding:16px; background:var(--bg-page); border-radius:var(--radius-md);">
+                                        <div style="font-size:12px; font-weight:600; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:12px;">Suggested Amount</div>
+                                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                                            <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:14px;"><span style="color:var(--text-secondary);">Remaining Balance</span><span id="isRemaining" style="font-weight:600;">—</span></div>
+                                            <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:14px;"><span style="color:var(--text-secondary);">Duration</span><span id="isDuration" style="font-weight:600;">—</span></div>
+                                            <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:14px; border-top:1px solid var(--border); grid-column:span 2;"><span style="color:var(--primary); font-weight:600;">Suggested Monthly Amount</span><span id="isMonthly" style="color:var(--primary); font-weight:700;">—</span></div>
+                                        </div>
+                                        <button type="button" class="btn btn-primary btn-sm" style="margin-top:12px;" onclick="useSuggestedAmount()">Use This Amount ↗</button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div id="installmentSummary" style="display:none; padding:16px; background:var(--bg-page); border-radius:var(--radius-md);">
-                            <div style="font-size:12px; font-weight:600; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:12px;">Installment Summary</div>
-                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                                <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:14px;"><span style="color:var(--text-secondary);">Remaining Balance</span><span id="isRemaining" style="font-weight:600;">—</span></div>
-                                <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:14px;"><span style="color:var(--text-secondary);">Duration</span><span id="isDuration" style="font-weight:600;">—</span></div>
-                                <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:14px; border-top:1px solid var(--border); grid-column:span 2;"><span style="color:var(--primary); font-weight:600;">Monthly Installment</span><span id="isMonthly" style="color:var(--primary); font-weight:700;">—</span></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
             <!-- SECTION 4: Current Payment -->
             <div class="card animate-fade-up mb-4">
@@ -500,6 +506,19 @@ function calcInstallment() {
   document.getElementById('isRemaining').textContent = 'Rs. ' + Number(remaining).toLocaleString();
   document.getElementById('isDuration').textContent = months + ' Months';
   document.getElementById('isMonthly').textContent = 'Rs. ' + Math.round(monthly).toLocaleString();
+}
+
+function useSuggestedAmount() {
+  const monthlyEl = document.getElementById('isMonthly');
+  if (monthlyEl && monthlyEl.textContent && monthlyEl.textContent !== '—') {
+    const value = monthlyEl.textContent.replace(/[^0-9]/g, '');
+    if (value) {
+      const amountInput = document.getElementById('id_amount');
+      amountInput.value = value;
+      amountInput.dispatchEvent(new Event('input'));
+      amountInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
 }
 
 function toggleMethodFields() {

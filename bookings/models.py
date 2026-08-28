@@ -59,6 +59,14 @@ class Reservation(models.Model):
     
     def __str__(self):
         return f"Reservation - {self.customer.full_name} - {self.plot.plot_number}"
+    
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(token_amount__gt=0),
+                name='reservation_token_positive',
+            ),
+        ]
 
 
 class Booking(models.Model):
@@ -102,12 +110,14 @@ class Booking(models.Model):
     
     def save(self, *args, **kwargs):
         if not self.booking_id:
-            last_booking = Booking.objects.order_by('-id').first()
-            if last_booking:
-                last_num = int(last_booking.booking_id.split('-')[1])
-                self.booking_id = f'BKG-{str(last_num + 1).zfill(5)}'
-            else:
-                self.booking_id = 'BKG-00001'
+            from django.db import transaction
+            with transaction.atomic():
+                last_booking = Booking.objects.select_for_update().order_by('-id').first()
+                if last_booking:
+                    last_num = int(last_booking.booking_id.split('-')[1])
+                    self.booking_id = f'BKG-{str(last_num + 1).zfill(5)}'
+                else:
+                    self.booking_id = 'BKG-00001'
         
         # Track status change for audit
         if self.pk:
@@ -145,6 +155,16 @@ class Booking(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(total_amount__gt=0),
+                name='booking_total_amount_positive',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(advance_paid__gte=0),
+                name='booking_advance_non_negative',
+            ),
+        ]
 
 
 class BookingTransfer(models.Model):
@@ -265,7 +285,55 @@ class InstallmentPlan(models.Model):
                 amount=amount,
                 status='pending'
             )
-    
+
+    def recalculate(self):
+        """Recalculate the plan so unpaid installments cover exactly the
+        booking's current remaining balance, preserving paid installments
+        and the schedule (count and due dates). Called automatically after
+        every payment is recorded, verified, or reversed.
+        """
+        from datetime import date
+        from decimal import Decimal
+
+        remaining = self.booking.remaining_balance
+        unpaid = list(
+            self.installments.exclude(status='paid').order_by('installment_number')
+        )
+        n = len(unpaid)
+        if n == 0:
+            return
+
+        if remaining <= 0:
+            # Fully paid: settle every unpaid installment.
+            for inst in unpaid:
+                inst.paid_amount = inst.amount + inst.late_fee
+                inst.status = 'paid'
+                inst.paid_date = inst.paid_date or date.today()
+                inst.save()
+            return
+
+        # Money already allocated to partially-paid installments stays put;
+        # the remaining balance is spread evenly across all unpaid ones.
+        allocated = sum((inst.paid_amount for inst in unpaid), Decimal('0'))
+        target_total = remaining + allocated
+        base = (target_total / n).quantize(Decimal('0.01'))
+        base = Decimal(base)
+
+        for idx, inst in enumerate(unpaid):
+            if idx < n - 1:
+                inst.amount = base
+            else:
+                # Last installment absorbs any rounding remainder.
+                inst.amount = target_total - base * (n - 1)
+            if inst.paid_amount >= inst.amount:
+                inst.status = 'paid'
+                inst.paid_date = inst.paid_date or date.today()
+            elif inst.paid_amount > 0:
+                inst.status = 'partial'
+            else:
+                inst.status = 'pending'
+            inst.save()
+
     class Meta:
         verbose_name_plural = 'Installment Plans'
 
@@ -336,6 +404,16 @@ class Installment(models.Model):
     class Meta:
         ordering = ['due_date']
         unique_together = ['plan', 'installment_number']
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(amount__gt=0),
+                name='installment_amount_positive',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(paid_amount__gte=0),
+                name='installment_paid_non_negative',
+            ),
+        ]
 
 
 class PaymentReminder(models.Model):

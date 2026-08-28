@@ -10,6 +10,16 @@ class AccountTransactionSerializer(serializers.ModelSerializer):
     direction_display = serializers.CharField(source='get_direction_display', read_only=True)
     employee_name = serializers.CharField(source='employee.full_name', read_only=True, allow_null=True)
 
+    def validate_amount(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError('Amount must be greater than 0')
+        return value
+
+    def validate_direction(self, value):
+        if value not in ('in', 'out'):
+            raise serializers.ValidationError("Direction must be 'in' or 'out'.")
+        return value
+
     class Meta:
         model = AccountTransaction
         fields = ['id', 'date', 'amount', 'direction', 'direction_display',

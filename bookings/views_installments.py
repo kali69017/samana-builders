@@ -13,7 +13,7 @@ from django.utils import timezone
 
 from core.models import AuditLog
 from core.permissions import management_or_above, finance_or_above
-from .models import InstallmentPlan, Installment, InstallmentReschedule
+from .models import InstallmentPlan, Installment, InstallmentReschedule, InstallmentPlanTemplate
 
 
 def _log(request, action, model, object_id, description):
@@ -43,9 +43,13 @@ def installment_plans_view(request):
         plan.paid_count = plan.installments.filter(status='paid').count()
         plan.overdue_count = plan.installments.filter(status='overdue').count()
 
+    # Available plan templates (the preset schedules shown in dropdowns)
+    templates = InstallmentPlanTemplate.objects.select_related('project').all()
+
     context = {
         'plans': plans,
         'search': search,
+        'templates': templates,
         'total_count': InstallmentPlan.objects.count(),
         'active_count': InstallmentPlan.objects.filter(is_active=True).count(),
     }
@@ -97,6 +101,11 @@ def installment_mark_paid_view(request, pk):
             if booking.remaining_balance <= 0:
                 booking.status = 'completed'
             booking.save()
+
+            # Recalculate the plan: this installment is now settled, so the
+            # remaining balance shrinks and later installments must adjust.
+            if hasattr(booking, 'installment_plan') and booking.installment_plan:
+                booking.installment_plan.recalculate()
 
         _log(request, 'update', 'Installment', pk,
              f'Marked installment {installment.installment_number} of {booking.booking_id} as paid')

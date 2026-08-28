@@ -142,6 +142,16 @@ class AgentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Commission rate must be between 0 and 100.')
         return value
 
+    def validate_phone(self, value):
+        value = (value or '').strip()
+        if value:
+            qs = Agent.objects.filter(phone=value)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError('An agent with this phone number already exists.')
+        return value
+
 
 class CompanySettingsSerializer(serializers.ModelSerializer):
     class Meta:

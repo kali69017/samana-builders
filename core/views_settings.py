@@ -110,6 +110,16 @@ def milestone_delete_view(request, pk):
     return render(request, 'confirm_delete.html', {'object': milestone, 'title': 'Delete Milestone', 'cancel_url': 'milestones'})
 
 
+@login_required
+@management_or_above
+def milestone_detail_view(request, pk):
+    milestone = get_object_or_404(
+        ProjectMilestone.objects.select_related('project'),
+        pk=pk,
+    )
+    return render(request, 'milestone_detail.html', {'milestone': milestone})
+
+
 # ─── RECEIVABLES AGING ─────────────────────────────────────────────────────────
 
 @login_required

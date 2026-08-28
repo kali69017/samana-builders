@@ -160,7 +160,7 @@
                 </div>
             </div>
             {% endif %}
-            {% if can_view_payments and collection_rate_trend %}
+            {% if can_view_payments and collection_trend %}
             <div class="card animate-fade-up stagger-6">
                 <div class="card-header">
                     <h3>📈 Collection Rate Trend</h3>
@@ -220,9 +220,12 @@
             <div class="card animate-fade-up stagger-6">
                 <div class="card-header">
                     <h3>🏗️ Project-wise Revenue</h3>
+                    <div class="card-actions">
+                        <button type="button" class="btn btn-sm btn-ghost" id="projectRevenueToggle">See More</button>
+                    </div>
                 </div>
                 <div class="table-container">
-                    <table class="sortable">
+                    <table class="sortable" id="projectRevenueTable">
                         <thead>
                             <tr>
                                 <th>Project</th>
@@ -230,7 +233,7 @@
                                 <th>Payments</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody class="pr-collapsible">
                             {% for p in project_revenue_data %}
                             <tr>
                                 <td><strong>{{ p.project }}</strong></td>
@@ -271,6 +274,17 @@
                             {% endfor %}
                         </tbody>
                     </table>
+                </div>
+            </div>
+            {% elif can_view_payments %}
+            <div class="card animate-fade-up stagger-7">
+                <div class="card-header">
+                    <h3>⚠️ Top Defaulters</h3>
+                </div>
+                <div class="chart-container" style="height:220px; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; color:var(--text-3);">
+                    <div style="font-size:32px;">✅</div>
+                    <div style="font-size:14px; font-weight:600;">No overdue installments</div>
+                    <div style="font-size:12px;">All customers are up to date on payments</div>
                 </div>
             </div>
             {% endif %}
@@ -414,6 +428,12 @@
 .stat-card:hover {
     transform:translateY(-4px);
     box-shadow:0 8px 25px rgba(0,0,0,0.1);
+}
+.pr-collapsible tr:nth-child(n+6) {
+    display:none;
+}
+.pr-collapsible.expanded tr:nth-child(n+6) {
+    display:table-row;
 }
 @media (max-width:768px) {
     .charts-grid-2col { grid-template-columns:1fr; }
@@ -672,14 +692,14 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     {% endif %}
 
-    {% if can_view_payments and collection_rate_trend %}
+    {% if can_view_payments and collection_trend %}
     new Chart(document.getElementById('collectionRateChart'), {
         type: 'line',
         data: {
-            labels: [{% for item in collection_rate_trend %}'{{ item.label }}'{% if not forloop.last %},{% endif %}{% endfor %}],
+            labels: [{% for item in collection_trend %}'{{ item.label }}'{% if not forloop.last %},{% endif %}{% endfor %}],
             datasets: [{
                 label: 'Collection Rate %',
-                data: [{% for item in collection_rate_trend %}{{ item.rate }}{% if not forloop.last %},{% endif %}{% endfor %}],
+                data: [{% for item in collection_trend %}{{ item.rate }}{% if not forloop.last %},{% endif %}{% endfor %}],
                 borderColor: c.emerald,
                 backgroundColor: 'rgba(16,185,129,0.1)',
                 fill: true,
@@ -943,6 +963,16 @@ document.addEventListener('DOMContentLoaded', function() {
         }]
     });
     {% endif %}
+
+    // Project-wise Revenue: See More / See Less toggle
+    var prToggle = document.getElementById('projectRevenueToggle');
+    var prBody = document.querySelector('#projectRevenueTable tbody.pr-collapsible');
+    if (prToggle && prBody) {
+        prToggle.addEventListener('click', function () {
+            var expanded = prBody.classList.toggle('expanded');
+            prToggle.textContent = expanded ? 'See Less' : 'See More';
+        });
+    }
 });
 </script>
 {% endblock %}

@@ -40,10 +40,22 @@
                 </div>
             </div>
 
-            <form method="post" novalidate>
+            <form method="post" novalidate class="form-grid">
                 {% csrf_token %}
 
                 {% for field in form %}
+                {% if field.field.widget.input_type == 'textarea' %}
+                <div class="floating-group form-grid-full">
+                    {{ field }}
+                    <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span style="color:var(--accent-red);">*</span>{% endif %}</label>
+                    {% if field.errors %}
+                    <div class="form-error">{% for error in field.errors %}{{ error }}{% endfor %}</div>
+                    {% endif %}
+                    {% if field.help_text %}
+                    <div class="form-hint">{{ field.help_text }}</div>
+                    {% endif %}
+                </div>
+                {% else %}
                 <div class="floating-group">
                     {{ field }}
                     <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span style="color:var(--accent-red);">*</span>{% endif %}</label>
@@ -54,9 +66,10 @@
                     <div class="form-hint">{{ field.help_text }}</div>
                     {% endif %}
                 </div>
+                {% endif %}
                 {% endfor %}
 
-                <div class="btn-group" style="padding-top:20px; border-top:1px solid var(--border);">
+                <div class="btn-group form-grid-full" style="padding-top:20px; border-top:1px solid var(--border);">
                     <button type="submit" class="btn btn-primary">
                         <span class="spinner"></span>
                         <span class="btn-text">📅 Create Reservation</span>
@@ -67,4 +80,14 @@
         </div>
     </main>
 </div>
+
+<style>
+    /* Compact 2-column form layout so forms fit on one screen. */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; align-items: start; }
+    .form-grid .floating-group { margin-bottom: 6px !important; }
+    .form-grid-full { grid-column: 1 / -1; }
+    @media (max-width: 768px) {
+        .form-grid { grid-template-columns: 1fr; }
+    }
+</style>
 {% endblock %}

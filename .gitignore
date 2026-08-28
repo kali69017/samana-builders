@@ -24,3 +24,5 @@ samana-builders-deploy.zip
 sendpk_documentation.md
 goldcity.jpeg
 
+db.sqlite3.bak-*
+research/.hermes-tmp.*

@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static property_tags %}
+{% load static %}
 
 {% block title %}Properties - Samana Builders ERP{% endblock %}
 
@@ -83,10 +83,13 @@
             <div class="card-header">
                 <h3>🏗️ Projects</h3>
                 <span class="badge badge-info">{{ projects|length|default:0 }} projects</span>
+                <div class="card-actions">
+                    <button type="button" class="btn btn-sm btn-ghost" id="projectsToggle">View More</button>
+                </div>
             </div>
             <div class="table-container">
                 {% if projects %}
-                <table class="sortable">
+                <table class="sortable" id="projectsTable">
                     <thead>
                         <tr>
                             <th>Project Name</th>
@@ -94,20 +97,14 @@
                             <th>Total Plots</th>
                             <th>Available</th>
                             <th>Status</th>
-                            <th class="no-sort">Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody class="pr-collapsible">
                         {% for project in projects %}
                         <tr>
                             <td><strong>{{ project.name }}</strong></td>
                             <td>
                                 {{ project.location }}
-                                {% if project.google_maps_link %}
-                                <a href="{{ project.google_maps_link }}" target="_blank" style="display:inline-block; margin-left:6px; font-size:12px; color:var(--primary); text-decoration:none;" title="View on Google Maps">📍 Map</a>
-                                {% elif project.latitude and project.longitude %}
-                                <a href="https://www.google.com/maps?q={{ project.latitude }},{{ project.longitude }}" target="_blank" style="display:inline-block; margin-left:6px; font-size:12px; color:var(--primary); text-decoration:none;" title="View on Google Maps">📍 Map</a>
-                                {% endif %}
                             </td>
                             <td>{{ project.total_plots }}</td>
                             <td>
@@ -117,14 +114,6 @@
                                 <span class="badge badge-{% if project.status == 'coming_soon' %}info{% elif project.status == 'booking_open' %}success{% elif project.status == 'under_construction' %}warning{% elif project.status == 'completed' %}secondary{% else %}danger{% endif %}">
                                     {{ project.get_status_display }}
                                 </span>
-                            </td>
-                            <td>
-                                <div class="table-actions">
-                                    <a href="{% url 'project_edit' project.pk %}" class="btn btn-secondary btn-sm">Edit</a>
-                                    {% if can_delete %}
-                                    <a href="{% url 'project_delete' project.pk %}" class="btn btn-danger btn-sm">Delete</a>
-                                    {% endif %}
-                                </div>
                             </td>
                         </tr>
                         {% endfor %}
@@ -146,10 +135,13 @@
             <div class="card-header">
                 <h3>📐 Plots</h3>
                 <span class="badge badge-info">{{ plots|length|default:0 }} plots</span>
+                <div class="card-actions">
+                    <button type="button" class="btn btn-sm btn-ghost" id="plotsToggle">View More</button>
+                </div>
             </div>
             <div class="table-container">
                 {% if plots %}
-                <table class="sortable">
+                <table class="sortable" id="plotsTable">
                     <thead>
                         <tr>
                             <th>Plot Number</th>
@@ -161,7 +153,7 @@
                             <th class="no-sort">Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody class="pr-collapsible">
                         {% for plot in plots %}
                         <tr>
                             <td><strong>{{ plot.plot_number }}</strong></td>
@@ -176,14 +168,11 @@
                             </td>
                             <td>
                                 <div class="table-actions">
-                                    {% if plot.status == 'available' %}
-                                    <a href="{% url 'booking_create' %}?plot_id={{ plot.pk }}" class="btn btn-success btn-sm">Book</a>
-                                    {% endif %}
-                                    <a href="{% url 'plot_edit' plot.pk %}" class="btn btn-secondary btn-sm">Edit</a>
-                                    {% if can_delete %}
-                                    <a href="{% url 'plot_delete' plot.pk %}" class="btn btn-danger btn-sm">Delete</a>
-                                    {% endif %}
-                                </div>
+                                                                    <a href="{% url 'plot_detail' plot.pk %}" class="btn btn-primary btn-sm">View</a>
+                                                                    {% if plot.status == 'available' %}
+                                                                    <a href="{% url 'booking_create' %}?plot_id={{ plot.pk }}" class="btn btn-success btn-sm">Book</a>
+                                                                    {% endif %}
+                                                                </div>
                             </td>
                         </tr>
                         {% endfor %}
@@ -195,41 +184,6 @@
                     <h3>No Plots Found</h3>
                     <p>{% if status_filter or project_filter %}No plots match the current filters.{% else %}Add plots to your projects.{% endif %}</p>
                     <a href="{% url 'plot_create' %}" class="btn btn-primary btn-sm">+ Add Plot</a>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-
-        <!-- Map Section -->
-        <div class="card animate-fade-up stagger-5">
-            <div class="card-header">
-                <h3>📍 Property Map</h3>
-            </div>
-            <div style="padding:16px;">
-                {% has_mappable_projects as has_maps %}
-                {% if has_maps %}
-                {% for project in projects %}
-                {% if project.latitude and project.longitude %}
-                <div style="margin-bottom:16px;">
-                    <h4 style="font-size:14px; font-weight:600; margin-bottom:8px; color:var(--text-primary);">{{ project.name }}</h4>
-                    <div style="border-radius:8px; overflow:hidden; border:1px solid var(--border);">
-                        <iframe 
-                            width="100%" 
-                            height="200" 
-                            style="border:0;" 
-                            loading="lazy" 
-                            referrerpolicy="no-referrer-when-downgrade"
-                            src="https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q={{ project.latitude }},{{ project.longitude }}&zoom=15">
-                        </iframe>
-                    </div>
-                </div>
-                {% endif %}
-                {% endfor %}
-                {% else %}
-                <div class="map-placeholder">
-                    <div class="map-icon">🗺️</div>
-                    <p>Add coordinates to projects to see them on the map</p>
-                    <span style="font-size:12px; opacity:0.6;">Set latitude and longitude in project settings</span>
                 </div>
                 {% endif %}
             </div>

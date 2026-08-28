@@ -1,0 +1,6 @@
+[
+  ["navigate", {"url": "http://127.0.0.1:8000/"}],
+  ["wait", {"ms": 1500}],
+  ["eval", {"js": "() => ({ title: document.title, h1: document.querySelector('h1')?.textContent?.trim(), hasLogin: !!document.querySelector('a[href=\"/login/\"]'), hasBookNow: !!document.querySelector('a[href*=\"lead\"]') || !!document.querySelector('button, a') })"}],
+  ["console", {}]
+]

@@ -7,7 +7,7 @@
 <div class="app-layout">
     <div class="sidebar-overlay" onclick="closeSidebar()"></div>
     <div class="top-bar">
-        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <button class="hamburger" onclick="toggleSidebar()">&#9776;</button>
         <span class="top-bar-title">Agent Detail</span>
         <div class="top-bar-actions"></div>
     </div>
@@ -16,6 +16,7 @@
         <div class="page-header">
             <h1>{{ agent.name }}</h1>
             <div class="page-actions">
+                <a href="{% url 'agent_commission_payment' agent.pk %}" class="btn btn-success btn-sm">💵 Record Commission Payment</a>
                 <a href="{% url 'agent_edit' agent.pk %}" class="btn btn-secondary btn-sm">Edit</a>
                 <a href="{% url 'agents' %}" class="btn btn-ghost btn-sm">← All Agents</a>
             </div>
@@ -34,9 +35,47 @@
                 <div class="detail-item"><div class="detail-label">Email</div><div class="detail-value">{{ agent.email|default:"-" }}</div></div>
                 <div class="detail-item"><div class="detail-label">CNIC</div><div class="detail-value">{{ agent.cnic|default:"-" }}</div></div>
             </div>
+            <!-- Commission summary -->
             <div class="card">
                 <div class="detail-item"><div class="detail-label">Total Bookings</div><div class="detail-value">{{ bookings|length }}</div></div>
-                <div class="detail-item"><div class="detail-label">Total Commission</div><div class="detail-value" style="color:var(--accent-green);">Rs. {{ total_commission|floatformat:0 }}</div></div>
+                <div class="detail-item"><div class="detail-label">Commission Earned</div><div class="detail-value" style="color:var(--accent-green); font-weight:600;">Rs. {{ total_commission|floatformat:0 }}</div></div>
+                <div class="detail-item"><div class="detail-label">Commission Paid</div><div class="detail-value" style="color:var(--accent-blue); font-weight:600;">Rs. {{ agent.commission_paid|floatformat:0 }}</div></div>
+                <div class="detail-item"><div class="detail-label">Balance Due</div><div class="detail-value" style="color:{% if agent.commission_balance > 0 %}var(--accent-amber); font-weight:700;{% else %}var(--accent-green);{% endif %}">Rs. {{ agent.commission_balance|floatformat:0 }}</div></div>
+            </div>
+        </div>
+
+        <!-- Payments history -->
+        <div class="card animate-fade-up" style="margin-bottom:16px;">
+            <div class="card-header"><h3>💵 Commission Payments</h3><span class="badge badge-info">{{ payments|length }}</span></div>
+            <div class="table-container">
+                {% if payments %}
+                <table class="sortable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Amount</th>
+                            <th>Method</th>
+                            <th>Reference</th>
+                            <th>Recorded By</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in payments %}
+                        <tr>
+                            <td>{{ p.payment_date|date:"d M Y"|default:"-" }}</td>
+                            <td style="font-weight:600; color:var(--accent-blue);">Rs. {{ p.amount|floatformat:0 }}</td>
+                            <td>{{ p.method|default:"-" }}</td>
+                            <td>{{ p.reference|default:"-" }}</td>
+                            <td>{{ p.paid_by.username|default:"-" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state"><div class="empty-icon">💵</div><h3>No Payments Yet</h3><p>Record a commission payment to track money paid to this agent.</p>
+                    <a href="{% url 'agent_commission_payment' agent.pk %}" class="btn btn-success btn-sm">💵 Record Payment</a>
+                </div>
+                {% endif %}
             </div>
         </div>
 

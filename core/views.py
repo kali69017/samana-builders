@@ -4,6 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import User
 from django.contrib import messages
+import re
 from django.db.models import Sum, Count, Q
 from django.db import transaction
 from django.db.models.functions import TruncMonth, TruncWeek, TruncYear
@@ -39,6 +40,16 @@ def login_view(request):
     
     if request.method == 'POST':
         form = AuthenticationForm(request, data=request.POST)
+        username = request.POST.get('username', '')
+        ip = request.META.get('REMOTE_ADDR')
+
+        # Brute-force guard: 5 failed attempts per 15 minutes locks the account.
+        from api.views import _login_locked_out, _record_login_attempt
+        if _login_locked_out(username, ip):
+            _record_login_attempt(username, ip, False)
+            messages.error(request, 'Too many failed attempts. Try again after 15 minutes.')
+            return render(request, 'login.html', {'form': form})
+
         if form.is_valid():
             user = form.get_user()
             
@@ -47,6 +58,7 @@ def login_view(request):
                 messages.error(request, 'Your account has been deactivated. Contact an administrator.')
                 return render(request, 'login.html', {'form': form})
             
+            _record_login_attempt(username, ip, True)
             login(request, user)
             AuditLog.objects.create(
                 user=user, action='login', model_name='User',
@@ -56,6 +68,7 @@ def login_view(request):
             messages.success(request, f'Welcome back, {user.get_full_name() or user.username}!')
             return redirect(_post_login_target(user))
         else:
+            _record_login_attempt(username, ip, False)
             messages.error(request, 'Invalid username or password.')
     else:
         form = AuthenticationForm()
@@ -609,6 +622,9 @@ def customer_edit_view(request, pk):
             return redirect('customers')
     else:
         form = CustomerForm(instance=customer)
+        # Pre-fill CNIC as plain digits (input field only accepts digits now)
+        if form.initial.get('cnic'):
+            form.initial['cnic'] = re.sub(r'\D', '', str(form.initial['cnic']))
         nominee_form = CustomerNomineeForm(instance=nominee_instance)
     
     return render(request, 'customer_form.html', {
@@ -623,6 +639,14 @@ def customer_edit_view(request, pk):
 @management_or_above
 def customer_delete_view(request, pk):
     customer = get_object_or_404(Customer, pk=pk)
+    # Data protection: a customer with bookings or ledger history cannot be
+    # deleted (matches the API guard). Deactivate instead.
+    if customer.bookings.exists() or customer.ledger_entries.exists():
+        messages.error(
+            request,
+            'Cannot delete a customer with bookings or ledger history. Deactivate them instead.'
+        )
+        return redirect('customer_detail', pk=customer.pk)
     if request.method == 'POST':
         customer_id = customer.customer_id
         customer.delete()
@@ -791,6 +815,14 @@ def plot_edit_view(request, pk):
 @management_or_above
 def plot_delete_view(request, pk):
     plot = get_object_or_404(Plot, pk=pk)
+    # Data protection: a plot with bookings or reservations cannot be deleted
+    # (deleting it would cascade away payment history).
+    if plot.bookings.exists() or plot.reservations.exists():
+        messages.error(
+            request,
+            'Cannot delete a plot that has bookings or reservations. Mark it inactive instead.'
+        )
+        return redirect('properties')
     if request.method == 'POST':
         plot_info = f'{plot.plot_number} ({plot.project.name})'
         plot.delete()
@@ -804,6 +836,22 @@ def plot_delete_view(request, pk):
     
     return render(request, 'confirm_delete.html', {'object': plot, 'title': 'Delete Plot', 'cancel_url': 'properties'})
 
+@login_required
+def plot_detail_view(request, pk):
+    plot = get_object_or_404(
+        Plot.objects.select_related('project', 'phase'),
+        pk=pk,
+    )
+    price_history = plot.price_history.select_related('changed_by').all()
+    booking = plot.bookings.select_related('customer').order_by('-id').first()
+    return render(request, 'plot_detail.html', {
+        'plot': plot,
+        'bookings': plot.bookings.select_related('customer').all(),
+        'reservations': plot.reservations.select_related('customer').all(),
+        'documents': plot.documents.all(),
+        'price_history': price_history,
+        'current_booking': booking,
+    })
 
 # ─── BOOKINGS ────────────────────────────────────────────────────────────────────
 
@@ -865,12 +913,17 @@ def booking_create_view(request):
                 from bookings.models import InstallmentPlanTemplate, InstallmentPlan
                 try:
                     template = InstallmentPlanTemplate.objects.get(pk=template_id, project=booking.plot.project)
+                    # Down payment = what the customer actually paid at booking
+                    # time (falling back to the template's expected percentage).
+                    down_payment = booking.advance_paid if booking.advance_paid > 0 else (
+                        booking.total_amount * template.down_payment_percentage / 100
+                    )
                     plan = InstallmentPlan.objects.create(
                         booking=booking,
                         template=template,
                         total_installments=template.total_installments,
-                        installment_amount=(booking.total_amount - (booking.total_amount * template.down_payment_percentage / 100)) / template.total_installments,
-                        down_payment_amount=booking.total_amount * template.down_payment_percentage / 100,
+                        installment_amount=(booking.total_amount - down_payment) / template.total_installments,
+                        down_payment_amount=down_payment,
                         start_date=booking.booking_date,
                         frequency=template.frequency,
                         late_fee_per_day=template.late_fee_per_day,
@@ -880,6 +933,31 @@ def booking_create_view(request):
                     messages.success(request, f'Installment plan generated: {template.total_installments} {template.frequency} installments.')
                 except InstallmentPlanTemplate.DoesNotExist:
                     pass
+            
+            # Record the upfront advance as a real verified Payment so the
+            # payment ledger, receipts, and customer payment history stay
+            # consistent with booking.advance_paid.
+            if booking.advance_paid > 0:
+                from payments.models import Payment, Receipt
+                payment = Payment.objects.create(
+                    booking=booking,
+                    amount=booking.advance_paid,
+                    payment_date=booking.booking_date,
+                    payment_method='cash',
+                    payment_type='down_payment',
+                    status='verified',
+                    verified_by=request.user,
+                    verified_at=timezone.now(),
+                    created_by=request.user,
+                    notes='Upfront advance collected at booking',
+                )
+                Receipt.objects.create(
+                    payment=payment,
+                    receipt_date=payment.payment_date,
+                    generated_by=request.user,
+                )
+                payment.receipt_generated = True
+                payment.save(update_fields=['receipt_generated'])
             
             AuditLog.objects.create(
                 user=request.user, action='create', model_name='Booking',
@@ -982,6 +1060,14 @@ def booking_edit_view(request, pk):
 @management_or_above
 def booking_delete_view(request, pk):
     booking = get_object_or_404(Booking, pk=pk)
+    # Data protection: a booking with payments cannot be hard-deleted
+    # (payments and receipts would vanish from the ledger).
+    if booking.payments.exists():
+        messages.error(
+            request,
+            'Cannot delete a booking that has payments. Cancel it and process a refund instead.'
+        )
+        return redirect('booking_detail', pk=booking.pk)
     if request.method == 'POST':
         booking_id = booking.booking_id
         # Reset plot status
@@ -1285,6 +1371,11 @@ def payment_create_view(request):
                 if booking.remaining_balance <= 0:
                     booking.status = 'completed'
                 booking.save()
+
+                # Recalculate the installment plan so unpaid installments
+                # reflect the new remaining balance.
+                if hasattr(booking, 'installment_plan') and booking.installment_plan:
+                    booking.installment_plan.recalculate()
 
                 # Auto-generate receipt
                 receipt = Receipt.objects.create(
@@ -1906,7 +1997,6 @@ def lead_submit_view(request):
 @login_required
 def portal_view(request):
     from django.db.models import Sum
-
     customer = Customer.objects.filter(user=request.user).first()
     if customer is None:
         messages.error(request, 'No customer profile is linked to this account.')
@@ -1981,3 +2071,89 @@ def portal_view(request):
         'installments': installment_payload,
     }
     return render(request, 'portal/dashboard.html', context)
+
+
+# ─── AI ASSISTANT (LangChain + DeepSeek) ─────────────────────────────────────
+
+@login_required
+def ai_assistant_page_view(request):
+    """ERP AI chat assistant page (staff only)."""
+    from django.conf import settings
+    from core.models import CompanySettings
+    from core.permissions import get_user_role, ADMIN_ROLES
+    settings_obj = CompanySettings.load()
+    role = get_user_role(request)
+    context = {
+        'ai_enabled': bool(getattr(settings, 'AI_ENABLED', False)),
+        'ai_configured': bool(getattr(settings, 'DEEPSEEK_API_KEY', '')),
+        'ai_language': settings_obj.ai_language,
+        'can_manage_ai_language': request.user.is_superuser or role in ADMIN_ROLES,
+    }
+    return render(request, 'ai/assistant.html', context)
+
+
+@login_required
+@finance_or_above
+def ai_insights_page_view(request):
+    """AI business insights page (finance/management only)."""
+    from django.conf import settings
+    from django.db.models import Sum
+    from bookings.models import Booking, Installment
+    from payments.models import Payment
+    from properties.models import Plot
+    from ai.models import AiInteractionLog
+
+    today = timezone.now().date()
+    month_start = today.replace(day=1)
+    total_revenue = Booking.objects.aggregate(total=Sum('advance_paid'))['total'] or 0
+    monthly_revenue = Booking.objects.filter(
+        booking_date__gte=month_start
+    ).aggregate(total=Sum('advance_paid'))['total'] or 0
+    pending_payments = Payment.objects.filter(status='pending').count()
+    overdue_count = Installment.objects.filter(status='overdue').count()
+    overdue_amount = Installment.objects.filter(status='overdue').aggregate(
+        total=Sum('amount'))['total'] or 0
+    available_plots = Plot.objects.filter(status='available').count()
+    active_bookings = Booking.objects.filter(status__in=['active', 'confirmed']).count()
+
+    history = list(
+        AiInteractionLog.objects.filter(feature='insights', status='success')
+        .order_by('-created_at')[:6]
+    )
+
+    context = {
+        'ai_enabled': bool(getattr(settings, 'AI_ENABLED', False)),
+        'ai_configured': bool(getattr(settings, 'DEEPSEEK_API_KEY', '')),
+        'total_revenue': total_revenue,
+        'monthly_revenue': monthly_revenue,
+        'pending_payments': pending_payments,
+        'overdue_count': overdue_count,
+        'overdue_amount': overdue_amount,
+        'available_plots': available_plots,
+        'active_bookings': active_bookings,
+        'insights_history': history,
+    }
+    return render(request, 'ai/insights.html', context)
+
+
+@login_required
+def ai_hr_page_view(request):
+    """AI HR tools page (HR/management roles)."""
+    from django.conf import settings
+    from .permissions import get_user_role
+
+    role = get_user_role(request)
+    if not (request.user.is_superuser or role in ('super_admin', 'admin', 'management', 'hr')):
+        messages.error(request, 'You do not have permission to access this page.')
+        return redirect('dashboard')
+
+    from hr.models import Department, Designation, Leave, PayrollRun
+    context = {
+        'ai_enabled': bool(getattr(settings, 'AI_ENABLED', False)),
+        'ai_configured': bool(getattr(settings, 'DEEPSEEK_API_KEY', '')),
+        'departments': Department.objects.filter(is_active=True),
+        'designations': Designation.objects.filter(is_active=True),
+        'pending_leaves': Leave.objects.filter(status='pending').select_related('employee')[:10],
+        'payroll_runs': PayrollRun.objects.all()[:10],
+    }
+    return render(request, 'ai/hr.html', context)

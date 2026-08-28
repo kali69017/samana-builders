@@ -242,10 +242,37 @@ def agent_detail_view(request, pk):
     agent = get_object_or_404(Agent, pk=pk)
     bookings = Booking.objects.filter(agent=agent).select_related('customer', 'plot', 'plot__project').all()
     total_commission = sum((b.agent_commission for b in bookings), 0)
+    payments = agent.commission_payments.all()
     return render(request, 'agent_detail.html', {
         'agent': agent,
         'bookings': bookings,
         'total_commission': total_commission,
+        'payments': payments,
+    })
+
+
+@login_required
+@management_or_above
+def agent_commission_payment_view(request, pk):
+    """Record a commission payment made to an agent."""
+    agent = get_object_or_404(Agent, pk=pk)
+    from .forms import AgentCommissionPaymentForm
+    if request.method == 'POST':
+        form = AgentCommissionPaymentForm(request.POST)
+        if form.is_valid():
+            payment = form.save(commit=False)
+            payment.agent = agent
+            payment.paid_by = request.user
+            payment.save()
+            _log(request, 'create', 'AgentCommissionPayment', payment.pk,
+                 f'Recorded Rs. {payment.amount} commission payment to {agent.name}')
+            messages.success(request, f'Commission payment of Rs. {payment.amount} recorded for {agent.name}.')
+            return redirect('agent_detail', pk=agent.pk)
+    else:
+        from django.utils import timezone
+        form = AgentCommissionPaymentForm(initial={'payment_date': timezone.localdate()})
+    return render(request, 'agent_commission_form.html', {
+        'form': form, 'agent': agent, 'title': f'Record Commission Payment — {agent.name}',
     })
 
 

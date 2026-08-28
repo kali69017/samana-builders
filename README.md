@@ -88,6 +88,43 @@ Samana Builders/
 └── themes/              # Theme samples
 ```
 
+## AI Assistant (LangChain + DeepSeek)
+
+The ERP ships with an AI layer powered by [LangChain](https://www.langchain.com/) and the DeepSeek chat API.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/ai/assistant/` | POST | Natural-language Q&A over live ERP data (revenue, bookings, overdue, inventory) |
+| `/api/ai/lead-score/` | POST | Scores a lead 0-100 with hot/warm/cold tier and reason |
+| `/api/ai/property-description/` | POST | Generates marketing copy for a plot |
+| `/api/ai/reminder-draft/` | POST | Drafts a personalized installment reminder message |
+| `/api/ai/insights/` | GET | Business insights narrative (finance/management roles) |
+| `/api/ai/health/` | GET | AI configuration status |
+| `/api/ai/hr/assistant/` | POST | HR Q&A (headcount, departments, payroll, leave) — HR roles |
+| `/api/ai/hr/leave-review/` | POST | Drafts approve/reject email for a leave request — HR roles |
+| `/api/ai/hr/payroll/` | POST | Payroll anomaly detection and summary — payroll roles |
+| `/api/ai/hr/attendance/` | POST | Monthly attendance rate + absenteeism analysis — HR roles |
+| `/api/ai/hr/job-description/` | POST | Generates a job description for a role — HR roles |
+
+UI pages: `/ai/` (chat assistant), `/ai/insights/` (business analysis) and
+`/ai/hr/` (HR tools), all in the sidebar.
+
+### Configuration
+
+Add to `.env` (gitignored):
+
+```
+AI_ENABLED=True
+DEEPSEEK_API_KEY=sk-...
+DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+```
+
+Every AI call is logged to the `AiInteractionLog` table (visible in Django admin).
+Scheduled daily insights: `python manage.py ai_daily_insights` (cron-friendly).
+When AI is disabled or the provider is unreachable, all endpoints degrade
+gracefully with a structured error instead of crashing the ERP.
+
 ## Testing
 
 ```bash

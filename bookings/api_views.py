@@ -3,9 +3,11 @@ from decimal import Decimal
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db.models import Sum
+from properties.models import Plot
 from payments.models import Payment
 from .models import (
     Booking, BookingGroup, BookingTransfer, BookingAmendment,
@@ -61,17 +63,84 @@ class BookingViewSet(viewsets.ModelViewSet):
         return BookingSerializer
     
     def perform_create(self, serializer):
-        booking = serializer.save(created_by=self.request.user)
-        # Update plot status
-        plot = booking.plot
-        plot.status = 'booked'
-        plot.save()
+        from django.db import transaction
+        with transaction.atomic():
+            # Lock the plot row so two concurrent requests cannot both book it.
+            plot = Plot.objects.select_for_update().get(pk=serializer.validated_data['plot'].pk)
+            if plot.status in ('booked', 'sold', 'cancelled'):
+                raise ValidationError({'plot': f'Plot {plot.plot_number} is not available for booking.'})
+            booking = serializer.save(created_by=self.request.user)
+            plot.status = 'booked'
+            plot.save()
+            # Record the upfront advance as a real verified Payment so the
+            # payment ledger, receipts, and customer payment history stay
+            # consistent with booking.advance_paid.
+            from decimal import Decimal as _Decimal
+            advance = _Decimal(serializer.validated_data.get('advance_paid') or 0)
+            if advance > 0:
+                from payments.models import Payment, Receipt
+                payment = Payment.objects.create(
+                    booking=booking,
+                    amount=advance,
+                    payment_date=timezone.now().date(),
+                    payment_method='cash',
+                    payment_type='down_payment',
+                    status='verified',
+                    verified_by=self.request.user,
+                    verified_at=timezone.now(),
+                    created_by=self.request.user,
+                    notes='Upfront advance collected at booking',
+                )
+                Receipt.objects.create(
+                    payment=payment,
+                    receipt_date=payment.payment_date,
+                    generated_by=self.request.user,
+                )
+                payment.receipt_generated = True
+                payment.save(update_fields=['receipt_generated'])
+            # Link the reservation if one exists for this customer+plot.
+            from .models import Reservation
+            Reservation.objects.filter(
+                customer=booking.customer, plot=plot, status='active'
+            ).update(status='converted')
         from core.models import AuditLog
         AuditLog.objects.create(
             user=self.request.user, action='create', model_name='Booking',
             object_id=booking.booking_id,
             description=f'Created booking {booking.booking_id} for {booking.customer.full_name} via API'
         )
+        # Match the web flow: notify the customer about the new booking.
+        try:
+            from notifications.services import NotificationService
+            NotificationService.send_booking_notification(booking)
+        except Exception:
+            # Notifications must never fail the booking creation.
+            import logging
+            logging.getLogger(__name__).warning(
+                'Booking notification failed for %s', booking.booking_id)
+
+    def destroy(self, request, *args, **kwargs):
+        """Delete a booking only when it has no payments.
+
+        Deleting a booking that already has verified payments would silently
+        destroy the payment, receipt, and ledger history — so those bookings
+        must go through the refund/cancel workflow instead. On a successful
+        delete the plot is released back to available.
+        """
+        from django.db.models import Sum
+        booking = self.get_object()
+        verified_amount = booking.payments.filter(status='verified').aggregate(
+            total=Sum('amount'))['total'] or 0
+        if verified_amount > 0:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError(
+                {'detail': 'This booking has verified payments. Process a refund before deleting it.'}
+            )
+        plot = booking.plot
+        response = super().destroy(request, *args, **kwargs)
+        plot.status = 'available'
+        plot.save(update_fields=['status'])
+        return response
     
     def get_queryset(self):
         qs = super().get_queryset()
@@ -93,37 +162,58 @@ class BookingViewSet(viewsets.ModelViewSet):
         booking = self.get_object()
         reason = request.data.get('reason', 'other')
         notes = request.data.get('notes', '')
-        
+
+        # Guard: a booking with verified payments cannot be cancelled
+        # through this endpoint — it needs the refund workflow instead.
+        verified_amount = booking.payments.filter(status='verified').aggregate(
+            total=Sum('amount'))['total'] or 0
+        if verified_amount > 0:
+            return Response(
+                {'error': 'This booking has verified payments. Process a refund before cancelling.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         plot = booking.plot
         plot.status = 'available'
         plot.save()
-        
+
         booking.status = 'cancelled'
         booking.notes = (booking.notes + '\n---\nCancelled: ' + notes) if booking.notes else notes
         booking.save()
-        
+
         from core.models import AuditLog
         AuditLog.objects.create(
             user=request.user, action='cancel', model_name='Booking',
             object_id=booking.booking_id,
             description=f'Cancelled booking {booking.booking_id} - Reason: {reason}'
         )
-        
+
         return Response(BookingSerializer(booking).data)
-    
+
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
         booking = self.get_object()
+
+        # Idempotent for already-confirmed/active/completed bookings (safe for
+        # API retries); only blocked for cancelled bookings.
+        if booking.status in ('confirmed', 'active', 'completed'):
+            return Response(BookingSerializer(booking).data)
+        if booking.status == 'cancelled':
+            return Response(
+                {'error': 'A cancelled booking cannot be confirmed.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         booking.status = 'confirmed'
         booking.save()
-        
+
         from core.models import AuditLog
         AuditLog.objects.create(
             user=request.user, action='update', model_name='Booking',
             object_id=booking.booking_id,
             description=f'Confirmed booking {booking.booking_id}'
         )
-        
+
         return Response(BookingSerializer(booking).data)
     
     @action(detail=True, methods=['get'])
@@ -227,24 +317,54 @@ class InstallmentViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'])
     def mark_paid(self, request, pk=None):
+        """Mark an installment paid and record a verified Payment for the ledger."""
+        from django.db import transaction as db_transaction
         installment = self.get_object()
         booking = installment.plan.booking
 
         total = installment.amount + installment.late_fee
         new_paid = Decimal(str(request.data.get('paid_amount', total)))
+        if new_paid < 0:
+            return Response({'error': 'paid_amount cannot be negative.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if new_paid > total:
+            return Response(
+                {'error': f'paid_amount cannot exceed installment total {total}.'},
+                status=status.HTTP_400_BAD_REQUEST)
+
         delta = new_paid - installment.paid_amount
 
-        installment.paid_amount = new_paid
-        installment.status = 'paid' if new_paid >= total else 'partial'
-        installment.paid_date = request.data.get('paid_date', timezone.now().date())
-        installment.save()
+        with db_transaction.atomic():
+            installment.paid_amount = new_paid
+            installment.status = 'paid' if new_paid >= total else 'partial'
+            installment.paid_date = request.data.get('paid_date', timezone.now().date())
+            installment.save()
 
-        # Keep booking revenue (advance_paid) consistent with the adjustment.
-        if delta > 0:
-            booking.advance_paid = min(booking.advance_paid + delta, booking.total_amount)
-            if booking.remaining_balance <= 0:
-                booking.status = 'completed'
-            booking.save()
+            # Record a real Payment row so the ledger, receipts, and
+            # customer totals stay consistent with advance_paid.
+            if delta > 0:
+                Payment.objects.create(
+                    booking=booking,
+                    installment=installment,
+                    amount=delta,
+                    payment_date=request.data.get('paid_date', timezone.now().date()),
+                    payment_method=request.data.get('payment_method', 'cash'),
+                    payment_type='installment',
+                    status='verified',
+                    verified_by=request.user,
+                    verified_at=timezone.now(),
+                    created_by=request.user,
+                    notes='Marked paid via installment action',
+                )
+                booking.advance_paid = min(booking.advance_paid + delta, booking.total_amount)
+                if booking.remaining_balance <= 0:
+                    booking.status = 'completed'
+                booking.save()
+
+                # Recalculate the plan: this installment is now settled, so
+                # later installments must adjust to the new remaining balance.
+                if hasattr(booking, 'installment_plan') and booking.installment_plan:
+                    booking.installment_plan.recalculate()
 
         return Response(InstallmentSerializer(installment).data)
 
@@ -265,11 +385,57 @@ class ReservationViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'])
     def convert(self, request, pk=None):
-        """Convert reservation to booking."""
+        """Convert reservation to booking.
+
+        Creates an actual Booking for the reserved plot (token amount becomes
+        the advance) and moves the plot to booked. Requires the customer and
+        plot to still be valid, and fails cleanly if the plot was already
+        booked by someone else in the meantime.
+        """
+        from django.db import transaction
+        from django.db.models import Q
+        from decimal import Decimal
+        from .models import Booking, Plot
+        from .serializers import BookingSerializer
+
         reservation = self.get_object()
-        reservation.status = 'converted'
-        reservation.save()
-        return Response({'status': 'converted'}, status=status.HTTP_200_OK)
+        if reservation.status != 'active':
+            return Response(
+                {'error': f'Reservation is already {reservation.get_status_display()}.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        with transaction.atomic():
+            plot = Plot.objects.select_for_update().get(pk=reservation.plot_id)
+            if plot.status in ('booked', 'sold'):
+                reservation.status = 'expired'
+                reservation.save()
+                return Response(
+                    {'error': 'Plot is no longer available for conversion.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            booking = Booking.objects.create(
+                customer=reservation.customer,
+                plot=plot,
+                total_amount=plot.price,
+                advance_paid=reservation.token_amount,
+                status='confirmed',
+                created_by=request.user,
+                notes=f'Converted from reservation {reservation.pk}',
+            )
+            plot.status = 'booked'
+            plot.save()
+            reservation.status = 'converted'
+            reservation.save()
+
+        from core.models import AuditLog
+        AuditLog.objects.create(
+            user=request.user, action='create', model_name='Booking',
+            object_id=booking.booking_id,
+            description=f'Created booking {booking.booking_id} from reservation {reservation.pk}'
+        )
+        return Response(BookingSerializer(booking).data, status=status.HTTP_201_CREATED)
 
 
 class BookingTransferViewSet(viewsets.ModelViewSet):

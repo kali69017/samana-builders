@@ -137,8 +137,23 @@ class BookingEdgeTests(TestCase):
         self.assertEqual(self.booking.payment_progress, 10)
 
     def test_payment_progress_zero_total(self):
-        b = Booking.objects.create(customer=self.customer, plot=self.plot, total_amount=Decimal('0'),
-                                   advance_paid=Decimal('0'), status='pending', created_by=self.user)
+        # Zero-total bookings are blocked by the DB CheckConstraint. The
+        # division-by-zero guard in payment_progress is therefore unreachable
+        # via real data; assert the constraint contract instead. The inner
+        # atomic isolates the expected failure so it does not poison the
+        # test transaction.
+        from django.db import IntegrityError, transaction
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Booking.objects.create(customer=self.customer, plot=self.plot,
+                                       total_amount=Decimal('0'),
+                                       advance_paid=Decimal('0'), status='pending',
+                                       created_by=self.user)
+        # And a positive-total booking still computes progress fine.
+        b = Booking.objects.create(customer=self.customer, plot=self.plot,
+                                   total_amount=Decimal('1000'),
+                                   advance_paid=Decimal('0'), status='pending',
+                                   created_by=self.user)
         self.assertEqual(b.payment_progress, 0)
 
     def test_agent_commission(self):

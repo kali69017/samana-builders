@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Plot {{ plot.plot_number }} - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    <div class="top-bar">
+        <button class="hamburger" onclick="toggleSidebar()">&#9776;</button>
+        <span class="top-bar-title">Plot {{ plot.plot_number }}</span>
+        <div class="top-bar-actions"></div>
+    </div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>{{ plot.plot_number }} <span style="font-size:13px; color:var(--text-secondary);">({{ plot.project.name }})</span></h1>
+            <div class="page-actions">
+                <a href="{% url 'plot_edit' plot.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                <a href="{% url 'properties' %}" class="btn btn-ghost btn-sm">← All Properties</a>
+            </div>
+        </div>
+
+        <!-- Key facts -->
+        <div class="detail-grid" style="margin-bottom:24px;">
+            <div class="card">
+                <div class="detail-item"><div class="detail-label">Status</div><div class="detail-value">
+                    <span class="badge badge-{% if plot.status == 'available' %}success{% elif plot.status == 'booked' %}info{% elif plot.status == 'sold' %}secondary{% elif plot.status == 'reserved' %}warning{% else %}danger{% endif %}">{{ plot.get_status_display }}</span>
+                </div></div>
+                <div class="detail-item"><div class="detail-label">Price</div><div class="detail-value" style="color:var(--accent-green); font-weight:600;">Rs. {{ plot.price|floatformat:0 }}</div></div>
+                <div class="detail-item"><div class="detail-label">Size</div><div class="detail-value">{{ plot.size_marla }} Marla{% if plot.size_sqft %} ({{ plot.size_sqft|floatformat:0 }} sq.ft){% endif %}</div></div>
+                <div class="detail-item"><div class="detail-label">Type</div><div class="detail-value">{{ plot.get_plot_type_display }}</div></div>
+            </div>
+            <div class="card">
+                <div class="detail-item"><div class="detail-label">Project</div><div class="detail-value">{{ plot.project.name }}</div></div>
+                <div class="detail-item"><div class="detail-label">Phase</div><div class="detail-value">{{ plot.phase.name|default:"—" }}</div></div>
+                <div class="detail-item"><div class="detail-label">Block</div><div class="detail-value">{{ plot.block|default:"—" }}</div></div>
+                <div class="detail-item"><div class="detail-label">Corner / Park Facing</div><div class="detail-value">{% if plot.is_corner %}Corner {% endif %}{% if plot.is_park_facing %}Park Facing {% endif %}{% if not plot.is_corner and not plot.is_park_facing %}—{% endif %}</div></div>
+            </div>
+            {% if current_booking %}
+            <div class="card">
+                <div class="detail-item"><div class="detail-label">Current Booking</div><div class="detail-value"><a href="{% url 'booking_detail' current_booking.pk %}">{{ current_booking.booking_id }}</a></div></div>
+                <div class="detail-item"><div class="detail-label">Customer</div><div class="detail-value">{{ current_booking.customer.full_name }}</div></div>
+                <div class="detail-item"><div class="detail-label">Total / Paid</div><div class="detail-value">Rs. {{ current_booking.total_amount|floatformat:0 }} / Rs. {{ current_booking.advance_paid|floatformat:0 }}</div></div>
+                <div class="detail-item"><div class="detail-label">Remaining</div><div class="detail-value" style="color:var(--accent-amber);">Rs. {{ current_booking.remaining_balance|floatformat:0 }}</div></div>
+            </div>
+            {% else %}
+            <div class="card">
+                <div class="empty-state">
+                    <div class="empty-icon">📐</div>
+                    <h3>Not Booked{% if plot.status == 'available' %} Yet{% endif %}</h3>
+                    {% if plot.status == 'available' %}<a href="{% url 'booking_create' %}?plot_id={{ plot.pk }}" class="btn btn-success btn-sm">+ Book This Plot</a>{% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if plot.description %}
+        <div class="card animate-fade-up" style="margin-bottom:16px;">
+            <div class="card-header"><h3>Description</h3></div>
+            <div class="card-body"><p style="color:var(--text-secondary); margin:0;">{{ plot.description }}</p></div>
+        </div>
+        {% endif %}
+
+        <!-- Features -->
+        {% if plot.features.all %}
+        <div class="card animate-fade-up" style="margin-bottom:16px;">
+            <div class="card-header"><h3>Features</h3></div>
+            <div class="card-body">
+                <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                    {% for f in plot.features.all %}<span class="badge badge-info" style="font-size:13px;">{{ f.icon }} {{ f.name }}</span>{% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Bookings -->
+        <div class="card animate-fade-up" style="margin-bottom:16px;">
+            <div class="card-header"><h3>📋 Booking History</h3><span class="badge badge-info">{{ bookings|length }}</span></div>
+            <div class="table-container">
+                {% if bookings %}
+                <table class="sortable">
+                    <thead><tr><th>Booking</th><th>Customer</th><th>Total</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for b in bookings %}
+                        <tr class="clickable" onclick="window.location='{% url 'booking_detail' b.pk %}'">
+                            <td><a href="{% url 'booking_detail' b.pk %}">{{ b.booking_id }}</a></td>
+                            <td>{{ b.customer.full_name }}</td>
+                            <td>Rs. {{ b.total_amount|floatformat:0 }}</td>
+                            <td><span class="badge badge-info">{{ b.get_status_display }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}<div class="empty-state"><div class="empty-icon">📋</div><h3>No Bookings</h3><p>No bookings on this plot.</p></div>{% endif %}
+            </div>
+        </div>
+
+        <!-- Price history -->
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>💱 Price History</h3><span class="badge badge-info">{{ price_history|length }}</span></div>
+            <div class="table-container">
+                {% if price_history %}
+                <table class="sortable">
+                    <thead><tr><th>Date</th><th>Old Price</th><th>New Price</th><th>Reason</th><th>Changed By</th></tr></thead>
+                    <tbody>
+                        {% for ph in price_history %}
+                        <tr>
+                            <td>{{ ph.changed_at|date:"d M Y H:i" }}</td>
+                            <td style="color:var(--text-secondary);">Rs. {{ ph.old_price|floatformat:0 }}</td>
+                            <td style="color:var(--accent-green); font-weight:600;">Rs. {{ ph.new_price|floatformat:0 }}</td>
+                            <td>{{ ph.change_reason|default:"—" }}</td>
+                            <td>{{ ph.changed_by.username }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}<div class="empty-state"><div class="empty-icon">💱</div><h3>No Price History</h3><p>No price changes recorded.</p></div>{% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

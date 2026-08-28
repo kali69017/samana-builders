@@ -43,6 +43,51 @@
             </form>
         </div>
 
+        <div class="card animate-fade-up stagger-2">
+            <div class="card-header">
+                <h3>🧾 Available Plan Templates</h3>
+                <span class="badge badge-info">{{ templates|length }} templates</span>
+            </div>
+            <div class="table-container">
+                {% if templates %}
+                <table class="sortable">
+                    <thead>
+                        <tr>
+                            <th>Template</th>
+                            <th>Project</th>
+                            <th>Installments</th>
+                            <th>Frequency</th>
+                            <th>Down Payment %</th>
+                            <th>Late Fee / Day</th>
+                            <th>Grace Days</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in templates %}
+                        <tr>
+                            <td><strong>{{ t.name }}</strong></td>
+                            <td>{{ t.project.name }}</td>
+                            <td>{{ t.total_installments }}</td>
+                            <td>{{ t.get_frequency_display }}</td>
+                            <td>{{ t.down_payment_percentage }}%</td>
+                            <td>Rs. {{ t.late_fee_per_day|floatformat:0 }}</td>
+                            <td>{{ t.grace_period_days }}</td>
+                            <td><span class="badge badge-{% if t.is_active %}success{% else %}danger{% endif %}">{% if t.is_active %}Active{% else %}Inactive{% endif %}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state">
+                    <div class="empty-icon">🧾</div>
+                    <h3>No Plan Templates</h3>
+                    <p>Plan templates define preset schedules. They are created with each project.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
         <div class="card animate-fade-up stagger-3">
             <div class="card-header">
                 <h3>All Plans</h3>

@@ -1,0 +1,6 @@
+[
+  ["navigate", {"url": "http://127.0.0.1:8000/"}],
+  ["wait", {"ms": 1500}],
+  ["eval", {"js": "() => { const r = {}; r.title = document.title; r.h1 = document.querySelector('h1')?.textContent?.trim(); r.loginLink = !!document.querySelector('a[href=\"/login/\"]'); r.heroImg = !!document.querySelector('main img'); r.navLinks = [...document.querySelectorAll('header a, nav a')].map(a => a.textContent.trim()).filter(Boolean).slice(0, 12); r.leadForm = !!document.querySelector('form[action*=\"lead\"]'); r.brokenImgs = [...document.images].filter(i => !i.complete || i.naturalWidth === 0).length; return r; }"}],
+  ["console", {}]
+]

@@ -311,4 +311,54 @@ document.addEventListener('DOMContentLoaded', function() {
             menu.classList.remove('open');
         }
     });
+
+    // ============================================================
+    // AUTO COLLAPSE: any table with more than 5 rows shows the
+    // first 5 + a "View More / View Less" toggle in its card header.
+    // Wires existing toggle buttons as well as creating new ones,
+    // so templates can pre-mark tables (class="pr-collapsible")
+    // and pre-place a button (id="*Toggle") without extra JS.
+    // ============================================================
+    document.querySelectorAll('table.sortable tbody').forEach(function(body) {
+        var rows = body.querySelectorAll('tr').length;
+        if (rows <= 5) return;
+        if (body.dataset.collapseWired) return; // already bound
+
+        var card = body.closest('.card');
+        var header = card ? card.querySelector('.card-header') : null;
+
+        // reuse an existing toggle button inside the card header if present
+        var btn = header ? header.querySelector('.table-collapse-toggle, [id$="Toggle"]') : null;
+        if (!btn) {
+            btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn btn-sm btn-ghost table-collapse-toggle';
+            btn.textContent = 'View More';
+            if (header) {
+                var actions = header.querySelector('.card-actions');
+                if (actions) {
+                    actions.appendChild(btn);
+                } else {
+                    var wrap = document.createElement('div');
+                    wrap.className = 'card-actions';
+                    wrap.appendChild(btn);
+                    header.appendChild(wrap);
+                }
+            } else if (card) {
+                var container = body.closest('.table-container') || body;
+                container.parentNode.insertBefore(btn, container);
+            }
+        }
+
+        // only collapse if not already marked
+        if (!body.classList.contains('pr-collapsible')) {
+            body.classList.add('pr-collapsible');
+        }
+
+        btn.addEventListener('click', function() {
+            var expanded = body.classList.toggle('expanded');
+            btn.textContent = expanded ? 'View Less' : 'View More';
+        });
+        body.dataset.collapseWired = '1';
+    });
 });

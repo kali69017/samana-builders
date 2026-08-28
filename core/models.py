@@ -179,20 +179,66 @@ class Agent(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.agent_id:
-            last = Agent.objects.order_by('-id').first()
-            num = int(last.agent_id.split('-')[1]) + 1 if last else 1
-            self.agent_id = f'AGT-{str(num).zfill(5)}'
+            from django.db import transaction
+            with transaction.atomic():
+                last = Agent.objects.select_for_update().order_by('-id').first()
+                num = int(last.agent_id.split('-')[1]) + 1 if last else 1
+                self.agent_id = f'AGT-{str(num).zfill(5)}'
         super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.agent_id} - {self.name}"
 
+    @property
+    def total_commission_earned(self):
+        """Gross commission across all of this agent's bookings."""
+        return sum((b.agent_commission for b in self.bookings.all()), 0)
+
+    @property
+    def commission_paid(self):
+        """Total commission money actually paid out to this agent."""
+        from django.db.models import Sum
+        return self.commission_payments.aggregate(total=Sum('amount'))['total'] or 0
+
+    @property
+    def commission_balance(self):
+        """Commission earned but not yet paid to the agent."""
+        return self.total_commission_earned - self.commission_paid
+
     class Meta:
         ordering = ['name']
 
 
+class AgentCommissionPayment(models.Model):
+    """A payment made to an agent against earned commission.
+
+    Tracks the money the company actually pays out versus what has been
+    earned. This lets finance see total earned, total paid, and the
+    remaining balance owed to each agent.
+    """
+    agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name='commission_payments')
+    amount = models.DecimalField(max_digits=15, decimal_places=2)
+    payment_date = models.DateField(default=None, null=True, blank=True)
+    method = models.CharField(max_length=30, blank=True, default='cash',
+                              help_text='Cash / Bank Transfer / Cheque, etc.')
+    reference = models.CharField(max_length=100, blank=True, help_text='Cheque no. / transaction id / notes')
+    paid_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='agent_commission_payments')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.agent.name} — Rs. {self.amount} ({self.payment_date})"
+
+    class Meta:
+        ordering = ['-payment_date', '-created_at']
+
+
 class CompanySettings(models.Model):
     """Singleton holding company-wide branding and finance settings."""
+
+    AI_LANGUAGE_CHOICES = [
+        ('english', 'English'),
+        ('roman_urdu', 'Roman Urdu'),
+    ]
 
     company_name = models.CharField(max_length=200, default='Samana Builders & Developers')
     tagline = models.CharField(max_length=300, blank=True, default='Real Estate Developers')
@@ -208,6 +254,10 @@ class CompanySettings(models.Model):
     facebook = models.URLField(blank=True)
     instagram = models.URLField(blank=True)
     twitter = models.URLField(blank=True)
+    ai_language = models.CharField(
+        max_length=20, choices=AI_LANGUAGE_CHOICES, default='english',
+        help_text='Global language for AI assistant replies (English or Roman Urdu).'
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):

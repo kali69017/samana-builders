@@ -1,0 +1,6 @@
+[
+  ["navigate", {"url": "http://127.0.0.1:8000/login/"}],
+  ["wait", {"ms": 1000}],
+  ["eval", {"js": "() => { const r = {}; r.title = document.title; r.hasUser = !!document.querySelector('#id_username, input[name=\"username\"]'); r.hasPass = !!document.querySelector('#id_password, input[name=\"password\"]'); r.hasSubmit = !!document.querySelector('button[type=\"submit\"]'); r.formAction = document.querySelector('form')?.getAttribute('action'); return r; }"}],
+  ["console", {}]
+]

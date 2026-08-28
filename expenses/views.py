@@ -111,6 +111,16 @@ def expense_edit_view(request, pk):
 
 @login_required
 @finance_or_above
+def expense_detail_view(request, pk):
+    expense = get_object_or_404(
+        Expense.objects.select_related('project', 'created_by'),
+        pk=pk,
+    )
+    return render(request, 'expense_detail.html', {'expense': expense})
+
+
+@login_required
+@finance_or_above
 def expense_delete_view(request, pk):
     expense = get_object_or_404(Expense, pk=pk)
     if request.method == 'POST':

@@ -29,6 +29,16 @@ class CustomerViewSet(viewsets.ModelViewSet):
     queryset = Customer.objects.all()
     serializer_class = CustomerSerializer
     permission_classes = [IsAdminOrSuperAdmin]
+
+    def destroy(self, request, *args, **kwargs):
+        """Block deletion of customers with financial history."""
+        customer = self.get_object()
+        if customer.bookings.exists() or customer.ledger_entries.exists():
+            return Response(
+                {'error': 'Cannot delete a customer with bookings or ledger history. Deactivate them instead.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return super().destroy(request, *args, **kwargs)
     
     def get_serializer_class(self):
         if self.action == 'create':

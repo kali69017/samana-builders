@@ -20,19 +20,13 @@
             <div class="table-container">
                 {% if departments %}
                 <table class="sortable">
-                    <thead><tr><th>Name</th><th>Employees</th><th>Status</th><th class="no-sort">Actions</th></tr></thead>
+                    <thead><tr><th>Name</th><th>Employees</th><th>Status</th></tr></thead>
                     <tbody>
                         {% for dept in departments %}
                         <tr>
                             <td><strong>{{ dept.name }}</strong>{% if dept.description %}<br><span style="font-size:12px;color:var(--text-2);">{{ dept.description }}</span>{% endif %}</td>
                             <td>{{ dept.employee_count }}</td>
                             <td><span class="badge badge-{% if dept.is_active %}success{% else %}secondary{% endif %}">{% if dept.is_active %}Active{% else %}Inactive{% endif %}</span></td>
-                            <td>
-                                <div class="table-actions">
-                                    <a href="{% url 'hr_department_edit' dept.pk %}" class="btn btn-secondary btn-sm">Edit</a>
-                                    <a href="{% url 'hr_department_delete' dept.pk %}" class="btn btn-danger btn-sm">Delete</a>
-                                </div>
-                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>

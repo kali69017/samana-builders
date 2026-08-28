@@ -31,3 +31,9 @@ class Expense(models.Model):
         indexes = [
             models.Index(fields=['project', 'expense_date']),
         ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(amount__gt=0),
+                name='expense_amount_positive',
+            ),
+        ]

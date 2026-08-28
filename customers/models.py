@@ -53,12 +53,14 @@ class Customer(models.Model):
     
     def save(self, *args, **kwargs):
         if not self.customer_id:
-            last_customer = Customer.objects.order_by('-id').first()
-            if last_customer:
-                last_num = int(last_customer.customer_id.split('-')[1])
-                self.customer_id = f'CUS-{str(last_num + 1).zfill(5)}'
-            else:
-                self.customer_id = 'CUS-00001'
+            from django.db import transaction
+            with transaction.atomic():
+                last_customer = Customer.objects.select_for_update().order_by('-id').first()
+                if last_customer:
+                    last_num = int(last_customer.customer_id.split('-')[1])
+                    self.customer_id = f'CUS-{str(last_num + 1).zfill(5)}'
+                else:
+                    self.customer_id = 'CUS-00001'
         super().save(*args, **kwargs)
     
     def __str__(self):

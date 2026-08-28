@@ -96,7 +96,7 @@ class SalaryPaymentAdmin(admin.ModelAdmin):
 
 @admin.register(Attendance)
 class AttendanceAdmin(admin.ModelAdmin):
-    list_display = ['employee', 'date', 'status', 'check_in', 'check_out']
+    list_display = ['employee', 'date', 'status']
     list_filter = ['status', 'date']
     search_fields = ['employee__first_name', 'employee__last_name']
 

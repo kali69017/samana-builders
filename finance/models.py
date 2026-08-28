@@ -61,6 +61,12 @@ class AccountTransaction(models.Model):
             models.Index(fields=['date']),
             models.Index(fields=['direction']),
         ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(amount__gt=0),
+                name='account_transaction_amount_positive',
+            ),
+        ]
 
 
 class Office(models.Model):
@@ -153,6 +159,12 @@ class OfficeExpense(models.Model):
     class Meta:
         ordering = ['-expense_date', '-created_at']
         indexes = [models.Index(fields=['office', 'expense_date'])]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(amount__gt=0),
+                name='office_expense_amount_positive',
+            ),
+        ]
 
 
 class ProjectBudget(models.Model):
@@ -175,6 +187,14 @@ class ProjectBudget(models.Model):
     @property
     def remaining_budget(self):
         return self.total_budget - self.total_actual
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(total_budget__gte=0),
+                name='project_budget_total_non_negative',
+            ),
+        ]
 
 
 class ProjectCost(models.Model):
@@ -225,6 +245,12 @@ class ProjectCost(models.Model):
     class Meta:
         ordering = ['-cost_date', '-created_at']
         indexes = [models.Index(fields=['project', 'cost_category'])]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(amount__gt=0),
+                name='project_cost_amount_positive',
+            ),
+        ]
 
 
 class ProjectInvestment(models.Model):
@@ -233,6 +259,14 @@ class ProjectInvestment(models.Model):
     total_investment = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     notes = models.TextField(blank=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(total_investment__gte=0),
+                name='project_investment_non_negative',
+            ),
+        ]
 
     def __str__(self):
         return f"Investment for {self.project.name}: {self.total_investment}"

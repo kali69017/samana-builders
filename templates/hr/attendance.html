@@ -31,14 +31,12 @@
             <div class="table-container">
                 {% if records %}
                 <table class="sortable">
-                    <thead><tr><th>Employee</th><th>Status</th><th>Check In</th><th>Check Out</th><th>Notes</th></tr></thead>
+                    <thead><tr><th>Employee</th><th>Status</th><th>Notes</th></tr></thead>
                     <tbody>
                         {% for rec in records %}
                         <tr>
                             <td><strong>{{ rec.employee.full_name }}</strong><br><span style="font-size:12px;color:var(--text-2);">{{ rec.employee.employee_id }}</span></td>
                             <td><span class="badge badge-{% if rec.status == 'present' %}success{% elif rec.status == 'absent' %}danger{% elif rec.status == 'leave' %}info{% else %}warning{% endif %}">{{ rec.get_status_display }}</span></td>
-                            <td>{{ rec.check_in|default:"-" }}</td>
-                            <td>{{ rec.check_out|default:"-" }}</td>
                             <td>{{ rec.notes|default:"-" }}</td>
                         </tr>
                         {% endfor %}

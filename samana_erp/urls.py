@@ -37,7 +37,8 @@ urlpatterns = [
     path('properties/plot/create/', core_views.plot_create_view, name='plot_create'),
     path('properties/reserve/', core_views.reservation_create_view, name='reservation_create'),
     path('properties/plot/<int:pk>/edit/', core_views.plot_edit_view, name='plot_edit'),
-    path('properties/plot/<int:pk>/delete/', core_views.plot_delete_view, name='plot_delete'),
+        path('properties/plot/<int:pk>/', core_views.plot_detail_view, name='plot_detail'),
+        path('properties/plot/<int:pk>/delete/', core_views.plot_delete_view, name='plot_delete'),
     
     # Bookings
     path('bookings/', core_views.bookings_view, name='bookings'),
@@ -97,7 +98,8 @@ urlpatterns = [
     path('agents/create/', views_crm.agent_create_view, name='agent_create'),
     path('agents/<int:pk>/', views_crm.agent_detail_view, name='agent_detail'),
     path('agents/<int:pk>/edit/', views_crm.agent_edit_view, name='agent_edit'),
-    path('agents/<int:pk>/delete/', views_crm.agent_delete_view, name='agent_delete'),
+        path('agents/<int:pk>/commission-payment/', views_crm.agent_commission_payment_view, name='agent_commission_payment'),
+        path('agents/<int:pk>/delete/', views_crm.agent_delete_view, name='agent_delete'),
 
     # Installment plans
     path('installment-plans/', views_installments.installment_plans_view, name='installment_plans'),
@@ -123,7 +125,8 @@ urlpatterns = [
     path('projects/milestones/', views_settings.milestones_view, name='milestones'),
     path('projects/milestones/create/', views_settings.milestone_create_view, name='milestone_create'),
     path('projects/milestones/<int:pk>/edit/', views_settings.milestone_edit_view, name='milestone_edit'),
-    path('projects/milestones/<int:pk>/delete/', views_settings.milestone_delete_view, name='milestone_delete'),
+        path('projects/milestones/<int:pk>/', views_settings.milestone_detail_view, name='milestone_detail'),
+        path('projects/milestones/<int:pk>/delete/', views_settings.milestone_delete_view, name='milestone_delete'),
 
     # Backup
     path('backup/', core_views.backup_view, name='backup'),
@@ -137,6 +140,11 @@ urlpatterns = [
 
     # Customer Portal (Django template)
     path('portal/', core_views.portal_view, name='portal'),
+
+    # AI Assistant pages
+    path('ai/', core_views.ai_assistant_page_view, name='ai_assistant_page'),
+    path('ai/insights/', core_views.ai_insights_page_view, name='ai_insights_page'),
+    path('ai/hr/', core_views.ai_hr_page_view, name='ai_hr_page'),
 
     # Corporate website (Django templates). Served last so it only matches the bare root path.
     path('', core_views.corporate_home_view, name='corporate_home'),

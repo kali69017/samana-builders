@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ milestone.title }} - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    <div class="top-bar">
+        <button class="hamburger" onclick="toggleSidebar()">&#9776;</button>
+        <span class="top-bar-title">Milestone</span>
+        <div class="top-bar-actions"></div>
+    </div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>{{ milestone.title }}</h1>
+            <div class="page-actions">
+                <a href="{% url 'milestone_edit' milestone.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                <a href="{% url 'milestones' %}" class="btn btn-ghost btn-sm">← All Milestones</a>
+            </div>
+        </div>
+
+        <div class="detail-grid" style="margin-bottom:24px;">
+            <div class="card">
+                <div class="detail-item"><div class="detail-label">Project</div><div class="detail-value">{{ milestone.project.name }}</div></div>
+                <div class="detail-item"><div class="detail-label">Status</div><div class="detail-value">
+                    <span class="badge badge-{% if milestone.status == 'completed' %}success{% elif milestone.status == 'in_progress' %}info{% elif milestone.status == 'delayed' %}danger{% else %}secondary{% endif %}">{{ milestone.get_status_display }}</span>
+                </div></div>
+            </div>
+            <div class="card">
+                <div class="detail-item"><div class="detail-label">Target Date</div><div class="detail-value">{{ milestone.target_date|date:"d M Y"|default:"—" }}</div></div>
+                <div class="detail-item"><div class="detail-label">Completed Date</div><div class="detail-value">{{ milestone.completed_date|date:"d M Y"|default:"—" }}</div></div>
+            </div>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>Description</h3></div>
+            <div class="card-body">
+                <p style="color:var(--text-secondary); margin:0; white-space:pre-wrap;">{{ milestone.description|default:"No description provided." }}</p>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

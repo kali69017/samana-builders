@@ -80,10 +80,13 @@
             <div class="card-header">
                 <h3>All Bookings</h3>
                 <span class="badge badge-info">{{ bookings|length|default:0 }} bookings</span>
+                <div class="card-actions">
+                    <button type="button" class="btn btn-sm btn-ghost" id="bookingsToggle">View More</button>
+                </div>
             </div>
             <div class="table-container">
                 {% if bookings %}
-                <table class="sortable">
+                <table class="sortable" id="bookingsTable">
                     <thead>
                         <tr>
                             <th>Booking ID</th>
@@ -97,7 +100,7 @@
                             <th class="no-sort">Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody class="pr-collapsible">
                         {% for booking in bookings %}
                         <tr>
                             <td><strong><a href="{% url 'booking_detail' booking.pk %}" style="color:var(--primary);">{{ booking.booking_id }}</a></strong></td>
@@ -115,10 +118,6 @@
                             <td>
                                 <div class="table-actions">
                                     <a href="{% url 'booking_detail' booking.pk %}" class="btn btn-primary btn-sm">View</a>
-                                    <a href="{% url 'booking_edit' booking.pk %}" class="btn btn-secondary btn-sm">Edit</a>
-                                    {% if can_delete %}
-                                    <a href="{% url 'booking_delete' booking.pk %}" class="btn btn-danger btn-sm">Del</a>
-                                    {% endif %}
                                 </div>
                             </td>
                         </tr>

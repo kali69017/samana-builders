@@ -51,6 +51,11 @@ def _apply_payment_effects(payment):
         booking.status = 'completed'
     booking.save()
 
+    # Recalculate the installment plan so unpaid installments reflect
+    # the new remaining balance.
+    if hasattr(booking, 'installment_plan') and booking.installment_plan:
+        booking.installment_plan.recalculate()
+
 
 @login_required
 @admin_or_above
@@ -194,10 +199,11 @@ def refund_approve_view(request, pk):
         if action == 'reject':
             refund.status = 'rejected'
             refund.notes = request.POST.get('notes', refund.notes)
+            refund.save(update_fields=['status', 'notes'])
         else:
-            refund.status = 'approved'
-            refund.approved_by = request.user
-        refund.save()
+            # Approval applies the financial effect: reduce the booking's
+            # advance_paid so the balance reflects the money returned.
+            refund.apply_approval(user=request.user)
         _log(request, 'update', 'Refund', refund.pk,
              f'{refund.get_status_display()} refund of {refund.amount} for booking {refund.booking.booking_id}')
         messages.success(request, f'Refund {refund.get_status_display()}.')

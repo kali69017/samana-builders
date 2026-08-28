@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone
 from bookings.models import Booking, Installment
 
 
@@ -85,6 +86,12 @@ class Payment(models.Model):
             models.Index(fields=['status']),
             models.Index(fields=['payment_date']),
         ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(amount__gt=0),
+                name='payment_amount_positive',
+            ),
+        ]
 
 
 class PaymentAllocation(models.Model):
@@ -122,6 +129,26 @@ class Refund(models.Model):
     processed_date = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def apply_approval(self, user=None):
+        """Apply the financial effect of an approved refund.
+
+        Money returned to the customer reduces the booking's advance_paid
+        (and thus restores the remaining balance). This keeps the booking
+        balance, payment ledger, and receivables consistent with the money
+        actually held. Safe to call on approval.
+        """
+        from decimal import Decimal
+        booking = self.booking
+        amount = Decimal(self.amount or 0)
+        if booking and amount > 0:
+            # Reduce money held on the booking by the refunded amount.
+            booking.advance_paid = max(booking.advance_paid - amount, Decimal('0'))
+            booking.save(update_fields=['advance_paid', 'updated_at'])
+        self.status = 'approved'
+        self.approved_by = user
+        self.processed_date = timezone.now()
+        self.save(update_fields=['status', 'approved_by', 'processed_date', 'notes'])
 
 
 class Receipt(models.Model):

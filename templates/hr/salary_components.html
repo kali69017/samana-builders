@@ -20,19 +20,13 @@
             <div class="table-container">
                 {% if components %}
                 <table class="sortable">
-                    <thead><tr><th>Name</th><th>Type</th><th>Status</th><th class="no-sort">Actions</th></tr></thead>
+                    <thead><tr><th>Name</th><th>Type</th><th>Status</th></tr></thead>
                     <tbody>
                         {% for comp in components %}
                         <tr>
                             <td><strong>{{ comp.name }}</strong></td>
                             <td><span class="badge badge-{% if comp.component_type == 'earning' %}success{% else %}warning{% endif %}">{{ comp.get_component_type_display }}</span></td>
                             <td><span class="badge badge-{% if comp.is_active %}success{% else %}secondary{% endif %}">{% if comp.is_active %}Active{% else %}Inactive{% endif %}</span></td>
-                            <td>
-                                <div class="table-actions">
-                                    <a href="{% url 'hr_salary_component_edit' comp.pk %}" class="btn btn-secondary btn-sm">Edit</a>
-                                    <a href="{% url 'hr_salary_component_delete' comp.pk %}" class="btn btn-danger btn-sm">Delete</a>
-                                </div>
-                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>

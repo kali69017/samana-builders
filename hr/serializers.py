@@ -50,6 +50,16 @@ class EmployeeSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     salaries = EmployeeSalarySerializer(many=True, read_only=True)
 
+    def validate_cnic(self, value):
+        value = (value or '').strip()
+        if value:
+            qs = Employee.objects.filter(cnic=value)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError('An employee with this CNIC already exists.')
+        return value
+
     class Meta:
         model = Employee
         fields = ['id', 'employee_id', 'first_name', 'last_name', 'full_name',
@@ -111,7 +121,7 @@ class AttendanceSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Attendance
-        fields = ['id', 'employee', 'employee_name', 'date', 'check_in', 'check_out',
+        fields = ['id', 'employee', 'employee_name', 'date',
                   'status', 'status_display', 'notes']
         read_only_fields = ['id']
 
@@ -120,6 +130,18 @@ class LeaveSerializer(serializers.ModelSerializer):
     employee_name = serializers.CharField(source='employee.full_name', read_only=True)
     leave_type_display = serializers.CharField(source='get_leave_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    def validate(self, attrs):
+        start = attrs.get('start_date')
+        end = attrs.get('end_date')
+        days = attrs.get('days')
+        if start and end and end < start:
+            raise serializers.ValidationError(
+                {'end_date': 'End date cannot be before the start date.'}
+            )
+        if days is not None and days <= 0:
+            raise serializers.ValidationError({'days': 'Leave days must be greater than 0.'})
+        return attrs
 
     class Meta:
         model = Leave

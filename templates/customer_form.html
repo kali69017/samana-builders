@@ -349,6 +349,24 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    // CNIC: allow ONLY digits — strip dashes, letters, spaces as typed/pasted.
+    var cnicInput = document.getElementById('id_cnic');
+    if (cnicInput) {
+        cnicInput.addEventListener('input', function() {
+            this.value = this.value.replace(/\D/g, '').slice(0, 13);
+        });
+        cnicInput.addEventListener('keydown', function(e) {
+            if (e.key === 'e' || e.key === 'E' || e.key === '+' || e.key === '-') {
+                e.preventDefault();
+            }
+        });
+        cnicInput.addEventListener('paste', function(e) {
+            e.preventDefault();
+            var text = (e.clipboardData || window.clipboardData).getData('text');
+            this.value = text.replace(/\D/g, '').slice(0, 13);
+        });
+    }
 });
 </script>
 <style>

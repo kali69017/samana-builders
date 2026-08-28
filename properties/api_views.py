@@ -147,24 +147,19 @@ class PriceHistoryViewSet(viewsets.ReadOnlyModelViewSet):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def plots_list_api(request):
-    """Public endpoint for homepage project locations."""
+    """Public endpoint for homepage project locations.
+
+    Only AVAILABLE plots are exposed — booked/sold inventory is a data leak.
+    """
     from .models import Plot
     from .serializers import PlotSerializer
 
-    plots = Plot.objects.select_related('project', 'phase')[:20]
+    plots = Plot.objects.select_related('project', 'phase').filter(
+        status='available'
+    )[:20]
     serializer = PlotSerializer(plots, many=True)
     return Response(serializer.data)
 
-
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def projects_locations_api(request):
-    """Public endpoint listing projects that have map coordinates."""
-    from .serializers import ProjectSerializer
-
-    projects = Project.objects.exclude(latitude__isnull=True).exclude(longitude__isnull=True)
-    serializer = ProjectSerializer(projects, many=True)
-    return Response(serializer.data)
 
 class ProjectMilestoneViewSet(viewsets.ModelViewSet):
     queryset = ProjectMilestone.objects.select_related('project').all()

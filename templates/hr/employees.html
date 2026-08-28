@@ -86,9 +86,6 @@
                             <td>
                                 <div class="table-actions">
                                     <a href="{% url 'hr_employee_detail' emp.pk %}" class="btn btn-primary btn-sm">View</a>
-                                    {% if can_manage_hr %}
-                                    <a href="{% url 'hr_employee_edit' emp.pk %}" class="btn btn-secondary btn-sm">Edit</a>
-                                    {% endif %}
                                 </div>
                             </td>
                         </tr>

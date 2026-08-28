@@ -15,6 +15,21 @@
             </div>
         </div>
 
+        <!-- User guide -->
+        <div class="card animate-fade-up" style="margin-bottom:20px;">
+            <div class="card-body" style="padding:16px 20px;">
+                <div style="display:flex; gap:12px; align-items:flex-start;">
+                    <span style="font-size:20px;">ℹ️</span>
+                    <div style="font-size:13px; color:var(--text-secondary); line-height:1.6;">
+                        <strong style="color:var(--text-primary);">What is a Project Cost?</strong>
+                        These are <strong>construction / development costs</strong> spent to build a project — materials, labor, contractors, transportation and other direct build costs. Each is linked to a project and can be set to <em>draft → approved → paid</em>.<br>
+                        <strong style="color:var(--text-primary);">Only "paid" costs</strong> count toward the project budget and the Project Investment &amp; Finance view.<br>
+                        <span style="color:var(--text-3);">Different from <strong>Expenses</strong> (general company/project overhead like marketing or admin) and <strong>Office Expenses</strong> (office rent, utilities, stationery).</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="stat-card animate-fade-up" style="margin-bottom:20px;">
             <div class="stat-icon amber">🏗️</div>
             <div class="stat-meta"><div class="stat-value">Rs. {{ total_amount|floatformat:0 }}</div><div class="stat-label">Total (filtered)</div></div>
@@ -48,7 +63,7 @@
                 {% if costs %}
                 <table class="sortable">
                     <thead>
-                        <tr><th>Date</th><th>Project</th><th>Category</th><th>Vendor</th><th>Amount</th><th>Status</th><th class="no-sort">Actions</th></tr>
+                        <tr><th>Date</th><th>Project</th><th>Category</th><th>Vendor</th><th>Amount</th><th>Status</th></tr>
                     </thead>
                     <tbody>
                         {% for cost in costs %}
@@ -59,14 +74,6 @@
                             <td>{{ cost.vendor|default:"-" }}</td>
                             <td style="font-weight:600;">Rs. {{ cost.amount|floatformat:0 }}</td>
                             <td><span class="badge badge-{% if cost.status == 'paid' %}success{% else %}secondary{% endif %}">{{ cost.get_status_display }}</span></td>
-                            <td>
-                                <div class="table-actions">
-                                    <a href="{% url 'finance_project_cost_edit' cost.pk %}" class="btn btn-secondary btn-sm">Edit</a>
-                                    {% if can_delete %}
-                                    <a href="{% url 'finance_project_cost_delete' cost.pk %}" class="btn btn-danger btn-sm">Delete</a>
-                                    {% endif %}
-                                </div>
-                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>

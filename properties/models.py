@@ -16,9 +16,6 @@ class Project(models.Model):
     location = models.CharField(max_length=200)
     total_plots = models.PositiveIntegerField(default=0)
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='booking_open')
-    latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, help_text="Google Maps latitude coordinate")
-    longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, help_text="Google Maps longitude coordinate")
-    google_maps_link = models.URLField(max_length=500, blank=True, help_text="Google Maps share link")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
