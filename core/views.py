@@ -90,6 +90,87 @@ def logout_view(request):
     return redirect('login')
 
 
+def password_reset_request_view(request):
+    """Step 1: accept an email, generate a 6-digit code, email it, and store
+    the pending user id in the session for step 2 verification."""
+    if request.method == 'POST':
+        email = request.POST.get('email', '').strip().lower()
+        user = User.objects.filter(email__iexact=email).first()
+        if user and user.is_active:
+            from .models import PasswordResetCode
+            PasswordResetCode.objects.filter(user=user, used=False).update(used=True, used_at=timezone.now())
+
+            code = '{:06d}'.format(__import__('random').SystemRandom().randrange(0, 1000000))
+            expiry = timezone.now() + timedelta(minutes=15)
+            PasswordResetCode.objects.create(user=user, code=code, expires_at=expiry)
+
+            from notifications.services import EmailService
+            EmailService.send(
+                to_email=user.email,
+                subject='Your Samana ERP Password Reset Code',
+                message=(
+                    'Hi ' + (user.get_full_name() or user.username) + ',\n\n'
+                    'Your password reset verification code is:\n\n'
+                    '      ' + code + '\n\n'
+                    'This code is valid for 15 minutes. If you did not request a '
+                    'password reset, you can safely ignore this email.\n\n'
+                    'Regards,\nSamana Builders & Developers'
+                ),
+            )
+
+            request.session['reset_user_id'] = user.pk
+            request.session['reset_email'] = user.email
+        messages.success(request, 'If an account exists for that email, a password reset code has been sent. Please check your inbox.')
+        return redirect('password_reset_verify')
+
+    return render(request, 'password_reset_request.html')
+
+
+def password_reset_verify_view(request):
+    """Step 2: verify the emailed code and set a new password."""
+    reset_user_id = request.session.get('reset_user_id')
+    user = User.objects.filter(pk=reset_user_id).first() if reset_user_id else None
+
+    if request.method == 'POST':
+        if user is None:
+            messages.error(request, 'Your reset session has expired. Please start again.')
+            return redirect('password_reset_request')
+
+        code = request.POST.get('code', '').strip()
+        new_password = request.POST.get('new_password', '')
+        confirm = request.POST.get('confirm_password', '')
+
+        if new_password != confirm:
+            messages.error(request, 'Passwords do not match.')
+        elif len(new_password) < 6:
+            messages.error(request, 'Password must be at least 6 characters.')
+        else:
+            from .models import PasswordResetCode
+            reset = PasswordResetCode.objects.filter(
+                user=user, code=code, used=False
+            ).order_by('-created_at').first()
+            if reset and not reset.is_expired:
+                reset.used = True
+                reset.used_at = timezone.now()
+                reset.save()
+                user.set_password(new_password)
+                user.save()
+                AuditLog.objects.create(
+                    user=user, action='update', model_name='User',
+                    description=f'Password reset for {user.username} via email code',
+                    ip_address=request.META.get('REMOTE_ADDR'),
+                )
+                request.session.pop('reset_user_id', None)
+                request.session.pop('reset_email', None)
+                messages.success(request, 'Your password has been reset successfully. Please log in.')
+                return redirect('login')
+            else:
+                messages.error(request, 'Invalid or expired verification code.')
+
+    context = {'user': user}
+    return render(request, 'password_reset_verify.html', context)
+
+
 @login_required
 def dashboard_view(request):
     # Employees use their own self-service Leave portal — never show them

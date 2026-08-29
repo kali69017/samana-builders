@@ -290,7 +290,7 @@ class AuditLog(models.Model):
         ('transfer', 'Transfer'),
         ('cancel', 'Cancel'),
     ]
-    
+
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     action = models.CharField(max_length=20, choices=ACTION_CHOICES)
     model_name = models.CharField(max_length=100)
@@ -298,13 +298,36 @@ class AuditLog(models.Model):
     description = models.TextField(blank=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
-    
+
     def __str__(self):
         return f"{self.user} - {self.action} - {self.model_name}"
-    
+
     class Meta:
         ordering = ['-timestamp']
         indexes = [
             models.Index(fields=['model_name', 'object_id']),
             models.Index(fields=['timestamp']),
         ]
+
+
+class PasswordResetCode(models.Model):
+    """One-time 6-digit code emailed to a user to reset their password."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='password_reset_codes')
+    code = models.CharField(max_length=6)
+    used = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Reset code for {self.user.username} ({'used' if self.used else 'active'})"
+
+    @property
+    def is_expired(self):
+        from django.utils import timezone
+        return timezone.now() > self.expires_at
+
+    class Meta:
+        ordering = ['-created_at']
+

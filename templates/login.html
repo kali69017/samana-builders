@@ -77,9 +77,9 @@
                 </button>
 
                 <div style="text-align:center;">
-                    <button type="button" class="btn btn-ghost btn-block" onclick="alert('Please contact your administrator to reset your password.')" style="font-size:13px;">
-                        🔑 Forgot Password?
-                    </button>
+                    <a href="{% url 'password_reset_request' %}" style="display:block; text-align:center; font-size:13px; padding:6px 0;">
+                                        🔑 Forgot Password?
+                                    </a>
                 </div>
             </form>
         </div>

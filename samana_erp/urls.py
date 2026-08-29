@@ -13,7 +13,9 @@ urlpatterns = [
     
     # Authentication
     path('login/', core_views.login_view, name='login'),
-    path('logout/', core_views.logout_view, name='logout'),
+        path('logout/', core_views.logout_view, name='logout'),
+        path('password-reset/', core_views.password_reset_request_view, name='password_reset_request'),
+        path('password-reset/verify/', core_views.password_reset_verify_view, name='password_reset_verify'),
     
     # Dashboard
     path('dashboard/', core_views.dashboard_view, name='dashboard'),
