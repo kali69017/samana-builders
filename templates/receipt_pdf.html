@@ -29,19 +29,23 @@
         .signature-line { border-top: 1px solid #1e293b; margin-bottom: 5px; margin-top: 40px; }
         .signature-label { font-size: 10px; font-weight: 600; }
         .notice { text-align: center; font-size: 9px; color: #94a3b8; margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+        .footer-label { font-weight: 700; color: #1e40af; }
     </style>
 </head>
 <body>
     <div class="header">
-        <div>
-            <div class="company-name">Samana Builders & Developers</div>
-            <div class="company-tagline">Excellence in Real Estate</div>
+            <div style="display:flex; align-items:center; gap:12px;">
+                <img src="images/samana-logo.png" style="height:44px;" alt="Samana Builders logo">
+                <div>
+                    <div class="company-name">Samana Builders & Developers</div>
+                    <div class="company-tagline">Excellence in Real Estate</div>
+                </div>
+            </div>
+            <div>
+                <div class="receipt-title">OFFICIAL RECEIPT</div>
+                <div class="receipt-number">{{ receipt.receipt_number }}</div>
+            </div>
         </div>
-        <div>
-            <div class="receipt-title">OFFICIAL RECEIPT</div>
-            <div class="receipt-number">{{ receipt.receipt_number }}</div>
-        </div>
-    </div>
 
     <table class="meta-table">
         <tr>
@@ -85,8 +89,8 @@
     </div>
 
     <div class="notice">
-        Office No. 207, 2nd Floor, Shayan Iconic Tower | Karachi, Pakistan<br>
-        info@samanabuilders.com
-    </div>
+            <span class="footer-label">Address:</span> Office No. 207, 2nd Floor, Shayan Iconic Tower, Plot No. 5-A, Delhi Mercantile Cooperative Society, Karachi, Pakistan<br>
+            <span class="footer-label">Email:</span> info@samanabuilders.com &nbsp;&nbsp; <span class="footer-label">Contact No:</span> 03206229330
+        </div>
 </body>
 </html>

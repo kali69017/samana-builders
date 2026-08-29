@@ -31,6 +31,7 @@ urlpatterns = [
     path('employees/<int:pk>/delete/', views.employee_delete_view, name='hr_employee_delete'),
     path('employees/<int:pk>/salary/add/', views.employee_salary_add_view, name='hr_employee_salary_add'),
     path('salary/<int:pk>/delete/', views.employee_salary_delete_view, name='hr_employee_salary_delete'),
+    path('employee-profile/', views.employee_profile_create_view, name='hr_employee_profile_create'),
 
     # Payroll runs
     path('payroll/', views.payroll_runs_view, name='hr_payroll_runs'),
@@ -54,4 +55,8 @@ urlpatterns = [
     path('leaves/', views.leaves_view, name='hr_leaves'),
     path('leaves/create/', views.leave_create_view, name='hr_leave_create'),
     path('leaves/<int:pk>/approve/', views.leave_approve_view, name='hr_leave_approve'),
+
+    # Employee self-service
+    path('my-leave/', views.my_leave_view, name='hr_my_leave'),
+    path('my-leave/apply/', views.my_leave_apply_view, name='hr_leave_apply'),
 ]

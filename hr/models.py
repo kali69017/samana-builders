@@ -9,6 +9,15 @@ from django.db import models
 from django.contrib.auth.models import User
 
 
+# Annual per-type leave entitlements in days. HR can adjust these numbers;
+# an employee's balance = allowance - approved leave days taken.
+LEAVE_POLICY_ALLOWANCES = {
+    'annual': 18,
+    'sick': 10,
+    'casual': 6,
+}
+
+
 class Department(models.Model):
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)

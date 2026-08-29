@@ -21,13 +21,15 @@
         .installment-table th { background: #f8fafc; padding: 8px; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; text-align: left; border-bottom: 2px solid #e2e8f0; }
         .installment-table td { padding: 8px; font-size: 11px; border-bottom: 1px solid #f1f5f9; }
         .notice { text-align: center; font-size: 9px; color: #94a3b8; margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+        .footer-label { font-weight: 700; color: #1e40af; }
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="company-name">Samana Builders & Developers</div>
-        <div class="invoice-title">BANK INVOICE</div>
-    </div>
+            <img src="images/samana-logo.png" style="height:48px; margin-bottom:6px;" alt="Samana Builders logo">
+            <div class="company-name">Samana Builders &amp; Developers</div>
+            <div class="invoice-title">BANK INVOICE</div>
+        </div>
 
     <table class="meta-table">
         <tr><td class="meta-label">Booking Reference</td><td class="meta-value">{{ booking.booking_id }}</td><td class="meta-label">Invoice Date</td><td class="meta-value">{% now "d F Y" %}</td></tr>
@@ -62,8 +64,9 @@
     {% endif %}
 
     <div class="notice">
-        This is a system-generated invoice from Samana Builders & Developers.<br>
-        Office No. 207, 2nd Floor, Shayan Iconic Tower | Karachi, Pakistan | info@samanabuilders.com
-    </div>
+            This is a system-generated invoice from Samana Builders &amp; Developers.<br>
+            <span class="footer-label">Address:</span> Office No. 207, 2nd Floor, Shayan Iconic Tower, Plot No. 5-A, Delhi Mercantile Cooperative Society, Karachi, Pakistan<br>
+            <span class="footer-label">Email:</span> info@samanabuilders.com &nbsp;&nbsp; <span class="footer-label">Contact No:</span> 03206229330
+        </div>
 </body>
 </html>

@@ -1,0 +1,118 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}My Leave - Samana Builders ERP{% endblock %}
+{% block page_title %}My Leave{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>My Leave</h1>
+            <div class="page-actions">
+                <a href="{% url 'hr_leave_apply' %}" class="btn btn-primary">+ Apply Leave</a>
+                <span class="badge badge-info" style="font-size:13px; padding:8px 14px;">
+                    {{ employee.employee_id }} · {{ employee.full_name }}
+                </span>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card animate-fade-up stagger-1">
+                <div class="stat-icon blue">🌴</div>
+                <div class="stat-value" data-target="{{ annual_remaining }}">{{ annual_remaining }}</div>
+                <div class="stat-label">Annual Leave Remaining</div>
+            </div>
+            <div class="stat-card animate-fade-up stagger-2">
+                <div class="stat-icon green">✅</div>
+                <div class="stat-value" data-target="{{ approved_count }}">{{ approved_count }}</div>
+                <div class="stat-label">Approved Leaves</div>
+            </div>
+            <div class="stat-card animate-fade-up stagger-3">
+                <div class="stat-icon amber">⏳</div>
+                <div class="stat-value" data-target="{{ pending_count }}">{{ pending_count }}</div>
+                <div class="stat-label">Pending Requests</div>
+            </div>
+            <div class="stat-card animate-fade-up stagger-4">
+                <div class="stat-icon red">❌</div>
+                <div class="stat-value" data-target="{{ rejected_count }}">{{ rejected_count }}</div>
+                <div class="stat-label">Rejected Requests</div>
+            </div>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header">
+                <h3>Leave Balance</h3>
+                <span class="badge badge-secondary">{{ total_requests }} total request{{ total_requests|pluralize }}</span>
+            </div>
+            <div class="table-container">
+                <table class="sortable">
+                    <thead><tr><th>Leave Type</th><th>Annual Allowance</th><th>Used (Days)</th><th>Remaining</th></tr></thead>
+                    <tbody>
+                        {% for row in balance_rows %}
+                        <tr>
+                            <td><strong>{{ row.label }}</strong></td>
+                            <td>{{ row.allowance }}</td>
+                            <td>{{ row.used }}</td>
+                            <td style="min-width:200px;">
+                                <div class="progress-label"><span>{{ row.remaining }} day{{ row.remaining|pluralize }} left</span></div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill {% if row.allowance and row.remaining <= row.allowance|divisibleby:4 %}amber{% elif row.allowance and row.remaining == 0 %}red{% else %}green{% endif %}" style="width:{% widthratio row.used row.allowance 100 %}%"></div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" style="text-align:center; color:var(--text-2);">No leave policy configured yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header">
+                <h3>My Leave Requests</h3>
+                <form method="get">
+                    <select name="status" class="form-control" onchange="this.form.submit()" style="width:auto;">
+                        <option value="">All Statuses</option>
+                        <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+                        <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>Approved</option>
+                        <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>Rejected</option>
+                    </select>
+                </form>
+            </div>
+            <div class="table-container">
+                {% if leaves %}
+                <table class="sortable">
+                    <thead><tr><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Applied On</th><th>Status</th><th>Reason</th></tr></thead>
+                    <tbody>
+                        {% for leave in leaves %}
+                        <tr>
+                            <td><strong>{{ leave.get_leave_type_display }}</strong></td>
+                            <td>{{ leave.start_date|date:"d M Y" }}</td>
+                            <td>{{ leave.end_date|date:"d M Y" }}</td>
+                            <td>{{ leave.days }}</td>
+                            <td>{{ leave.applied_on|date:"d M Y, H:i" }}</td>
+                            <td>
+                                <span class="badge badge-{% if leave.status == 'approved' %}success{% elif leave.status == 'rejected' %}danger{% else %}warning{% endif %}">
+                                    {{ leave.get_status_display }}
+                                </span>
+                                {% if leave.status != 'pending' and leave.approved_by %}
+                                <div style="font-size:11px; color:var(--text-2); margin-top:4px;">by {{ leave.approved_by.get_full_name|default:leave.approved_by.username }}</div>
+                                {% endif %}
+                            </td>
+                            <td>{{ leave.reason|default:"—" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state"><div class="empty-icon">🌴</div><h3>No Leave Requests</h3><p>{% if status_filter %}No requests match this filter.{% else %}You have not applied for any leave yet.{% endif %}</p></div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

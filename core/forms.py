@@ -282,3 +282,6 @@ class CompanySettingsForm(forms.ModelForm):
             'twitter': forms.URLInput(attrs={'class': 'form-control', 'placeholder': ' '}),
             'ai_language': forms.Select(attrs={'class': 'form-control'}),
         }
+        labels = {
+            'ai_language': 'AI Language',
+        }

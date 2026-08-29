@@ -12,11 +12,12 @@ from core.permissions import hr_required, payroll_access
 from .models import (
     Department, Designation, SalaryComponent, Employee, EmployeeDocument,
     EmployeeSalary, PayrollRun, SalarySlip, SalarySlipItem, SalaryPayment,
-    Attendance, Leave,
+    Attendance, Leave, LEAVE_POLICY_ALLOWANCES,
 )
 from .forms import (
     DepartmentForm, DesignationForm, SalaryComponentForm, EmployeeForm,
     EmployeeSalaryForm, PayrollRunForm, AttendanceForm, LeaveForm,
+    EmployeeProfileForm,
 )
 
 
@@ -598,6 +599,112 @@ def leave_approve_view(request, pk):
         _log(request, 'update', 'Leave', leave.pk, f'{leave.get_status_display()} leave for {leave.employee.full_name}')
         messages.success(request, f'Leave {leave.get_status_display()}.')
     return redirect('hr_leaves')
+
+
+@hr_required
+def employee_profile_create_view(request):
+    """Create an ERP login (username/password) linked to an existing Employee."""
+    if request.method == 'POST':
+        form = EmployeeProfileForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            employee = form.cleaned_data['employee']
+            _log(request, 'create', 'EmployeeProfile', employee.employee_id,
+                 f'Created employee login for {employee.full_name} ({user.username})')
+            messages.success(request,
+                             f'Employee login created for {employee.full_name} (username: {user.username}).')
+            return redirect('hr_employees')
+    else:
+        form = EmployeeProfileForm()
+
+    return render(request, 'hr/employee_profile_form.html', {
+        'form': form,
+        'title': 'Create Employee Profile',
+    })
+
+
+@login_required
+def my_leave_view(request):
+    """Employee-facing Leave portal: their balance and own requests only."""
+    employee = getattr(request.user, 'employee', None)
+    if employee is None:
+        messages.error(request, 'You do not have an employee profile.')
+        return redirect('dashboard')
+
+    status_filter = request.GET.get('status', '')
+    leaves_qs = Leave.objects.filter(employee=employee).select_related('approved_by')
+    leaves = leaves_qs.all()
+    if status_filter:
+        leaves = leaves.filter(status=status_filter)
+
+    # Balance per leave type: annual allowance minus approved days taken.
+    used_by_type = {
+        row['leave_type']: row['total']
+        for row in leaves_qs.filter(status='approved')
+        .values('leave_type').annotate(total=Sum('days'))
+    }
+    balance_rows = []
+    for value, label in Leave.LEAVE_TYPE_CHOICES:
+        allowance = LEAVE_POLICY_ALLOWANCES.get(value, 0)
+        used = used_by_type.get(value, 0)
+        balance_rows.append({
+            'value': value,
+            'label': label,
+            'allowance': allowance,
+            'used': used,
+            'remaining': max(allowance - used, 0),
+        })
+
+    context = {
+        'employee': employee,
+        'balance_rows': balance_rows,
+        'leaves': leaves,
+        'status_filter': status_filter,
+        'total_requests': leaves_qs.count(),
+        'pending_count': leaves_qs.filter(status='pending').count(),
+        'approved_count': leaves_qs.filter(status='approved').count(),
+        'rejected_count': leaves_qs.filter(status='rejected').count(),
+        'annual_remaining': next(
+            (row['remaining'] for row in balance_rows if row['value'] == 'annual'), 0),
+    }
+    return render(request, 'hr/my_leave.html', context)
+
+
+@login_required
+def my_leave_apply_view(request):
+    """Employee-facing leave application.
+
+    Employees apply only for their own profile: the employee selector is never
+    shown and any posted employee value is ignored — the leave is always bound
+    to the logged-in employee. All other fields, validation, styling and
+    submission logic are identical to the admin Apply Leave form, and requests
+    flow into the same workflow for admin review/approval.
+    """
+    employee = getattr(request.user, 'employee', None)
+    if employee is None:
+        messages.error(request, 'You do not have an employee profile.')
+        return redirect('hr_my_leave')
+
+    form = LeaveForm(request.POST if request.method == 'POST' else None)
+    # Employees apply for themselves; drop the employee picker entirely.
+    form.fields.pop('employee')
+    # Custom grid layout: Days | Leave Type on row 1, then End date | Start
+    # date on row 2, then the Reason field.
+    form.fields = {name: form.fields[name]
+                   for name in ('days', 'leave_type', 'end_date', 'start_date', 'reason')}
+    form.fields['leave_type'].widget.input_type = 'float-select'
+    form.fields['leave_type'].label = 'Leave Type'
+
+    if request.method == 'POST':
+        if form.is_valid():
+            leave = form.save(commit=False)
+            leave.employee = employee
+            leave.save()
+            _log(request, 'create', 'Leave', leave.pk, f'Leave applied for {leave.employee.full_name}')
+            messages.success(request, 'Leave application submitted for review.')
+            return redirect('hr_my_leave')
+
+    return render(request, 'hr/leave_form.html', {'form': form, 'title': 'Apply Leave'})
 
 
 # ─── REPORTS ─────────────────────────────────────────────────────────────────

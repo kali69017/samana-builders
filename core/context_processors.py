@@ -26,9 +26,10 @@ def erp_context(request):
         initials = ''
     return {
         'user_role': role,
-        'user_display_name': display_name,
-        'user_initials': initials,
-        'can_view_payments': role in PAYMENTS_ACCESS_ROLES,
+                'user_display_name': display_name,
+                'user_initials': initials,
+                'is_employee': bool(getattr(user, 'employee', None)),
+                'can_view_payments': role in PAYMENTS_ACCESS_ROLES,
         'can_view_expenses': role in FINANCE_ROLES,
         'can_manage_users': role in ADMIN_ROLES,
         'can_view_users': role in MANAGEMENT_ROLES,

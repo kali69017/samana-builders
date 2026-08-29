@@ -1,6 +1,9 @@
 import re
 
 from django import forms
+from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
+from core.models import UserProfile
 from .models import (
     Department, Designation, SalaryComponent, Employee, EmployeeSalary,
     PayrollRun, Attendance, Leave,
@@ -135,3 +138,61 @@ class LeaveForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['reason'].required = False
+
+
+class EmployeeProfileForm(forms.Form):
+    """Create an ERP login linked to an existing Employee."""
+
+    employee = forms.ModelChoiceField(
+        queryset=Employee.objects.filter(status='active').exclude(user__isnull=False),
+        label='Employee',
+        widget=forms.Select(attrs={'class': 'form-control', 'placeholder': ' '}),
+    )
+    username = forms.CharField(
+        max_length=150, label='Username',
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+    )
+    email = forms.EmailField(
+        label='Email',
+        widget=forms.EmailInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+    )
+    password = forms.CharField(
+        label='Password', min_length=6,
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+    )
+    confirm_password = forms.CharField(
+        label='Confirm Password',
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+    )
+
+    def clean_username(self):
+        username = self.cleaned_data.get('username')
+        if User.objects.filter(username=username).exists():
+            raise ValidationError('Username already exists')
+        return username
+
+    def clean_email(self):
+        email = self.cleaned_data.get('email')
+        if email and User.objects.filter(email=email).exists():
+            raise ValidationError('Email is already in use')
+        return email
+
+    def clean(self):
+        cleaned = super().clean()
+        password = cleaned.get('password')
+        confirm = cleaned.get('confirm_password')
+        if password and confirm and password != confirm:
+            self.add_error('confirm_password', ValidationError('Passwords do not match'))
+        return cleaned
+
+    def save(self):
+        employee = self.cleaned_data['employee']
+        user = User(username=self.cleaned_data['username'], email=self.cleaned_data['email'])
+        user.set_password(self.cleaned_data['password'])
+        user.save()
+        # Give the employee a staff-level ERP profile so they land on the
+        # ERP dashboard (their own Leave portal) after logging in.
+        UserProfile.objects.create(user=user, role='staff')
+        employee.user = user
+        employee.save(update_fields=['user'])
+        return user

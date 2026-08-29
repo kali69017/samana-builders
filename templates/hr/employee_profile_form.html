@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ title }} - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+
+    <div class="top-bar">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <span class="top-bar-title">Create Employee Profile</span>
+        <div class="top-bar-actions"></div>
+    </div>
+
+    {% include 'includes/sidebar.html' %}
+
+    <main class="main-content">
+        <div class="page-header">
+            <h1>{{ title }}</h1>
+            <div class="page-actions">
+                <a href="{% url 'hr_employees' %}" class="btn btn-secondary btn-sm">← Back to Employees</a>
+            </div>
+        </div>
+
+        {% if form.non_field_errors %}
+        <div class="alert alert-error animate-slide-right">
+            <span>⚠️</span>
+            <span>{{ form.non_field_errors }}</span>
+        </div>
+        {% endif %}
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            <div class="card animate-fade-up">
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:24px; padding-bottom:16px; border-bottom:1px solid var(--border);">
+                    <div style="width:48px; height:48px; border-radius:12px; background:var(--primary-bg); display:flex; align-items:center; justify-content:center; font-size:24px;">👤</div>
+                    <div>
+                        <h3 style="font-size:16px; font-weight:600; color:var(--text-primary);">Employee Portal Login</h3>
+                        <p style="font-size:13px; color:var(--text-secondary);">Give an employee access to their own Leave portal</p>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="floating-group">
+                        {{ form.employee }}
+                        <label for="{{ form.employee.id_for_label }}">Employee <span style="color:var(--accent-red);">*</span></label>
+                        {% if form.employee.errors %}
+                        <div class="form-error">{% for error in form.employee.errors %}{{ error }}{% endfor %}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="floating-group">
+                        {{ form.username }}
+                        <label for="{{ form.username.id_for_label }}">Username <span style="color:var(--accent-red);">*</span></label>
+                        {% if form.username.errors %}
+                        <div class="form-error">{% for error in form.username.errors %}{{ error }}{% endfor %}</div>
+                        {% endif %}
+                    </div>
+                    <div class="floating-group">
+                        {{ form.email }}
+                        <label for="{{ form.email.id_for_label }}">Email <span style="color:var(--accent-red);">*</span></label>
+                        {% if form.email.errors %}
+                        <div class="form-error">{% for error in form.email.errors %}{{ error }}{% endfor %}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="floating-group">
+                        {{ form.password }}
+                        <label for="{{ form.password.id_for_label }}">Password <span style="color:var(--accent-red);">*</span></label>
+                        {% if form.password.errors %}
+                        <div class="form-error">{% for error in form.password.errors %}{{ error }}{% endfor %}</div>
+                        {% endif %}
+                    </div>
+                    <div class="floating-group">
+                        {{ form.confirm_password }}
+                        <label for="{{ form.confirm_password.id_for_label }}">Confirm Password <span style="color:var(--accent-red);">*</span></label>
+                        {% if form.confirm_password.errors %}
+                        <div class="form-error">{% for error in form.confirm_password.errors %}{{ error }}{% endfor %}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="card animate-fade-up stagger-1" style="border:none; background:transparent; box-shadow:none; padding:0;">
+                <div class="btn-group" style="justify-content:flex-end;">
+                    <a href="{% url 'hr_employees' %}" class="btn btn-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary">
+                        <span class="spinner"></span>
+                        <span class="btn-text">Create Profile</span>
+                    </button>
+                </div>
+            </div>
+        </form>
+    </main>
+</div>
+{% endblock %}

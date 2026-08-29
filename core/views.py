@@ -26,7 +26,10 @@ from expenses.models import Expense
 
 
 def _post_login_target(user):
-    """Customers (non-staff) go to the React customer portal; staff go to the ERP dashboard."""
+    """Employees go straight to their Leave portal; customers (non-staff) go
+    to the React customer portal; staff go to the ERP dashboard."""
+    if getattr(user, 'employee', None):
+        return 'hr_my_leave'
     if user.is_staff or hasattr(user, 'profile'):
         return 'dashboard'
     if Customer.objects.filter(user=user).exists():
@@ -89,6 +92,11 @@ def logout_view(request):
 
 @login_required
 def dashboard_view(request):
+    # Employees use their own self-service Leave portal — never show them
+    # the admin dashboard or its menus.
+    if getattr(request.user, 'employee', None):
+        return redirect('hr_my_leave')
+
     today = timezone.now().date()
     month_start = today.replace(day=1)
     
@@ -1532,6 +1540,7 @@ def receipt_pdf_view(request, pk):
         response = HttpResponse(pdf_content, content_type='application/pdf')
         filename = f"receipt_{receipt.receipt_number.replace('/', '-')}.pdf"
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response['Cache-Control'] = 'no-store'
         return response
 
     messages.error(request, 'Failed to generate PDF. Please try again.')
@@ -1550,6 +1559,7 @@ def invoice_pdf_view(request, pk):
         response = HttpResponse(pdf_content, content_type='application/pdf')
         filename = f"invoice_{booking.booking_id}.pdf"
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response['Cache-Control'] = 'no-store'
         return response
 
     messages.error(request, 'Failed to generate invoice PDF.')

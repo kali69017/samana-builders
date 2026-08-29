@@ -575,18 +575,17 @@ class AttendanceLeaveTests(CrmHrBase):
     def test_attendance_create(self):
         resp = self.client.post(reverse('attendance-list'), {
             'employee': self.emp.pk, 'date': date.today().isoformat(),
-            'check_in': '09:00', 'check_out': '17:00', 'status': 'present',
+            'status': 'present',
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 
     def test_attendance_duplicate_date_rejected(self):
         Attendance.objects.create(
-            employee=self.emp, date=date.today(), check_in='09:00',
-            check_out='17:00', status='present',
+            employee=self.emp, date=date.today(), status='present',
         )
         resp = self.client.post(reverse('attendance-list'), {
             'employee': self.emp.pk, 'date': date.today().isoformat(),
-            'check_in': '09:30', 'check_out': '17:30', 'status': 'present',
+            'status': 'present',
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 

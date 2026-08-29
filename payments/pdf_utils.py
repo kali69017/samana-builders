@@ -11,7 +11,12 @@ def render_to_pdf(template_src, context_dict=None):
     template = get_template(template_src)
     html = template.render(context_dict or {})
     result = BytesIO()
-    pdf = pisa.pisaDocument(BytesIO(html.encode('UTF-8')), result, encoding='UTF-8')
+    # Resolve relative image paths (e.g. "images/samana-logo.png") against
+    # the project's static directory so logos render in PDFs.
+    pdf = pisa.pisaDocument(
+        BytesIO(html.encode('UTF-8')), result, encoding='UTF-8',
+        path=str(settings.BASE_DIR / 'static'),
+    )
     if not pdf.err:
         return result.getvalue()
     return None

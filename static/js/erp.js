@@ -296,6 +296,43 @@
         console.log('Samana Builders ERP — Theme System Active');
         console.log('Current theme:', document.documentElement.getAttribute('data-theme'));
 
+    // ============================================================
+    // PREVENT TOP-JUMP ON PLACEHOLDER ANCHORS
+    // Any <a href="#"> must never force the page back to the top.
+    // ============================================================
+    document.addEventListener('click', function (e) {
+        var a = e.target && e.target.closest ? e.target.closest('a[href="#"]') : null;
+        if (a) e.preventDefault();
+    });
+
+    // ============================================================
+    // PRESERVE SIDEBAR SCROLL POSITION ACROSS PAGE LOADS
+    // The left sidebar (.sidebar-nav) has its own scrollbar; it must
+    // not snap back to the top after clicking a menu item navigates.
+    // ============================================================
+    var SIDEBAR_SCROLL_KEY = 'samana_sidebar_scroll';
+    function saveSidebarScroll() {
+        var nav = document.querySelector('.sidebar-nav');
+        if (nav && nav.scrollTop > 0) {
+            sessionStorage.setItem(SIDEBAR_SCROLL_KEY, String(nav.scrollTop));
+        }
+    }
+    function restoreSidebarScroll() {
+        var nav = document.querySelector('.sidebar-nav');
+        if (!nav) return;
+        var y = parseInt(sessionStorage.getItem(SIDEBAR_SCROLL_KEY) || '0', 10);
+        if (y > 0) {
+            nav.scrollTop = y;
+        }
+    }
+    window.addEventListener('beforeunload', saveSidebarScroll);
+    document.addEventListener('DOMContentLoaded', function () {
+        restoreSidebarScroll();
+        document.querySelectorAll('.sidebar-nav a.nav-link').forEach(function (link) {
+            link.addEventListener('click', saveSidebarScroll);
+        });
+    });
+
 // ============================================================
 // TOPBAR: sync page title + close user menu on outside click
 // ============================================================

@@ -226,6 +226,8 @@ img { max-width: 100%; display: block; }
   font-weight: 800; font-size: 15px;
   flex-shrink: 0;
 }
+.brand-mark.logo { background: transparent; }
+.brand-mark img { width: 34px; height: 34px; object-fit: contain; display: block; }
 .brand-text h2 { font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -0.2px; line-height: 1.2; }
 .brand-text p { font-size: 11px; color: var(--text-3); font-weight: 500; }
 
