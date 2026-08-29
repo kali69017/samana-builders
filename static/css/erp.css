@@ -745,17 +745,6 @@ select[multiple].form-control { background-image: none; min-height: 120px; paddi
 .chart-box canvas { max-height: 240px; width: 100% !important; }
 .action-btn { justify-content: flex-start; }
 
-/* ─── WHATSAPP FLOAT ──────────────────────────────────────────────────────── */
-.whatsapp-float {
-  position: fixed; bottom: 24px; right: 24px;
-  width: 56px; height: 56px;
-  background: #25d366; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 8px 24px rgba(37, 211, 102, 0.4);
-  z-index: 90; transition: transform 0.2s ease;
-}
-.whatsapp-float:hover { transform: scale(1.08); }
-
 /* Legacy in-template mobile top bars are superseded by the global topbar. */
 .top-bar { display: none; }
 .menu-toggle { display: none; }
