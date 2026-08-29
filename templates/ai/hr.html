@@ -1,132 +1,46 @@
 {% extends 'base.html' %}
 {% load static %}
 {% block title %}AI HR - Samana ERP{% endblock %}
-{% block page_title %}AI HR Tools{% endblock %}
+{% block page_title %}HR Assistant{% endblock %}
 
 {% block content %}
 <div class="app-layout">
     <div class="sidebar-overlay" onclick="closeSidebar()"></div>
     <div class="top-bar">
         <button class="hamburger" onclick="toggleSidebar()">&#9776;</button>
-        <span class="top-bar-title">AI HR Tools</span>
+        <span class="top-bar-title">HR Assistant</span>
         <div class="top-bar-actions"></div>
     </div>
 
     {% include 'includes/sidebar.html' %}
 
-    <main class="main-content">
-    <div class="page-header">
-        <h1>AI HR Tools</h1>
-        <p style="color: var(--text-secondary); font-size: 13px; margin-top: 4px;">DeepSeek-powered HR assistant, leave review, payroll analysis, attendance insights, and job descriptions.</p>
-    </div>
-
+    <main class="main-content" style="height: 100vh; height: 100dvh; overflow: hidden; padding: var(--topbar-h) 0 0; display: flex; flex-direction: column;">
     {% if not ai_enabled or not ai_configured %}
-    <div class="alert alert-warning">
+    <div class="alert alert-warning" style="margin: 16px 20px 0; flex-shrink: 0;">
         <strong>AI is not configured.</strong> Set <code>AI_ENABLED=True</code> and
         <code>DEEPSEEK_API_KEY</code> in your <code>.env</code> file to enable these tools.
     </div>
     {% endif %}
 
-    <div class="grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px;">
-
-        <!-- HR Assistant chat -->
-        <div class="card">
-            <h3>HR Assistant</h3>
-            <p style="font-size:13px; color:var(--text-3);">Ask about headcount, departments, payroll, leave, or attendance.</p>
-            <div id="hrChat" style="height: 200px; overflow-y:auto; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:8px; font-size:13px;"></div>
-            <form id="hrChatForm" style="display:flex; gap:6px;">
+    <div class="card" style="flex: 1; min-height: 0; display: flex; flex-direction: column; margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none;">
+        <div id="hrChat" style="flex: 1; min-height: 0; overflow-y: auto; padding: 20px; background: var(--bg); font-size: 14px;">
+            <div class="msg bot">Hello! I'm the Samana HR assistant. Ask about headcount, departments, payroll, leave, or attendance.</div>
+        </div>
+        <div style="flex-shrink: 0; padding: 10px 20px 14px; background: var(--surface); border-top: 1px solid var(--border);">
+            <form id="hrChatForm" style="display: flex; gap: 8px;">
                 <input type="text" id="hrChatInput" class="form-control" placeholder="e.g. How many active employees do we have?" style="flex:1;">
-                <button type="submit" class="btn btn-primary btn-sm">Ask</button>
+                <button type="submit" class="btn btn-primary btn-sm no-loading"><span class="spinner"></span><span class="btn-text">Ask</span></button>
             </form>
-        </div>
-
-        <!-- Leave review -->
-        <div class="card">
-            <h3>Leave Review Draft</h3>
-            <p style="font-size:13px; color:var(--text-3);">Pick a pending leave request and a decision to draft the reply email.</p>
-            <form id="leaveForm">
-                <select id="leaveId" class="form-control" style="margin-bottom:8px;">
-                    {% for l in pending_leaves %}
-                    <option value="{{ l.pk }}">{{ l.employee.full_name }} — {{ l.get_leave_type_display }} ({{ l.start_date }} → {{ l.end_date }})</option>
-                    {% empty %}
-                    <option value="">No pending leave requests</option>
-                    {% endfor %}
-                </select>
-                <select id="leaveDecision" class="form-control" style="margin-bottom:8px;">
-                    <option value="approve">Approve</option>
-                    <option value="reject">Reject</option>
-                </select>
-                <button type="submit" class="btn btn-primary btn-sm">Draft Reply</button>
-            </form>
-            <div id="leaveOut" class="ai-out"></div>
-        </div>
-
-        <!-- Payroll insights -->
-        <div class="card">
-            <h3>Payroll Analysis</h3>
-            <p style="font-size:13px; color:var(--text-3);">Detect anomalies and summarize a payroll run.</p>
-            <form id="payrollForm">
-                <select id="payrollRunId" class="form-control" style="margin-bottom:8px;">
-                    {% for r in payroll_runs %}
-                    <option value="{{ r.pk }}">{{ r.period_label }} ({{ r.status }})</option>
-                    {% empty %}
-                    <option value="">No payroll runs yet</option>
-                    {% endfor %}
-                </select>
-                <button type="submit" class="btn btn-primary btn-sm">Analyze</button>
-            </form>
-            <div id="payrollOut" class="ai-out"></div>
-        </div>
-
-        <!-- Attendance insights -->
-        <div class="card">
-            <h3>Attendance Insights</h3>
-            <p style="font-size:13px; color:var(--text-3);">Monthly attendance rate and absenteeism analysis.</p>
-            <form id="attForm" style="display:flex; gap:6px; margin-bottom:8px;">
-                <input type="number" id="attMonth" class="form-control" placeholder="Month (1-12)" min="1" max="12" style="width:45%;">
-                <input type="number" id="attYear" class="form-control" placeholder="Year" min="2020" max="2100" style="width:45%;">
-                <button type="submit" class="btn btn-primary btn-sm">Analyze</button>
-            </form>
-            <div id="attOut" class="ai-out"></div>
-        </div>
-
-        <!-- Job description -->
-        <div class="card">
-            <h3>Job Description Generator</h3>
-            <p style="font-size:13px; color:var(--text-3);">Draft a professional JD for an open position.</p>
-            <form id="jdForm">
-                <select id="jdDesignation" class="form-control" style="margin-bottom:8px;">
-                    <option value="">— Designation —</option>
-                    {% for d in designations %}
-                    <option value="{{ d.title }}">{{ d.title }}</option>
-                    {% endfor %}
-                </select>
-                <select id="jdDepartment" class="form-control" style="margin-bottom:8px;">
-                    <option value="">— Department —</option>
-                    {% for d in departments %}
-                    <option value="{{ d.name }}">{{ d.name }}</option>
-                    {% endfor %}
-                </select>
-                <button type="submit" class="btn btn-primary btn-sm">Generate JD</button>
-            </form>
-            <div id="jdOut" class="ai-out"></div>
-        </div>
-
-        <!-- Copy-ready inbox -->
-        <div class="card" style="grid-column: 1 / -1;">
-            <h3>Draft Output</h3>
-            <p style="font-size:13px; color:var(--text-3);">Copy from here, or send via Notifications.</p>
-            <textarea id="copyArea" class="form-control" rows="6" placeholder="Generated drafts appear here..."></textarea>
+            <div id="hrChatStatus" style="height: 14px; line-height: 14px; font-size: 12px; color: var(--text-3);"></div>
         </div>
     </div>
     </main>
 </div>
 
 <style>
-.ai-out { margin-top: 8px; padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; font-size: 13px; white-space: pre-wrap; min-height: 40px; }
-#hrChat .msg { margin-bottom: 6px; padding: 6px 10px; border-radius: 8px; }
-#hrChat .msg.user { background: var(--primary); color: #fff; margin-left: 20%; }
-#hrChat .msg.bot { background: var(--bg-card); border: 1px solid var(--border); margin-right: 20%; }
+#hrChat .msg { margin-bottom: 10px; padding: 10px 14px; border-radius: 10px; width: fit-content; max-width: 80%; white-space: pre-wrap; line-height: 1.5; overflow-wrap: anywhere; }
+#hrChat .msg.user { background: var(--primary); color: #fff; margin-left: auto; margin-right: 0; }
+#hrChat .msg.bot { background: var(--bg-card); border: 1px solid var(--border); margin-right: auto; margin-left: 0; }
 </style>
 {% endblock %}
 
@@ -139,35 +53,20 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     const csrf = getCookie('csrftoken') || '';
 
-    async function callAI(path, body, outEl, copyEl) {
-        if (!outEl) return;
-        outEl.textContent = 'Thinking...';
-        try {
-            const resp = await fetch('/api/ai/' + path, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
-                body: JSON.stringify(body)
-            });
-            const data = await resp.json();
-            if (data.ok) {
-                outEl.textContent = data.result;
-                if (copyEl) copyEl.value = data.result;
-            } else {
-                outEl.textContent = 'Error: ' + (data.error || 'unknown');
-            }
-        } catch (e) {
-            outEl.textContent = 'Request failed: ' + e.message;
-        }
+    function submitButton(form) {
+        return form.querySelector('button[type="submit"]');
     }
 
     // HR chat
     const hrChat = document.getElementById('hrChat');
     const hrForm = document.getElementById('hrChatForm');
+    const askBtn = submitButton(hrForm);
     const hrInput = document.getElementById('hrChatInput');
     hrForm.addEventListener('submit', function (e) {
         e.preventDefault();
         const q = hrInput.value.trim();
         if (!q) return;
+        if (askBtn) { askBtn.classList.add('loading'); askBtn.disabled = true; }
         hrChat.insertAdjacentHTML('beforeend', '<div class="msg user">' + q.replace(/</g, '&lt;') + '</div>');
         hrInput.value = '';
         const bot = document.createElement('div');
@@ -182,42 +81,10 @@ document.addEventListener('DOMContentLoaded', function () {
         }).then(r => r.json()).then(d => {
             bot.textContent = d.ok ? d.result : ('Error: ' + (d.error || 'unknown'));
             hrChat.scrollTop = hrChat.scrollHeight;
-        }).catch(err => { bot.textContent = 'Request failed: ' + err.message; });
-    });
-
-    // Leave review
-    document.getElementById('leaveForm').addEventListener('submit', function (e) {
-        e.preventDefault();
-        callAI('hr/leave-review/', {
-            leave_id: document.getElementById('leaveId').value,
-            decision: document.getElementById('leaveDecision').value
-        }, document.getElementById('leaveOut'), document.getElementById('copyArea'));
-    });
-
-    // Payroll
-    document.getElementById('payrollForm').addEventListener('submit', function (e) {
-        e.preventDefault();
-        callAI('hr/payroll/', {
-            payroll_run_id: document.getElementById('payrollRunId').value
-        }, document.getElementById('payrollOut'), document.getElementById('copyArea'));
-    });
-
-    // Attendance
-    document.getElementById('attForm').addEventListener('submit', function (e) {
-        e.preventDefault();
-        callAI('hr/attendance/', {
-            month: document.getElementById('attMonth').value,
-            year: document.getElementById('attYear').value
-        }, document.getElementById('attOut'), document.getElementById('copyArea'));
-    });
-
-    // Job description
-    document.getElementById('jdForm').addEventListener('submit', function (e) {
-        e.preventDefault();
-        callAI('hr/job-description/', {
-            designation: document.getElementById('jdDesignation').value,
-            department: document.getElementById('jdDepartment').value
-        }, document.getElementById('jdOut'), document.getElementById('copyArea'));
+        }).catch(err => { bot.textContent = 'Request failed: ' + err.message; })
+          .finally(function () {
+            if (askBtn) { askBtn.classList.remove('loading'); askBtn.disabled = false; }
+        });
     });
 });
 </script>
