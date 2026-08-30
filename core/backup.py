@@ -135,7 +135,10 @@ def _convert(raw, field):
     if raw == '':
         if isinstance(field, (models.CharField, models.TextField, models.FileField,
                               models.ImageField, models.BinaryField)):
-            return ''
+            # Round-trip NULL back to NULL for nullable text/file fields.
+            # The DB serializer writes None as '' in the CSV; restoring it as an
+            # empty string would collide with UNIQUE constraints ('' != NULL).
+            return None if getattr(field, 'null', False) else ''
         return None
     if isinstance(field, _NUMERIC):
         try:
@@ -265,8 +268,20 @@ def _reset_sequences(models_restored):
 def restore_from_backup(data):
     """Restore the entire database + media from a created backup ZIP.
 
-    Returns a dict with a summary of what was restored.
+    Django framework tables (sessions, migrations, admin log, permissions,
+    content types) are deliberately NOT restored: wiping sessions logs every
+    user out mid-request and restoring stale migration/permission rows can
+    corrupt Django's schema bookkeeping. They are left untouched.
     """
+    # Tables that must never be wiped/restored (Django-managed metadata).
+    FRAMEWORK_TABLES = {
+        'django_session',
+        'django_migrations',
+        'django_admin_log',
+        'auth_permission',
+        'django_content_type',
+    }
+
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
         csv_names = [n for n in zf.namelist()
                      if n.startswith('database/') and n.endswith('.csv')]
@@ -275,6 +290,8 @@ def restore_from_backup(data):
         all_models = list(apps.get_models())
         for name in csv_names:
             table = Path(name).stem
+            if table in FRAMEWORK_TABLES:
+                continue
             for model in all_models:
                 if model._meta.db_table == table:
                     model_by_file[name] = model

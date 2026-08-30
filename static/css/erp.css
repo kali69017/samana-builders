@@ -390,6 +390,13 @@ img { max-width: 100%; display: block; }
   transition: margin-left 0.25s ease;
 }
 
+/* Form pages: keep fields from stretching edge-to-edge on wide screens. */
+.main-content.form-page > * {
+  max-width: 1160px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 /* ─── PAGE HEADER ─────────────────────────────────────────────────────────── */
 .page-header {
   display: flex;

@@ -361,6 +361,7 @@ def dashboard_view(request):
     booking_status_data = [
         {'label': 'Completed', 'count': completed_bookings, 'color': '#0ca30c'},
         {'label': 'Active', 'count': active_bookings, 'color': '#2a78d6'},
+        {'label': 'Confirmed', 'count': confirmed_bookings, 'color': '#7a5af8'},
         {'label': 'Pending', 'count': pending_bookings, 'color': '#fab219'},
         {'label': 'Cancelled', 'count': cancelled_bookings, 'color': '#d03b3b'},
     ]
@@ -1952,10 +1953,13 @@ def _perform_restore(request, data, name):
     try:
         summary = restore_from_backup(data)
     except Exception as exc:
-        AuditLog.objects.create(
-            user=request.user, action='restore', model_name='Database',
-            object_id=name, description=f'Restore FAILED: {exc}',
-        )
+        try:
+            AuditLog.objects.create(
+                user=request.user, action='restore', model_name='Database',
+                object_id=name, description=f'Restore FAILED: {exc}',
+            )
+        except Exception:
+            pass
         messages.error(request, f'Restore failed: {exc}')
         return False
 

@@ -45,9 +45,9 @@
                         <option value="resigned" {% if status_filter == 'resigned' %}selected{% endif %}>Resigned</option>
                         <option value="terminated" {% if status_filter == 'terminated' %}selected{% endif %}>Terminated</option>
                     </select>
-                    <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+                    <button type="submit" class="btn btn-primary btn-sm" style="height:42px; padding:0 20px; white-space:nowrap;">Filter</button>
                     {% if search or status_filter %}
-                    <a href="{% url 'hr_employees' %}" class="btn btn-secondary btn-sm">Clear</a>
+                    <a href="{% url 'hr_employees' %}" class="btn btn-secondary btn-sm" style="height:42px; padding:0 16px; white-space:nowrap;">Clear</a>
                     {% endif %}
                 </div>
             </form>

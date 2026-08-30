@@ -313,8 +313,11 @@
     var SIDEBAR_SCROLL_KEY = 'samana_sidebar_scroll';
     function saveSidebarScroll() {
         var nav = document.querySelector('.sidebar-nav');
-        if (nav && nav.scrollTop > 0) {
+        if (!nav) return;
+        if (nav.scrollTop > 0) {
             sessionStorage.setItem(SIDEBAR_SCROLL_KEY, String(nav.scrollTop));
+        } else {
+            sessionStorage.removeItem(SIDEBAR_SCROLL_KEY);
         }
     }
     function restoreSidebarScroll() {
@@ -323,6 +326,19 @@
         var y = parseInt(sessionStorage.getItem(SIDEBAR_SCROLL_KEY) || '0', 10);
         if (y > 0) {
             nav.scrollTop = y;
+        }
+        // If the newly active item is outside the visible area, bring it into view.
+        // This prevents the sidebar staying stuck at the bottom after clicking a
+        // top item while it was scrolled down.
+        var active = nav.querySelector('a.nav-link.active');
+        if (active) {
+            var navRect = nav.getBoundingClientRect();
+            var linkRect = active.getBoundingClientRect();
+            var linkTop = linkRect.top - navRect.top + nav.scrollTop;
+            var linkBottom = linkTop + linkRect.height;
+            if (linkTop < nav.scrollTop || linkBottom > nav.scrollTop + nav.clientHeight) {
+                nav.scrollTop = linkTop - (nav.clientHeight - linkRect.height) / 2;
+            }
         }
     }
     window.addEventListener('beforeunload', saveSidebarScroll);

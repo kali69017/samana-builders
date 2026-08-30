@@ -75,7 +75,7 @@
         window.SAMANA_THEME = '{{ user_theme|default:"professional-blue" }}';
         window.SAMANA_IS_AUTHED = {% if user.is_authenticated %}true{% else %}false{% endif %};
     </script>
-    <script src="{% static 'js/erp.js' %}"></script>
+    <script src="{% static 'js/erp.js' %}?v=2"></script>
 
     {% block extra_scripts %}{% endblock %}
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>

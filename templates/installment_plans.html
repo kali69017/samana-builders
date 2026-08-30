@@ -37,8 +37,8 @@
                         <span class="search-icon">🔍</span>
                         <input type="text" name="search" value="{{ search }}" class="form-control" placeholder="Search booking ID or customer..." style="padding-left:40px;">
                     </div>
-                    <button type="submit" class="btn btn-primary btn-sm">Search</button>
-                    {% if search %}<a href="{% url 'installment_plans' %}" class="btn btn-secondary btn-sm">Clear</a>{% endif %}
+                    <button type="submit" class="btn btn-primary btn-sm" style="height:42px; padding:0 20px; white-space:nowrap;">Filter</button>
+                    {% if search %}<a href="{% url 'installment_plans' %}" class="btn btn-secondary btn-sm" style="height:42px; padding:0 16px; white-space:nowrap;">Clear</a>{% endif %}
                 </div>
             </form>
         </div>
