@@ -1,4 +1,5 @@
 {% extends "corporate_base.html" %}
+{% load static %}
 
 {% block title %}Samana Builders &amp; Developers | Building Trust, Building the Life You Deserve{% endblock %}
 
@@ -6,7 +7,7 @@
 
   <!-- ================= HERO ================= -->
   <section class="hero" id="home">
-    <div class="hero-bg" style="background-image:url('https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1920&q=80');" aria-hidden="true"></div>
+    <div class="hero-bg" style="background-image:url('{% static 'corporate/hero-photo-1600585154340-be6161a56a0c.jpg' %}');" aria-hidden="true"></div>
     <div class="hero-overlay" aria-hidden="true"></div>
 
     <div class="hero-content">
@@ -32,7 +33,7 @@
     <div class="container">
       <div class="about-grid">
         <div class="about-image reveal">
-          <img src="https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=1000&q=80" alt="Samana Builders architectural development" loading="lazy">
+          <img src="{% static 'corporate/about-photo-1512917774080-9991f1c4c750.jpg' %}" alt="Samana Builders architectural development" loading="lazy">
         </div>
         <div class="about-copy reveal" data-delay="1">
           <span class="section-eyebrow">About Us</span>
@@ -130,7 +131,7 @@
       <div class="projects-grid">
         <div class="project-card reveal">
           <div class="img-wrap">
-            <img src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&q=80" alt="Samana Green Valley" loading="lazy">
+            <img src="{% static 'corporate/project-greenvalley-photo-1600596542815-ffad4c1539a9.jpg' %}" alt="Samana Green Valley" loading="lazy">
             <span class="project-badge">Now Booking</span>
           </div>
           <div class="project-body">
@@ -140,7 +141,7 @@
         </div>
         <div class="project-card reveal" data-delay="1">
           <div class="img-wrap">
-            <img src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&q=80" alt="Samana Sky Residences" loading="lazy">
+            <img src="{% static 'corporate/project-skyresidences-photo-1486406146926-c627a92ad1ab.jpg' %}" alt="Samana Sky Residences" loading="lazy">
             <span class="project-badge">Under Construction</span>
           </div>
           <div class="project-body">
@@ -150,7 +151,7 @@
         </div>
         <div class="project-card reveal" data-delay="2">
           <div class="img-wrap">
-            <img src="https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&q=80" alt="Samana Gold City" loading="lazy">
+            <img src="{% static 'corporate/project-goldcity-photo-1522708323590-d24dbb6b0267.jpg' %}" alt="Samana Gold City" loading="lazy">
             <span class="project-badge">Completed</span>
           </div>
           <div class="project-body">
