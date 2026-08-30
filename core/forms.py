@@ -263,7 +263,7 @@ class CompanySettingsForm(forms.ModelForm):
     class Meta:
         model = CompanySettings
         fields = ['company_name', 'tagline', 'phone', 'email', 'address', 'website',
-                  'logo', 'currency', 'currency_symbol', 'tax_rate', 'receipt_footer',
+                  'currency', 'currency_symbol', 'tax_rate', 'receipt_footer',
                   'facebook', 'instagram', 'twitter', 'ai_language']
         widgets = {
             'company_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
@@ -272,7 +272,6 @@ class CompanySettingsForm(forms.ModelForm):
             'email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': ' '}),
             'address': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': ' '}),
             'website': forms.URLInput(attrs={'class': 'form-control', 'placeholder': ' '}),
-            'logo': forms.ClearableFileInput(attrs={'class': 'form-control'}),
             'currency': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
             'currency_symbol': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
             'tax_rate': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': ' '}),
