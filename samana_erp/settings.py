@@ -42,6 +42,14 @@ if DEBUG:
     # Local development always needs loopback access regardless of .env.
     ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS + ['localhost', '127.0.0.1', 'testserver']))
 
+# HTTPS behind the Caddy reverse proxy — required for CSRF + secure cookies.
+# Caddy terminates TLS and forwards X-Forwarded-Proto=https to the web container.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+CSRF_TRUSTED_ORIGINS = [f'https://{h}' for h in ALLOWED_HOSTS if h]
+CSRF_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_SECURE = not DEBUG
+SECURE_SSL_REDIRECT = not DEBUG
+
 
 # Application definition
 
