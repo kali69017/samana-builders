@@ -68,6 +68,18 @@ class PlotForm(forms.ModelForm):
             raise forms.ValidationError('Size must be greater than 0')
         return size
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Dynamic phase queryset: only show phases belonging to the selected
+        # project (on edit the plot already has a project attached).
+        project = getattr(self.instance, 'project', None)
+        if project is not None:
+            self.fields['phase'].queryset = project.phases.all()
+        else:
+            # No project selected yet (create form) -> expose all phases so the
+            # picker isn't empty before a project is chosen.
+            self.fields['phase'].queryset = ProjectPhase.objects.all()
+
 
 class PlotBulkCreateForm(forms.Form):
     project = forms.ModelChoiceField(
@@ -117,12 +129,17 @@ class PlotBulkCreateForm(forms.Form):
 class ProjectMilestoneForm(forms.ModelForm):
     class Meta:
         model = ProjectMilestone
-        fields = ['project', 'title', 'description', 'target_date', 'status', 'order']
+        fields = ['project', 'title', 'description', 'start_date', 'target_date',
+                  'milestone_type', 'completion_percent', 'progress_date', 'status', 'order']
         widgets = {
             'project': forms.Select(attrs={'class': 'form-control'}),
             'title': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': ' '}),
+            'start_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'target_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'milestone_type': forms.Select(attrs={'class': 'form-control'}),
+            'completion_percent': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0', 'max': '100'}),
+            'progress_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'status': forms.Select(attrs={'class': 'form-control'}),
             'order': forms.NumberInput(attrs={'class': 'form-control'}),
         }

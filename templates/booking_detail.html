@@ -37,13 +37,15 @@
                 </div>
             </div>
             <div style="display:flex; gap:8px;">
-                {% if booking.status == 'pending' %}
-                <a href="{% url 'booking_confirm' booking.pk %}" class="btn btn-success btn-sm">✓ Confirm Booking</a>
-                {% endif %}
-                {% if booking.status != 'cancelled' %}
-                <a href="{% url 'booking_delete' booking.pk %}" class="btn btn-danger btn-sm">✕ Cancel Booking</a>
-                {% endif %}
-            </div>
+                            {% if booking.status == 'pending' %}
+                            <a href="{% url 'booking_confirm' booking.pk %}" class="btn btn-success btn-sm">✓ Confirm Booking</a>
+                            {% endif %}
+                            {% if booking.status == 'cancelled' %}
+                            <a href="{% url 'booking_reopen' booking.pk %}" class="btn btn-primary btn-sm">♻️ Reopen Booking</a>
+                            {% else %}
+                            <a href="{% url 'booking_cancel' booking.pk %}" class="btn btn-danger btn-sm">✕ Cancel Booking</a>
+                            {% endif %}
+                        </div>
         </div>
 
         <!-- Booking Info Card -->
@@ -62,22 +64,47 @@
                     <div style="font-size:12px; color:var(--text-secondary);">{{ booking.customer.phone }}</div>
                 </div>
                 <div class="detail-item">
-                    <div class="detail-label">Plot</div>
-                    <div class="detail-value">{{ booking.plot.plot_number }}</div>
-                    <div style="font-size:12px; color:var(--text-secondary);">{{ booking.plot.project.name }}</div>
-                </div>
-                <div class="detail-item">
-                    <div class="detail-label">Total Amount</div>
-                    <div class="detail-value" style="color:var(--primary);">Rs. {{ booking.total_amount|floatformat:0 }}</div>
-                </div>
-                <div class="detail-item">
-                    <div class="detail-label">Advance Paid</div>
-                    <div class="detail-value" style="color:var(--accent-green);">Rs. {{ booking.advance_paid|floatformat:0 }}</div>
-                </div>
-                <div class="detail-item">
-                    <div class="detail-label">Remaining Balance</div>
-                    <div class="detail-value" style="color:var(--accent-amber);">Rs. {{ booking.remaining_balance|floatformat:0 }}</div>
-                </div>
+                                    <div class="detail-label">Plot</div>
+                                    <div class="detail-value">{{ booking.plot.plot_number }}</div>
+                                    <div style="font-size:12px; color:var(--text-secondary);">{{ booking.plot.project.name }}</div>
+                                    <div style="font-size:12px; color:var(--text-secondary);">Block {{ booking.plot.block|default:"-" }} / {{ booking.plot.get_plot_type_display }}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Original Plot Price</div>
+                                    <div class="detail-value">Rs. {{ booking.plot.price|floatformat:0 }}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Development Charge</div>
+                                    <div class="detail-value">Rs. {{ booking.plot.development_charge|default:0|floatformat:0 }}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Lease Charge</div>
+                                    <div class="detail-value">Rs. {{ booking.plot.lease_charge|default:0|floatformat:0 }}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Other Charges</div>
+                                    <div class="detail-value">Rs. {{ booking.plot.other_charges|default:0|floatformat:0 }}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Total Plot Cost (incl. charges)</div>
+                                    <div class="detail-value" style="font-weight:700; color:var(--primary);">Rs. {{ booking.plot.total_cost|floatformat:0 }}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Holding/Deposit Amount</div>
+                                    <div class="detail-value">Rs. {{ booking.plot.holding_deposit|default:0|floatformat:0 }}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Total Amount</div>
+                                    <div class="detail-value" style="color:var(--primary);">Rs. {{ booking.total_amount|floatformat:0 }}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Advance Paid</div>
+                                    <div class="detail-value" style="color:var(--accent-green);">Rs. {{ booking.advance_paid|floatformat:0 }}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Remaining Balance</div>
+                                    <div class="detail-value" style="color:var(--accent-amber);">Rs. {{ booking.remaining_balance|floatformat:0 }}</div>
+                                </div>
                 <div class="detail-item">
                     <div class="detail-label">Booking Date</div>
                     <div class="detail-value">{{ booking.booking_date|date:"d M Y" }}</div>

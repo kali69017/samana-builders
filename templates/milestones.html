@@ -41,9 +41,11 @@
                     <thead>
                         <tr>
                             <th>Project</th>
+                            <th>Type</th>
                             <th>Milestone</th>
+                            <th>Start</th>
                             <th>Target</th>
-                            <th>Completed</th>
+                            <th>Progress</th>
                             <th>Status</th>
                             <th class="no-sort">Actions</th>
                         </tr>
@@ -52,9 +54,18 @@
                         {% for m in milestones %}
                         <tr>
                             <td><strong>{{ m.project.name }}</strong></td>
+                            <td><span class="badge badge-info">{{ m.get_milestone_type_display }}</span></td>
                             <td>{{ m.title }}</td>
+                            <td>{{ m.start_date|date:"d M Y"|default:"-" }}</td>
                             <td>{{ m.target_date|date:"d M Y"|default:"-" }}</td>
-                            <td>{{ m.completed_date|date:"d M Y"|default:"-" }}</td>
+                            <td>
+                                {% if m.completion_percent is not None %}
+                                <div class="progress-bar" style="height:10px; width:120px; border-radius:5px; position:relative;">
+                                    <div class="progress-fill" style="width:{{ m.completion_percent }}%;"></div>
+                                </div>
+                                <span style="font-size:12px;">{{ m.completion_percent|floatformat:0 }}%</span>
+                                {% else %}-{% endif %}
+                            </td>
                             <td>
                                 <span class="badge badge-{% if m.status == 'completed' %}success{% elif m.status == 'in_progress' %}info{% elif m.status == 'delayed' %}danger{% else %}secondary{% endif %}">
                                     {{ m.get_status_display }}

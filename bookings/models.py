@@ -107,6 +107,10 @@ class Booking(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='bookings_cancelled')
+    cancelled_reason = models.CharField(max_length=100, blank=True)
+    reopened_at = models.DateTimeField(null=True, blank=True)
     
     def save(self, *args, **kwargs):
         if not self.booking_id:
@@ -152,6 +156,50 @@ class Booking(models.Model):
         if self.agent and self.agent.commission_rate:
             return (self.total_amount * self.agent.commission_rate) / 100
         return 0
+
+    @property
+    def payment_plan(self):
+        """Human-readable payment plan label from the installment plan/group."""
+        if hasattr(self, 'installment_plan') and self.installment_plan:
+            plan = self.installment_plan
+            return f"{plan.total_installments} {plan.get_frequency_display() or 'installments'}"
+        group = self.group
+        if group and group.payment_plan:
+            return group.payment_plan
+        return "Standard plan"
+
+    @property
+    def payment_plan_display(self):
+        return self.payment_plan
+
+
+
+    @property
+    def amount_paid(self):
+        """Verified money actually paid against this booking.
+
+        Defaults to advance_paid (the single source of truth for the ledger);
+        if there are verified Payment records that exceed advance_paid, uses
+        the sum of verified payments instead so the detail screen reflects
+        actual collections.
+        """
+        from payments.models import Payment
+        from django.db.models import Sum
+        verified = Payment.objects.filter(booking=self, status='verified').aggregate(
+            total=Sum('amount'))['total'] or 0
+        if verified > 0:
+            return verified
+        return self.advance_paid
+
+    @property
+    def total_charges(self):
+        """Applicable plot charges on this booking's plot (excl. base price)."""
+        return self.plot.total_charges if hasattr(self.plot, 'total_charges') else 0
+
+    def get_payment_plan_display(self):
+        """Django template-compatible accessor for the payment plan."""
+        return self.payment_plan
+
 
     class Meta:
         ordering = ['-created_at']

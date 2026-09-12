@@ -1,4 +1,5 @@
 from django import forms
+from django.db import models
 from django.utils import timezone
 from datetime import timedelta
 from .models import (
@@ -26,7 +27,9 @@ class BookingForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['customer'].queryset = Customer.objects.filter(is_active=True)
-        self.fields['plot'].queryset = Plot.objects.filter(status='available')
+        self.fields['plot'].queryset = Plot.objects.filter(
+            models.Q(status='available') | models.Q(status='booked', bookings__pk=self.instance.pk if self.instance else None)
+        ).distinct()
         self.fields['advance_paid'].initial = 0
         self.fields['source'].required = False
         self.fields['agent'].required = False
@@ -46,6 +49,44 @@ class BookingForm(forms.ModelForm):
         if advance and advance < 0:
             raise forms.ValidationError('Advance cannot be negative')
         return advance
+
+    def clean(self):
+        cleaned = super().clean()
+        from decimal import Decimal
+        plot = cleaned.get('plot')
+        total = cleaned.get('total_amount')
+        advance = cleaned.get('advance_paid')
+
+        if plot:
+            # ─── Task 1: booking amount must match the plot/unit price ─────
+            # The plot's defined price + charges is the source of truth. A
+            # booking may only be created at a value the plot supports; sellers
+            # cannot silently sell below the defined price without an explicit
+            # discount/approval mechanism (a Group with a discount_amount).
+            # ─── Task 1 + Task 12: booking amount must not under-sell the plot ──
+            plot_total_cost = plot.total_cost if hasattr(plot, 'total_cost') else (plot.price or 0)
+            if total is not None:
+                if plot_total_cost and Decimal(str(total)) < Decimal(str(plot_total_cost)):
+                    raise forms.ValidationError(
+                        'Total amount (Rs. {:,}) is below the plot total cost of Rs. {:,} '
+                        '(price + development/lease/other charges). You cannot sell below '
+                        'the defined cost.'.format(int(total), int(plot_total_cost))
+                    )
+
+            # ─── Task 1: deposit/holding amount consistency ─────────────────
+            # The upfront advance/holding deposit recorded on the booking must
+            # be at least the plot's holding_deposit (the token required to
+            # reserve/confirm the plot), when one is defined.
+            required_deposit = plot.holding_deposit if plot.holding_deposit is not None else 0
+            if required_deposit:
+                if advance is None or advance < required_deposit:
+                    raise forms.ValidationError(
+                        'Advance/holding deposit (Rs. {:,}) is below the required '
+                        'token/holding amount (Rs. {:,}) for this plot.'.format(
+                            int(advance or 0), int(required_deposit))
+                    )
+
+        return cleaned
 
 
 class ReservationForm(forms.ModelForm):

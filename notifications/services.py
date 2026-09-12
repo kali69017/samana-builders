@@ -300,6 +300,54 @@ class NotificationService:
                 )
 
     @staticmethod
+    def send_customer_welcome(customer, user=None):
+        """Send a welcome email to a freshly-created Customer.
+
+        Failure-safe by design: the whole send is wrapped so that a broken
+        email (invalid address, SMTP failure, even a NotificationLog write
+        error) can NEVER propagate up and corrupt the customer transaction that
+        just succeeded. Only emails to a present, non-empty address are sent.
+        Returns the NotificationLog row, or None if there was nothing to send
+        or the send failed (failure is logged, never raised).
+        """
+        try:
+            email = (getattr(customer, 'email', '') or '').strip()
+            if not email:
+                logger.info(
+                    f"[Welcome email skipped] no email address for customer "
+                    f"{getattr(customer, 'customer_id', None) or getattr(customer, 'pk', None)}"
+                )
+                return None
+
+            customer_id = getattr(customer, 'customer_id', '') or ''
+            message = (
+                f"Dear {customer.full_name},\n\n"
+                f"Welcome to Samana Builders & Developers! Your customer profile "
+                f"({customer_id}) has been created successfully.\n\n"
+                f"We look forward to assisting you with your property needs. "
+                f"Should you have any questions, please don't hesitate to "
+                f"reach out to our team.\n\n"
+                f"Best regards,\nSamana Builders & Developers"
+            )
+            return NotificationService.send_notification(
+                recipient_name=customer.full_name,
+                recipient_contact=email,
+                channel='email',
+                notification_type='customer_welcome',
+                subject='Welcome to Samana Builders & Developers',
+                message=message,
+                customer_id=customer_id,
+                user=user,
+            )
+        except Exception as e:
+            # Log and swallow: a welcome email must never break customer creation.
+            logger.error(
+                f"[Welcome email failed - non-fatal] customer "
+                f"{getattr(customer, 'customer_id', None) or getattr(customer, 'pk', None)}: {e}"
+            )
+            return None
+
+    @staticmethod
     def send_installment_reminder(installment):
         booking = installment.plan.booking
         customer = booking.customer

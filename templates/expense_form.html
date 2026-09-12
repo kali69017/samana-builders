@@ -30,8 +30,8 @@
         </div>
         {% endif %}
 
-        <form method="post" novalidate>
-            {% csrf_token %}
+        <form method="post" enctype="multipart/form-data" novalidate>
+                    {% csrf_token %}
 
             <div class="card animate-fade-up">
                 <div style="display:flex; align-items:center; gap:12px; margin-bottom:24px; padding-bottom:16px; border-bottom:1px solid var(--border);">
@@ -92,9 +92,25 @@
                         {% endif %}
                     </div>
                 </div>
-            </div>
+            <div class="form-row">
+                                <div class="floating-group">
+                                    {{ form.payment_reference }}
+                                    <label for="{{ form.payment_reference.id_for_label }}">Payment Reference / Cheque No.</label>
+                                    {% if form.payment_reference.errors %}
+                                    <div class="form-error">{% for error in form.payment_reference.errors %}{{ error }}{% endfor %}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="floating-group">
+                                    {{ form.receipt_attachment }}
+                                    <label for="{{ form.receipt_attachment.id_for_label }}">Receipt / Bill Attachment</label>
+                                    {% if form.receipt_attachment.errors %}
+                                    <div class="form-error">{% for error in form.receipt_attachment.errors %}{{ error }}{% endfor %}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
 
-            <div class="card animate-fade-up stagger-1" style="border:none; background:transparent; box-shadow:none; padding:0;">
+                        <div class="card animate-fade-up stagger-1" style="border:none; background:transparent; box-shadow:none; padding:0;">
                 <div class="btn-group" style="justify-content:flex-end;">
                     <a href="{% url 'expenses' %}" class="btn btn-secondary">Cancel</a>
                     <button type="submit" class="btn btn-primary">

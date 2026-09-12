@@ -319,6 +319,8 @@ class RefundDeepTests(MoneyBase):
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_refund_approve_requires_admin(self):
+        # Refund must be backed by verified payments (refundable amount).
+        self.make_payment(amount='10000', status='verified')
         refund = Refund.objects.create(
             booking=self.booking, amount=Decimal('1000'),
             reason='other', status='pending',
@@ -645,7 +647,7 @@ class AccountTransactionTests(MoneyBase):
         resp = self.client.post(reverse('accounttransaction-list'), {
             'date': date.today().isoformat(), 'amount': '25000',
             'direction': 'in', 'transaction_type': 'income',
-            'category': 'Sales', 'description': 'Test',
+            'category': 'Sales', 'reference_type': 'manual', 'reference_id': None, 'description': 'Test',
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 

@@ -20,7 +20,7 @@
             <div class="table-container">
                 {% if offices %}
                 <table class="sortable">
-                    <thead><tr><th>Name</th><th>Type</th><th>Address</th><th>Status</th></tr></thead>
+                    <thead><tr><th>Name</th><th>Type</th><th>Address</th><th>Status</th><th class="no-sort">Actions</th></tr></thead>
                     <tbody>
                         {% for office in offices %}
                         <tr>
@@ -28,6 +28,15 @@
                             <td><span class="badge badge-info">{{ office.get_office_type_display }}</span></td>
                             <td>{{ office.address|default:"-" }}</td>
                             <td><span class="badge badge-{% if office.is_active %}success{% else %}secondary{% endif %}">{% if office.is_active %}Active{% else %}Inactive{% endif %}</span></td>
+                            <td>
+                                <div class="table-actions">
+                                    <a href="{% url 'finance_office_edit' office.pk %}" class="btn btn-sm btn-outline-primary">Edit</a>
+                                    <form method="post" action="{% url 'finance_office_delete' office.pk %}" style="display:inline;" onsubmit="return confirm('Delete this office? This may be blocked if it has expenses or ledger transactions.');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                                    </form>
+                                </div>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>

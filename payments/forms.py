@@ -1,4 +1,5 @@
 from django import forms
+from django.db.models import Sum
 from .models import Payment, Refund
 from bookings.models import Booking, Installment
 
@@ -75,11 +76,15 @@ class PaymentForm(forms.ModelForm):
 class RefundForm(forms.ModelForm):
     class Meta:
         model = Refund
-        fields = ['booking', 'amount', 'reason', 'notes']
+        fields = ['booking', 'amount', 'reason', 'refund_method', 'refund_date',
+                  'supporting_document', 'notes']
         widgets = {
             'booking': forms.Select(attrs={'class': 'form-control'}),
             'amount': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': ' '}),
             'reason': forms.Select(attrs={'class': 'form-control'}),
+            'refund_method': forms.Select(attrs={'class': 'form-control'}),
+            'refund_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'supporting_document': forms.ClearableFileInput(attrs={'class': 'form-control'}),
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': ' '}),
         }
 
@@ -87,12 +92,33 @@ class RefundForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['booking'].queryset = Booking.objects.select_related('customer').all()
         self.fields['notes'].required = False
+        self.fields['refund_date'].required = False
+        self.fields['supporting_document'].required = False
 
     def clean_amount(self):
         amount = self.cleaned_data.get('amount')
         if amount is not None and amount <= 0:
             raise forms.ValidationError('Amount must be greater than 0')
         return amount
+
+    def clean(self):
+        cleaned = super().clean()
+        amount = cleaned.get('amount')
+        booking = cleaned.get('booking')
+        if amount and booking:
+            total_paid = booking.payments.filter(status='verified').aggregate(
+                t=Sum('amount'))['t'] or 0
+            refund_qs = Refund.objects.filter(booking_id=booking.pk).exclude(status='rejected')
+            if self.instance and self.instance.pk:
+                refund_qs = refund_qs.exclude(pk=self.instance.pk)
+            total_refunded = refund_qs.aggregate(t=Sum('amount'))['t'] or 0
+            refundable = max(total_paid - total_refunded, 0)
+            if amount > refundable:
+                raise forms.ValidationError(
+                    f'Refund amount cannot exceed the refundable amount '
+                    f'(Rs. {refundable}) for this booking.'
+                )
+        return cleaned
 
 
 class PaymentFilterForm(forms.Form):

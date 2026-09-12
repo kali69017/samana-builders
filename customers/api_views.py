@@ -49,6 +49,8 @@ class CustomerViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         customer = serializer.save(created_by=self.request.user)
+        from notifications.services import NotificationService
+        NotificationService.send_customer_welcome(customer, user=self.request.user)
         from core.models import AuditLog
         AuditLog.objects.create(
             user=self.request.user, action='create', model_name='Customer',

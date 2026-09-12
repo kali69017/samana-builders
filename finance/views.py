@@ -73,6 +73,20 @@ def office_edit_view(request, pk):
 def office_delete_view(request, pk):
     office = get_object_or_404(Office, pk=pk)
     if request.method == 'POST':
+        # Dependency guard: refuse deletion while the office still owns
+        # expenses or ledger transactions.
+        dependents = []
+        if office.expenses.exists():
+            dependents.append(f"{office.expenses.count()} office expense(s)")
+        if office.transactions.exists():
+            dependents.append(f"{office.transactions.count()} ledger transaction(s)")
+        if dependents:
+            messages.error(
+                request,
+                f"Cannot delete office '{office.name}' — it still has "
+                f"{' and '.join(dependents)}. Delete or reassign those records first."
+            )
+            return redirect('finance_offices')
         office.delete()
         _log(request, 'delete', 'Office', pk, f'Deleted office {office.name}')
         messages.success(request, 'Office deleted successfully!')

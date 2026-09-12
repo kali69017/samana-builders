@@ -217,6 +217,8 @@ class LeadViewSet(viewsets.ModelViewSet):
         lead.status = 'converted'
         lead.converted_customer = customer
         lead.save()
+        from notifications.services import NotificationService
+        NotificationService.send_customer_welcome(customer, user=request.user)
 
         AuditLog.objects.create(
             user=request.user, action='update', model_name='Lead',

@@ -66,6 +66,16 @@ class AccountTransaction(models.Model):
                 condition=models.Q(amount__gt=0),
                 name='account_transaction_amount_positive',
             ),
+            models.UniqueConstraint(
+                # A source object (reference_type + reference_id) must map to at
+                # most one ledger row. This is the root-cause guard against
+                # duplicate ledger transactions (e.g. a payroll run posted twice
+                # creates two SalaryPayment-watching rows). NULL reference_id
+                # (unlinked/ad hoc entries) is intentionally exempt.
+                fields=['reference_type', 'reference_id'],
+                condition=models.Q(reference_id__isnull=False),
+                name='account_transaction_reference_unique',
+            ),
         ]
 
 

@@ -289,6 +289,11 @@ class RefundEdgeTests(ApiEdgeBase):
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_approve_refund_sets_status(self):
+        # Refund must be backed by verified payments (refundable amount).
+        Payment.objects.create(
+            booking=self.booking, amount=Decimal('100000'),
+            payment_date=date.today(), status='verified', created_by=self.admin,
+        )
         refund = Refund.objects.create(booking=self.booking, amount=Decimal('50000'), reason='other')
         resp = self.client.post(reverse('refund-approve', args=[refund.pk]), format='json')
         self.assertEqual(resp.status_code, status.HTTP_200_OK)

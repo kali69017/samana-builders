@@ -15,6 +15,7 @@ class NotificationLog(models.Model):
         ('receipt_notification', 'Receipt Notification'),
         ('booking_notification', 'Booking Notification'),
         ('booking_approval', 'Booking Approval'),
+        ('customer_welcome', 'Customer Welcome'),
         ('general', 'General'),
     ]
     STATUS_CHOICES = [

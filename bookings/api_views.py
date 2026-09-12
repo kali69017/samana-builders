@@ -204,6 +204,14 @@ class BookingViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # ─── Task 2: no advance payment => cannot confirm (API bypass blocked) ──
+        if booking.advance_paid <= 0:
+            return Response(
+                {'error': 'Cannot confirm booking: no advance payment has been recorded. '
+                          'Record the deposit/advance before confirming.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         booking.status = 'confirmed'
         booking.save()
 

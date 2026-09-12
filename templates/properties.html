@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load property_tags %}
 
 {% block title %}Properties - Samana Builders ERP{% endblock %}
 
@@ -92,31 +93,38 @@
                 <table class="sortable" id="projectsTable">
                     <thead>
                         <tr>
-                            <th>Project Name</th>
-                            <th>Location</th>
-                            <th>Total Plots</th>
-                            <th>Available</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody class="pr-collapsible">
-                        {% for project in projects %}
-                        <tr>
-                            <td><strong>{{ project.name }}</strong></td>
-                            <td>
-                                {{ project.location }}
-                            </td>
-                            <td>{{ project.total_plots }}</td>
-                            <td>
-                                <span style="font-weight:600; color:var(--accent-green);">{{ project.available_plots }}</span>
-                            </td>
-                            <td>
-                                <span class="badge badge-{% if project.status == 'coming_soon' %}info{% elif project.status == 'booking_open' %}success{% elif project.status == 'under_construction' %}warning{% elif project.status == 'completed' %}secondary{% else %}danger{% endif %}">
-                                    {{ project.get_status_display }}
-                                </span>
-                            </td>
-                        </tr>
-                        {% endfor %}
+                                                    <th>Project Name</th>
+                                                    <th>Location</th>
+                                                    <th>Total Plots</th>
+                                                    <th>Available</th>
+                                                    <th>Status</th>
+                                                    <th class="no-sort">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="pr-collapsible">
+                                                {% for project in projects %}
+                                                <tr>
+                                                    <td><strong>{{ project.name }}</strong></td>
+                                                    <td>
+                                                        {{ project.location }}
+                                                    </td>
+                                                    <td>{{ project.total_plots }}</td>
+                                                    <td>
+                                                        <span style="font-weight:600; color:var(--accent-green);">{{ project.available_plots }}</span>
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge badge-{% if project.status == 'coming_soon' %}info{% elif project.status == 'booking_open' %}success{% elif project.status == 'under_construction' %}warning{% elif project.status == 'completed' %}secondary{% else %}danger{% endif %}">
+                                                            {{ project.get_status_display }}
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <div class="table-actions">
+                                                            <a href="{% url 'project_edit' project.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                                                            <a href="{% url 'project_delete' project.pk %}" class="btn btn-danger btn-sm" onclick="return confirm('Delete project \'{{ project.name }}\'? This cannot be undone.');">Delete</a>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
                     </tbody>
                 </table>
                 {% else %}
@@ -160,7 +168,7 @@
                             <td>{{ plot.project.name }}</td>
                             <td>{{ plot.get_plot_type_display }}</td>
                             <td>{{ plot.size_marla }}</td>
-                            <td style="font-weight:600;">Rs. {{ plot.price|floatformat:0 }}</td>
+                            <td style="font-weight:600;">Rs. {{ plot.price|money }}</td>
                             <td>
                                 <span class="badge badge-{% if plot.status == 'available' %}success{% elif plot.status == 'booked' %}info{% elif plot.status == 'sold' %}secondary{% elif plot.status == 'reserved' %}warning{% else %}danger{% endif %}">
                                     {{ plot.get_status_display }}

@@ -178,7 +178,7 @@ def refunds_view(request):
 @finance_or_above
 def refund_create_view(request):
     if request.method == 'POST':
-        form = RefundForm(request.POST)
+        form = RefundForm(request.POST, request.FILES)
         if form.is_valid():
             refund = form.save()
             _log(request, 'create', 'Refund', refund.pk,
@@ -196,15 +196,34 @@ def refund_approve_view(request, pk):
     refund = get_object_or_404(Refund.objects.select_related('booking'), pk=pk)
     if request.method == 'POST':
         action = request.POST.get('action', 'approve')
-        if action == 'reject':
-            refund.status = 'rejected'
-            refund.notes = request.POST.get('notes', refund.notes)
-            refund.save(update_fields=['status', 'notes'])
-        else:
-            # Approval applies the financial effect: reduce the booking's
-            # advance_paid so the balance reflects the money returned.
-            refund.apply_approval(user=request.user)
+        try:
+            if action == 'reject':
+                refund.reject(notes=request.POST.get('notes', ''), user=request.user)
+            else:
+                # Approval applies the financial effect: reduce the booking's
+                # advance_paid so the balance reflects the money returned.
+                refund.apply_approval(user=request.user)
+        except Exception as exc:
+            messages.error(request, f'Unable to {action} refund: {exc}')
+            return redirect('refunds')
         _log(request, 'update', 'Refund', refund.pk,
              f'{refund.get_status_display()} refund of {refund.amount} for booking {refund.booking.booking_id}')
         messages.success(request, f'Refund {refund.get_status_display()}.')
+    return redirect('refunds')
+
+
+@login_required
+@management_or_above
+def refund_process_view(request, pk):
+    """Mark an approved refund as processed and post it to the ledger exactly once."""
+    refund = get_object_or_404(Refund.objects.select_related('booking'), pk=pk)
+    if request.method == 'POST':
+        try:
+            refund.process(user=request.user)
+        except Exception as exc:
+            messages.error(request, f'Unable to process refund: {exc}')
+            return redirect('refunds')
+        _log(request, 'process', 'Refund', refund.pk,
+             f'Processed refund of {refund.amount} for booking {refund.booking.booking_id}')
+        messages.success(request, 'Refund processed and posted to the ledger.')
     return redirect('refunds')

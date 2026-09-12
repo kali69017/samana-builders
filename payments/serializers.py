@@ -50,15 +50,48 @@ class PaymentAllocationSerializer(serializers.ModelSerializer):
 class RefundSerializer(serializers.ModelSerializer):
     booking_id_display = serializers.CharField(source='booking.booking_id', read_only=True)
     approved_by_name = serializers.CharField(source='approved_by.username', read_only=True, allow_null=True)
+    processed_by_name = serializers.CharField(source='processed_by.username', read_only=True, allow_null=True)
     reason_display = serializers.CharField(source='get_reason_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    refund_method_display = serializers.CharField(source='get_refund_method_display', read_only=True, allow_null=True)
+    supporting_document_url = serializers.SerializerMethodField()
+    project = serializers.SerializerMethodField()
+    plot = serializers.SerializerMethodField()
+    total_paid = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    total_refunded = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    refundable_amount = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    refund_percentage = serializers.SerializerMethodField()
 
     class Meta:
         model = Refund
         fields = ['id', 'booking', 'booking_id_display', 'original_payment',
-                  'amount', 'reason', 'reason_display', 'status', 'status_display',
-                  'approved_by', 'approved_by_name', 'processed_date', 'notes', 'created_at']
-        read_only_fields = ['id', 'processed_date', 'created_at']
+                  'amount', 'reason', 'reason_display', 'refund_method', 'refund_method_display',
+                  'refund_date', 'supporting_document', 'supporting_document_url',
+                  'status', 'status_display', 'approved_by', 'approved_by_name',
+                  'processed_by', 'processed_by_name', 'processed_date',
+                  'project', 'plot', 'total_paid', 'total_refunded',
+                  'refundable_amount', 'refund_percentage', 'notes', 'created_at']
+        read_only_fields = ['id', 'processed_by', 'processed_by_name', 'processed_date', 'created_at']
+
+    def get_supporting_document_url(self, obj):
+        request = self.context.get('request')
+        if obj.supporting_document and request:
+            return request.build_absolute_uri(obj.supporting_document.url)
+        return None
+
+    def get_project(self, obj):
+        p = getattr(obj, 'project', None)
+        return {'id': p.pk, 'name': p.name} if p else None
+
+    def get_plot(self, obj):
+        p = getattr(obj, 'plot', None)
+        return {'id': p.pk, 'plot_number': p.plot_number} if p else None
+
+    def get_refund_percentage(self, obj):
+        try:
+            return obj.refund_percentage
+        except Exception:
+            return 0
 
     def validate_amount(self, value):
         if value is not None and value <= 0:
@@ -69,11 +102,16 @@ class RefundSerializer(serializers.ModelSerializer):
         booking = data.get('booking')
         amount = data.get('amount')
         if booking and amount is not None:
-            verified = booking.payments.filter(status='verified').aggregate(
-                total=Sum('amount'))['total'] or 0
-            if amount > verified:
+            from django.db.models import Sum
+            total_paid = booking.payments.filter(status='verified').aggregate(
+                t=Sum('amount'))['t'] or 0
+            total_refunded = Refund.objects.filter(booking_id=booking.pk).exclude(
+                status='rejected').aggregate(t=Sum('amount'))['t'] or 0
+            refundable = max(total_paid - total_refunded, 0)
+            if amount > refundable:
                 raise serializers.ValidationError(
-                    {'amount': f'Refund amount cannot exceed the verified payments (Rs. {verified}) for this booking.'}
+                    {'amount': f'Refund amount cannot exceed the refundable amount '
+                               f'(Rs. {refundable}) for this booking.'}
                 )
         return data
 

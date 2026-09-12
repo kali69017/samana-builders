@@ -29,7 +29,13 @@
                 </div></div>
             </div>
             <div class="card">
+                <div class="detail-item"><div class="detail-label">Type</div><div class="detail-value">{{ milestone.get_milestone_type_display }}</div></div>
+                <div class="detail-item"><div class="detail-label">Start Date</div><div class="detail-value">{{ milestone.start_date|date:"d M Y"|default:"—" }}</div></div>
                 <div class="detail-item"><div class="detail-label">Target Date</div><div class="detail-value">{{ milestone.target_date|date:"d M Y"|default:"—" }}</div></div>
+                <div class="detail-item"><div class="detail-label">Progress</div><div class="detail-value">
+                    {% if milestone.completion_percent is not None %}{{ milestone.completion_percent|floatformat:0 }}%{% else %}—{% endif %}
+                    {% if milestone.progress_date %}<span style="font-size:12px; color:var(--text-secondary);">({{ milestone.progress_date|date:"d M Y" }})</span>{% endif %}
+                </div></div>
                 <div class="detail-item"><div class="detail-label">Completed Date</div><div class="detail-value">{{ milestone.completed_date|date:"d M Y"|default:"—" }}</div></div>
             </div>
         </div>

@@ -97,6 +97,9 @@ class Plot(models.Model):
     facing_direction = models.CharField(max_length=20, blank=True, help_text="North/South/East/West")
     features = models.ManyToManyField(PlotFeature, blank=True)
     holding_deposit = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text="Required token/holding amount")
+    development_charge = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text="Development/infrastructure charge payable by the buyer")
+    lease_charge = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text="Lease/registration charge payable by the buyer")
+    other_charges = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text="Other one-off plot charges (e.g. documentation)")
     description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -104,6 +107,27 @@ class Plot(models.Model):
     def __str__(self):
         return f"{self.project.name} - {self.plot_number}"
     
+    @property
+    def total_charges(self):
+        """Sum of all additional plot charges (excluding base price)."""
+        from decimal import Decimal
+        return (
+            Decimal(self.development_charge or 0)
+            + Decimal(self.lease_charge or 0)
+            + Decimal(self.other_charges or 0)
+        )
+
+    @property
+    def total_cost(self):
+        """Full payable price for the plot = base price + all charges.
+
+        Single source of truth for 'total plot cost' used by bookings,
+        payment screens, receipts, customer statements, and reports so
+        nothing double-counts or omits a charge.
+        """
+        from decimal import Decimal
+        return Decimal(self.price or 0) + self.total_charges
+
     class Meta:
         unique_together = ['project', 'plot_number']
         ordering = ['project', 'plot_number']
@@ -127,6 +151,22 @@ class ProjectMilestone(models.Model):
     target_date = models.DateField(null=True, blank=True)
     completed_date = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    start_date = models.DateField(null=True, blank=True, help_text='Planned start date')
+    milestone_type = models.CharField(
+        max_length=20,
+        choices=[
+            ('construction', 'Construction'),
+            ('payment', 'Payment'),
+            ('development', 'Development'),
+            ('documentation', 'Documentation'),
+            ('handover', 'Handover'),
+            ('other', 'Other'),
+        ],
+        default='construction',
+        help_text='Category of this milestone'
+    )
+    completion_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0, blank=True, null=True, help_text='Completion % (0-100)')
+    progress_date = models.DateField(null=True, blank=True, help_text='Date of last progress/completion update')
     order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -112,23 +112,106 @@ class Refund(models.Model):
         ('booking_transfer', 'Booking Transfer'),
         ('other', 'Other'),
     ]
-    
+
+    METHOD_CHOICES = [
+        ('cash', 'Cash'),
+        ('bank_transfer', 'Bank Transfer'),
+        ('cheque', 'Cheque'),
+        ('online', 'Online Payment'),
+        ('easypaisa', 'Easypaisa'),
+        ('raast', 'Raast Transfer'),
+    ]
+
     STATUS_CHOICES = [
-        ('pending', 'Pending'),
+        ('pending', 'Pending Approval'),
         ('approved', 'Approved'),
         ('processed', 'Processed'),
         ('rejected', 'Rejected'),
     ]
-    
+
     booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name='refunds')
     original_payment = models.ForeignKey(Payment, on_delete=models.SET_NULL, null=True, blank=True)
     amount = models.DecimalField(max_digits=15, decimal_places=2)
     reason = models.CharField(max_length=30, choices=REASON_CHOICES)
+    refund_method = models.CharField(max_length=20, choices=METHOD_CHOICES, default='bank_transfer')
+    refund_date = models.DateField(null=True, blank=True)
+    supporting_document = models.FileField(upload_to='refunds/%Y/%m/', blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='refunds_approved')
+    processed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='refunds_processed')
     processed_date = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # ─── Computed helpers ──────────────────────────────────────────────────────
+    @property
+    def project(self):
+        return self.booking.plot.project if self.booking and self.booking.plot_id else None
+
+    @property
+    def plot(self):
+        return self.booking.plot if self.booking and self.booking.plot_id else None
+
+    @property
+    def total_paid(self):
+        """Sum of verified payments received on the booking."""
+        if not self.booking_id:
+            return 0
+        from django.db.models import Sum
+        total = self.booking.payments.filter(status='verified').aggregate(t=Sum('amount'))['t']
+        return total or 0
+
+    @property
+    def total_refunded(self):
+        """Sum of all refunds on this booking excluding rejected ones.
+
+        When computing for a stored refund, excludes the current instance so a
+        refund does not cap itself during validation (its own amount must not
+        reduce the available-for-refund it is checked against).
+        """
+        if not self.booking_id:
+            return 0
+        from django.db.models import Sum
+        qs = Refund.objects.filter(booking_id=self.booking_id).exclude(
+            status='rejected')
+        if self.pk:
+            qs = qs.exclude(pk=self.pk)
+        total = qs.aggregate(t=Sum('amount'))['t']
+        return total or 0
+
+    @property
+    def refundable_amount(self):
+        """Maximum amount still refundable for this booking (never negative)."""
+        return max(self.total_paid - self.total_refunded, 0)
+
+    @property
+    def refund_percentage(self):
+        """Share of the total verified paid amount that this refund represents."""
+        if not self.total_paid:
+            return 0
+        return (self.amount / self.total_paid) * 100
+
+    # ─── Validation ────────────────────────────────────────────────────────────
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        refundable = self.refundable_amount
+        if self.amount is not None and self.amount > refundable:
+            raise ValidationError({
+                'amount': f'Refund amount Rs. {self.amount} cannot exceed the '
+                          f'refundable amount Rs. {refundable} for this booking.'
+            })
+
+    # ─── Workflow ──────────────────────────────────────────────────────────────
+    def validate_refund_limit(self):
+        """Raise if this refund's amount exceeds the currently refundable amount."""
+        from django.core.exceptions import ValidationError
+        refundable = self.refundable_amount
+        if self.amount is not None and self.amount > refundable:
+            raise ValidationError(
+                f'Refund amount Rs. {self.amount} cannot exceed the '
+                f'refundable amount Rs. {refundable} for this booking.'
+            )
 
     def apply_approval(self, user=None):
         """Apply the financial effect of an approved refund.
@@ -138,6 +221,7 @@ class Refund(models.Model):
         balance, payment ledger, and receivables consistent with the money
         actually held. Safe to call on approval.
         """
+        self.validate_refund_limit()
         from decimal import Decimal
         booking = self.booking
         amount = Decimal(self.amount or 0)
@@ -147,8 +231,80 @@ class Refund(models.Model):
             booking.save(update_fields=['advance_paid', 'updated_at'])
         self.status = 'approved'
         self.approved_by = user
+        if not self.processed_date:
+            self.processed_date = timezone.now()
+        self.save(update_fields=['status', 'approved_by', 'processed_date', 'notes', 'updated_at'])
+
+    def reject(self, notes='', user=None):
+        self.status = 'rejected'
+        if notes:
+            self.notes = notes
+        self.save(update_fields=['status', 'notes', 'updated_at'])
+
+    def post_to_ledger(self):
+        """Idempotently post a single ledger row for this refund.
+
+        Uses ``reference_type='Refund'`` + ``reference_id=self.pk`` so the unique
+        constraint ``account_transaction_reference_unique`` plus ``update_or_create``
+        guarantee the refund is never doubled in the ledger even if called twice.
+        """
+        from finance.models import AccountTransaction
+        from datetime import date
+        post_date = self.refund_date
+        if not post_date:
+            post_date = self.processed_date.date() if self.processed_date else date.today()
+        AccountTransaction.objects.update_or_create(
+            reference_type='Refund', reference_id=self.pk,
+            defaults={
+                'date': post_date,
+                'amount': self.amount,
+                'direction': 'out',
+                'transaction_type': 'refund',
+                'category': 'Refund',
+                'project': self.project,
+                'description': f'Refund of Rs. {self.amount} for booking '
+                               f'{self.booking.booking_id} - {self.get_reason_display()}',
+                'created_by': self.processed_by,
+            },
+        )
+
+    def process(self, user=None):
+        """Mark the approved refund as processed and post it to the ledger exactly once."""
+        from django.core.exceptions import ValidationError
+        from finance.models import AccountTransaction
+
+        if self.status != 'approved':
+            raise ValidationError('Only an approved refund can be processed.')
+
+        # Guard: never double-post to the ledger.
+        already_posted = AccountTransaction.objects.filter(
+            reference_type='Refund', reference_id=self.pk
+        ).exists()
+
+        self.status = 'processed'
+        self.processed_by = user
         self.processed_date = timezone.now()
-        self.save(update_fields=['status', 'approved_by', 'processed_date', 'notes'])
+        self.save(update_fields=['status', 'processed_by', 'processed_date', 'notes', 'updated_at'])
+
+        if not already_posted:
+            self.post_to_ledger()
+        return self
+
+    def mark_processed(self, user=None):
+        """Alias for :meth:`process`."""
+        return self.process(user=user)
+
+    def __str__(self):
+        return f"Refund for {self.booking.booking_id} - {self.get_status_display()}"
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(amount__gt=0),
+                name='refund_amount_positive',
+            ),
+        ]
 
 
 class Receipt(models.Model):

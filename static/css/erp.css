@@ -789,3 +789,15 @@ select[multiple].form-control { background-image: none; min-height: 120px; paddi
   .card { padding: 16px; }
   .sidebar-overlay.active { display: block; }
 }
+
+/* ─── PRINT: hide chrome so printed reports contain only the content ─────── */
+@media print {
+  .topbar, .top-bar, .sidebar, .sidebar-overlay, .topbar-actions,
+  .user-menu-trigger, .hamburger, .menu-toggle, .btn, .no-print,
+  .page-actions, .btn-group, form { display: none !important; }
+  .app-layout { display: block; }
+  .main-content { margin: 0 !important; padding: 0 !important; }
+  body { font-size: 11px; color: #000; }
+  table { font-size: 10.5px; }
+  a { text-decoration: none; color: #000; }
+}

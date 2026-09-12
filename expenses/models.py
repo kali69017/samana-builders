@@ -10,6 +10,13 @@ class Expense(models.Model):
         ('miscellaneous', 'Miscellaneous'),
     ]
 
+    STATUS_CHOICES = [
+        ('pending', 'Pending Approval'),
+        ('approved', 'Approved'),
+        ('paid', 'Paid'),
+        ('rejected', 'Rejected'),
+    ]
+
     project = models.ForeignKey(
         'properties.Project', on_delete=models.CASCADE,
         related_name='expenses', verbose_name='Project',
@@ -23,8 +30,67 @@ class Expense(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # ─── Expense approval workflow ─────────────────────────────────────────
+    payment_reference = models.CharField(
+        max_length=100, blank=True,
+        verbose_name='Payment Reference / Cheque No.',
+        help_text='Cheque No. / Bank Reference / Transaction ID for this expense.',
+    )
+    receipt_attachment = models.FileField(
+        upload_to='expenses/receipts/', blank=True, null=True,
+        verbose_name='Receipt / Bill Attachment',
+        help_text='Upload a scanned receipt, bill, or invoice as proof.',
+    )
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default='pending',
+        verbose_name='Approval Status', db_index=True,
+    )
+    approved_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='expenses_approved', verbose_name='Approved By',
+    )
+    approved_at = models.DateTimeField(null=True, blank=True, verbose_name='Approved At')
+
     def __str__(self):
         return f"{self.expense_type.title()} · {self.amount} — {self.project.name}"
+
+    @property
+    def status_label(self):
+        return self.get_status_display()
+
+    def can_be_posted(self):
+        """An expense may only hit the final ledger once approved/paid."""
+        return self.status in ('approved', 'paid') and not self.status == 'rejected'
+
+    def post_to_ledger(self, user=None):
+        """Post this expense to the Financial Ledger exactly once (idempotent).
+
+        Reuses the same ``AccountTransaction.update_or_create`` pattern as
+        ``OfficeExpense.post_to_ledger`` / ``ProjectCost.post_to_ledger``,
+        keyed on ``reference_type='Expense'`` + ``reference_id=self.pk`` so
+        re-posting can never create a duplicate ledger entry.
+        """
+        from finance.models import AccountTransaction
+        AccountTransaction.objects.update_or_create(
+            reference_type='Expense', reference_id=self.pk,
+            defaults={
+                'date': self.expense_date,
+                'amount': self.amount,
+                'direction': 'out',
+                'transaction_type': 'project_cost',
+                'category': self.get_expense_type_display(),
+                'project': self.project,
+                'description': f"{self.project.name} - {self.get_expense_type_display()}: "
+                               f"{self.description or self.paid_to}",
+                'created_by': user or self.created_by,
+            },
+        )
+
+    def is_posted_to_ledger(self):
+        from finance.models import AccountTransaction
+        return AccountTransaction.objects.filter(
+            reference_type='Expense', reference_id=self.pk,
+        ).exists()
 
     class Meta:
         ordering = ['-expense_date', '-created_at']

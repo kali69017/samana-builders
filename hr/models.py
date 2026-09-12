@@ -264,22 +264,29 @@ class SalaryPayment(models.Model):
         return f"Payment for {self.slip.employee.full_name} - {self.amount}"
 
     def post_to_ledger(self):
-        """Record this payment in the unified financial ledger."""
-        from finance.models import AccountTransaction
-        employee = self.slip.employee
-        AccountTransaction.objects.update_or_create(
-            reference_type='SalaryPayment', reference_id=self.pk,
-            defaults={
-                'date': self.payment_date,
-                'amount': self.amount,
-                'direction': 'out',
-                'transaction_type': 'payroll',
-                'category': 'Salary',
-                'employee': employee,
-                'description': f'Salary payment for {employee.full_name} ({self.slip.run.period_label})',
-                'created_by': self.created_by,
-            },
-        )
+            """Record this payment in the unified financial ledger.
+
+            Idempotent: a payment maps to exactly one ``AccountTransaction`` row
+            (enforced by the DB unique constraint on reference_type/reference_id).
+            Re-posting the same payment updates the existing row instead of creating
+            a duplicate, matching the constraint. The pay views also guard at the
+            call site so a payroll run is only ever posted once.
+            """
+            from finance.models import AccountTransaction
+            employee = self.slip.employee
+            AccountTransaction.objects.update_or_create(
+                reference_type='SalaryPayment', reference_id=self.pk,
+                defaults={
+                    'date': self.payment_date,
+                    'amount': self.amount,
+                    'direction': 'out',
+                    'transaction_type': 'payroll',
+                    'category': 'Salary',
+                    'employee': employee,
+                    'description': f'Salary payment for {employee.full_name} ({self.slip.run.period_label})',
+                    'created_by': self.created_by,
+                },
+            )
 
     class Meta:
         ordering = ['-payment_date']

@@ -136,8 +136,31 @@ class BookingCreateSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, data):
+        from decimal import Decimal
         plot = data.get('plot')
         if plot:
+            # ─── Task 1 + Task 12: no under-selling below the plot's total cost ──
+            # The plot's total cost (price + development/lease/other charges) is
+            # the single source of truth. The API must reject a booking value
+            # below it, so callers cannot bypass the price check.
+            total = data.get('total_amount')
+            plot_total_cost = plot.total_cost if hasattr(plot, 'total_cost') else (plot.price or 0)
+            if total is not None and plot_total_cost:
+                if Decimal(str(total)) < Decimal(str(plot_total_cost)):
+                    raise serializers.ValidationError(
+                        f'Total amount (Rs. {int(total)}) is below the plot total cost '
+                        f'(Rs. {int(plot_total_cost)}, price + development/lease/other charges).'
+                    )
+
+            # ─── Task 1: deposit/holding amount consistency ────────────────
+            required_deposit = plot.holding_deposit if plot.holding_deposit is not None else 0
+            advance = data.get('advance_paid')
+            if required_deposit and (advance is None or Decimal(str(advance)) < Decimal(str(required_deposit))):
+                raise serializers.ValidationError(
+                    {'advance_paid': f'Advance/holding deposit must be at least the required '
+                                     f'token amount (Rs. {required_deposit}) for this plot.'}
+                )
+
             # A plot can only be booked if it is currently available or
             # reserved for this same customer. This prevents double-booking.
             if plot.status in ('booked', 'sold'):
@@ -156,7 +179,6 @@ class BookingCreateSerializer(serializers.ModelSerializer):
                     {'plot': f'Plot {plot.plot_number} already has an active booking.'}
                 )
         return data
-
 
 class BookingDetailSerializer(serializers.ModelSerializer):
     """Full booking detail with payments and installments."""

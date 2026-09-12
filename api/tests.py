@@ -175,12 +175,25 @@ class BookingApiTests(ApiBaseTestCase):
     def test_confirm_booking(self):
         booking = Booking.objects.create(
             customer=self.customer, plot=self.create_available_plot(),
-            total_amount=Decimal('3000000'), status='pending', created_by=self.admin,
+            total_amount=Decimal('3000000'), advance_paid=Decimal('300000'),
+            status='pending', created_by=self.admin,
         )
         resp = self.client.post(reverse('booking-confirm', args=[booking.pk]), format='json')
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         booking.refresh_from_db()
         self.assertEqual(booking.status, 'confirmed')
+
+    def test_confirm_booking_blocked_without_advance(self):
+        # Client req: a booking with 0 advance cannot reach Confirmed (API guard).
+        booking = Booking.objects.create(
+            customer=self.customer, plot=self.create_available_plot(),
+            total_amount=Decimal('3000000'), advance_paid=Decimal('0'),
+            status='pending', created_by=self.admin,
+        )
+        resp = self.client.post(reverse('booking-confirm', args=[booking.pk]), format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, 'pending')
 
     def test_cancel_booking(self):
         booking = Booking.objects.create(
@@ -303,6 +316,11 @@ class RefundApiTests(ApiBaseTestCase):
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 
     def test_approve_refund(self):
+        # Refunds are capped at the booking's refundable amount (verified paid).
+        Payment.objects.create(
+            booking=self.booking, amount=Decimal('100000'),
+            payment_date=date.today(), status='verified', created_by=self.admin,
+        )
         refund = Refund.objects.create(booking=self.booking, amount=Decimal('50000'), reason='other')
         resp = self.client.post(reverse('refund-approve', args=[refund.pk]), format='json')
         self.assertEqual(resp.status_code, status.HTTP_200_OK)

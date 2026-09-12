@@ -640,6 +640,11 @@ def customer_create_view(request):
                     nominee = nominee_form.save(commit=False)
                     nominee.customer = customer
                     nominee.save()
+            # Send a welcome email on successful creation. Wrapped inside
+            # send_customer_welcome so a broken email can never break the
+            # customer transaction that just succeeded.
+            from notifications.services import NotificationService
+            NotificationService.send_customer_welcome(customer, user=request.user)
             AuditLog.objects.create(
                 user=request.user, action='create', model_name='Customer',
                 object_id=customer.customer_id,
@@ -723,6 +728,56 @@ def customer_edit_view(request, pk):
         'title': f'Edit Customer {customer.customer_id}',
         'customer': customer,
     })
+
+@login_required
+def customer_nominee_manage_view(request, pk):
+    """Add or edit a nominee for a customer from the Customer detail page.
+
+    Lets a customer created through a lead (which has no nominee) add nominee
+    information later, without editing the whole customer profile.
+    """
+    from customers.forms import CustomerNomineeForm
+    from customers.models import Customer
+
+    customer = get_object_or_404(Customer, pk=pk)
+    nominee = getattr(customer, 'nominee', None)
+    is_edit = nominee is not None
+
+    if request.method == 'POST':
+        form = CustomerNomineeForm(request.POST, instance=nominee)
+        if form.is_valid():
+            with transaction.atomic():
+                data = form.cleaned_data
+                if not data.get('nominee_name'):
+                    # Clearing the form removes the nominee.
+                    if nominee:
+                        nominee.delete()
+                else:
+                    nominee = form.save(commit=False)
+                    nominee.customer = customer
+                    nominee.save()
+            AuditLog.objects.create(
+                user=request.user, action='update', model_name='CustomerNominee',
+                object_id=customer.customer_id,
+                description=('Removed nominee' if not data.get('nominee_name')
+                             else f'{"Updated" if is_edit else "Added"} nominee for {customer.full_name}')
+            )
+            messages.success(
+                request,
+                f'Nominee {"updated" if is_edit else "added"} for {customer.full_name} successfully.'
+            )
+            return redirect('customer_detail', pk=customer.pk)
+    else:
+        form = CustomerNomineeForm(instance=nominee)
+
+    return render(request, 'customer_nominee_form.html', {
+        'form': form,
+        'customer': customer,
+        'nominee': nominee,
+        'is_edit': is_edit,
+        'title': f'{"Edit" if is_edit else "Add"} Nominee - {customer.full_name}',
+    })
+
 
 
 @login_required
@@ -819,6 +874,7 @@ def project_create_view(request):
 
 
 @login_required
+@management_or_above
 def project_edit_view(request, pk):
     from properties.forms import ProjectForm
     
@@ -844,6 +900,16 @@ def project_edit_view(request, pk):
 @management_or_above
 def project_delete_view(request, pk):
     project = get_object_or_404(Project, pk=pk)
+    # Dependency guard: a project with plots (and therefore bookings, payments,
+    # expenses linked through those plots) must NOT be deleted — doing so would
+    # cascade away financial history. Refuse and suggest marking it inactive.
+    if project.plots.exists():
+        messages.error(
+            request,
+            f'Cannot delete project "{project.name}" — it has {project.plots.count()} plot(s). '
+            'Delete or move those plots first, or mark the project inactive instead.'
+        )
+        return redirect('properties')
     if request.method == 'POST':
         project_name = project.name
         project.delete()
@@ -1178,9 +1244,103 @@ def booking_delete_view(request, pk):
 
 @login_required
 @management_or_above
+def booking_cancel_view(request, pk):
+    """Cancel a booking and consistently release the plot.
+
+    Cancellation requires no verified payments (a booking with money must go
+    through the refund workflow instead — matching the existing delete guard),
+    sets the status/cancelled timestamps, and returns the plot to available.
+    """
+    booking = get_object_or_404(Booking, pk=pk)
+    if booking.status == 'cancelled':
+        messages.info(request, f'Booking {booking.booking_id} is already cancelled.')
+        return redirect('booking_detail', pk=pk)
+
+    from django.db.models import Sum
+    verified_amount = booking.payments.filter(status='verified').aggregate(
+        total=Sum('amount'))['total'] or 0
+    if verified_amount > 0:
+        messages.error(
+            request,
+            'This booking has verified payments. Process a refund before cancelling it.'
+        )
+        return redirect('booking_detail', pk=pk)
+
+    if request.method == 'POST':
+        reason = request.POST.get('reason', 'customer_request')
+        notes = request.POST.get('notes', '')
+
+        plot = booking.plot
+        plot.status = 'available'
+        plot.save(update_fields=['status', 'updated_at'])
+
+        booking.status = 'cancelled'
+        booking.cancelled_at = timezone.now()
+        booking.cancelled_by = request.user
+        booking.cancelled_reason = reason
+        if notes:
+            booking.notes = (booking.notes + '\n---\nCancelled: ' + notes) if booking.notes else notes
+        booking.save()
+
+        AuditLog.objects.create(
+            user=request.user, action='cancel', model_name='Booking',
+            object_id=booking.booking_id,
+            description=f'Cancelled booking {booking.booking_id} - Reason: {reason}'
+        )
+        messages.success(request, f'Booking {booking.booking_id} cancelled successfully.')
+        return redirect('booking_detail', pk=pk)
+
+    return render(request, 'booking_cancel.html', {'booking': booking})
+
+
+@login_required
+@management_or_above
+def booking_reopen_view(request, pk):
+    """Reopen a cancelled booking back to pending and reserve its plot."""
+    booking = get_object_or_404(Booking, pk=pk)
+    if booking.status != 'cancelled':
+        messages.info(request, f'Booking {booking.booking_id} is not cancelled.')
+        return redirect('booking_detail', pk=pk)
+
+    if request.method == 'POST':
+        plot = booking.plot
+        plot.status = 'reserved'
+        plot.save(update_fields=['status', 'updated_at'])
+
+        booking.status = 'pending'
+        booking.reopened_at = timezone.now()
+        booking.cancelled_reason = ''
+        booking.save()
+
+        AuditLog.objects.create(
+            user=request.user, action='update', model_name='Booking',
+            object_id=booking.booking_id,
+            description=f'Reopened booking {booking.booking_id} (was cancelled)'
+        )
+        messages.success(request, f'Booking {booking.booking_id} reopened to pending.')
+        return redirect('booking_detail', pk=pk)
+
+    return render(request, 'booking_reopen.html', {'booking': booking})
+
+
+
+@login_required
+@management_or_above
 def booking_confirm_view(request, pk):
     """Confirm a pending booking status"""
     booking = get_object_or_404(Booking, pk=pk)
+    # ─── Task 2: a booking with 0 advance payment cannot be confirmed ─────
+    # A booking must have some advance/holding payment before it can reach
+    # Confirmed status. This is enforced here (and in the API) so callers
+    # cannot bypass it. The plot's required holding deposit is the floor.
+    if booking.advance_paid <= 0:
+        messages.error(
+            request,
+            'Cannot confirm booking: no advance payment has been recorded. '
+            'Record the deposit/advance before confirming.'
+        )
+        return redirect('booking_detail', pk=pk)
+
     
     # Only allow confirming pending bookings
     if booking.status != 'pending':
@@ -2153,6 +2313,7 @@ def portal_view(request):
 
     context = {
         'customer': customer,
+        'nominee': getattr(customer, 'nominee', None),
         'summary': {
             'total_bookings': bookings_qs.count(),
             'total_paid': float(total_paid),

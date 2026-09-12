@@ -29,6 +29,7 @@ urlpatterns = [
     path('customers/create-profile/', core_views.customer_profile_create_view, name='customer_profile_create'),
     path('customers/<int:pk>/', core_views.customer_detail_view, name='customer_detail'),
     path('customers/<int:pk>/edit/', core_views.customer_edit_view, name='customer_edit'),
+    path('customers/<int:pk>/nominee/', core_views.customer_nominee_manage_view, name='customer_nominee_manage'),
     path('customers/<int:pk>/delete/', core_views.customer_delete_view, name='customer_delete'),
     
     # Properties
@@ -49,6 +50,8 @@ urlpatterns = [
     path('bookings/<int:pk>/edit/', core_views.booking_edit_view, name='booking_edit'),
     path('bookings/<int:pk>/confirm/', core_views.booking_confirm_view, name='booking_confirm'),
     path('bookings/<int:pk>/delete/', core_views.booking_delete_view, name='booking_delete'),
+    path('bookings/<int:pk>/cancel/', core_views.booking_cancel_view, name='booking_cancel'),
+    path('bookings/<int:pk>/reopen/', core_views.booking_reopen_view, name='booking_reopen'),
     
     path('bookings/<int:pk>/transfer/', core_views.booking_transfer_view, name='booking_transfer'),
 
@@ -119,6 +122,7 @@ urlpatterns = [
     path('refunds/', views_workflow.refunds_view, name='refunds'),
     path('refunds/create/', views_workflow.refund_create_view, name='refund_create'),
     path('refunds/<int:pk>/approve/', views_workflow.refund_approve_view, name='refund_approve'),
+    path('refunds/<int:pk>/process/', views_workflow.refund_process_view, name='refund_process'),
 
     # Reports & settings
     path('reports/receivables/', views_settings.receivables_aging_view, name='receivables_aging'),

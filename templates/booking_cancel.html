@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Cancel Booking - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    <div class="top-bar">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <span class="top-bar-title">Cancel Booking {{ booking.booking_id }}</span>
+        <div class="top-bar-actions"></div>
+    </div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header"><h1>Cancel Booking {{ booking.booking_id }}</h1></div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>⚠️ Confirm Cancellation</h3></div>
+            <p style="margin:16px 0; color:var(--text-secondary);">
+                You are about to cancel booking
+                <strong>{{ booking.booking_id }}</strong> for
+                <strong>{{ booking.customer.full_name }}</strong>
+                (Plot {{ booking.plot.plot_number }}, {{ booking.plot.project.name }}).
+                The plot will be released back to <strong>Available</strong>.
+            </p>
+            <p style="margin:8px 0 20px; color:var(--text-secondary);">
+                Total: Rs. {{ booking.total_amount|floatformat:0 }} &nbsp;|&nbsp;
+                Advance Paid: Rs. {{ booking.advance_paid|floatformat:0 }} &nbsp;|&nbsp;
+                Remaining: Rs. {{ booking.remaining_balance|floatformat:0 }}
+            </p>
+
+            <form method="post" novalidate>
+                {% csrf_token %}
+                <div class="form-group">
+                    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Cancellation Reason</label>
+                    <select name="reason" class="form-control">
+                        <option value="customer_request">Customer Request</option>
+                        <option value="payment_default">Payment Default</option>
+                        <option value="transfer">Transfer to Another Booking</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Notes</label>
+                    <textarea name="notes" class="form-control" rows="3" placeholder="Cancellation notes..."></textarea>
+                </div>
+
+                <div class="btn-group" style="margin-top:24px;">
+                    <button type="submit" class="btn btn-danger">✕ Confirm Cancellation</button>
+                    <a href="{% url 'booking_detail' booking.pk %}" class="btn btn-secondary">← Back</a>
+                </div>
+            </form>
+        </div>
+    </main>
+</div>
+{% endblock %}

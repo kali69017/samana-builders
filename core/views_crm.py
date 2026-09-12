@@ -193,6 +193,9 @@ def lead_convert_view(request, pk):
             lead.converted_customer = customer
             lead.save()
 
+        from notifications.services import NotificationService
+        NotificationService.send_customer_welcome(customer, user=request.user)
+
         _log(request, 'update', 'Lead', lead.pk,
              f'Converted lead {lead.display_name} to customer {customer.customer_id}')
         messages.success(request, f'Lead converted to customer {customer.customer_id}!')

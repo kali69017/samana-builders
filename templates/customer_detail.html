@@ -133,31 +133,43 @@
         </div>
 
         <!-- Nominee Information -->
-        {% if nominee %}
-        <div class="card animate-fade-up stagger-2">
-            <div class="card-header">
-                <h3>👥 Nominee Information</h3>
-            </div>
-            <div class="detail-grid" style="grid-template-columns:1fr 1fr 1fr 1fr;">
-                <div class="detail-item">
-                    <div class="detail-label">Nominee Name</div>
-                    <div class="detail-value" style="font-size:15px;">{{ nominee.nominee_name }}</div>
+                {% if nominee %}
+                <div class="card animate-fade-up stagger-2">
+                    <div class="card-header">
+                        <h3>👥 Nominee Information</h3>
+                        <a href="{% url 'customer_nominee_manage' customer.pk %}" class="btn btn-secondary btn-sm">✏️ Edit Nominee</a>
+                    </div>
+                    <div class="detail-grid" style="grid-template-columns:1fr 1fr 1fr 1fr;">
+                        <div class="detail-item">
+                            <div class="detail-label">Nominee Name</div>
+                            <div class="detail-value" style="font-size:15px;">{{ nominee.nominee_name }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Relationship</div>
+                            <div class="detail-value" style="font-size:15px;">{{ nominee.relationship|default:"Not specified" }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">CNIC</div>
+                            <div class="detail-value" style="font-size:15px; font-family:monospace;">{{ nominee.nominee_cnic|default:"Not provided" }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Phone</div>
+                            <div class="detail-value" style="font-size:15px;">{{ nominee.nominee_phone|default:"Not provided" }}</div>
+                        </div>
+                    </div>
                 </div>
-                <div class="detail-item">
-                    <div class="detail-label">Relationship</div>
-                    <div class="detail-value" style="font-size:15px;">{{ nominee.relationship|default:"Not specified" }}</div>
+                {% else %}
+                <div class="card animate-fade-up stagger-2">
+                    <div class="card-header">
+                        <h3>👥 Nominee Information</h3>
+                        <a href="{% url 'customer_nominee_manage' customer.pk %}" class="btn btn-primary btn-sm">+ Add Nominee</a>
+                    </div>
+                    <div class="empty-state" style="padding:12px 20px;">
+                        <div class="empty-icon">👥</div>
+                        <p style="color:var(--text-secondary);">No nominee added yet. <a href="{% url 'customer_nominee_manage' customer.pk %}">Add one now</a>.</p>
+                    </div>
                 </div>
-                <div class="detail-item">
-                    <div class="detail-label">CNIC</div>
-                    <div class="detail-value" style="font-size:15px; font-family:monospace;">{{ nominee.nominee_cnic|default:"Not provided" }}</div>
-                </div>
-                <div class="detail-item">
-                    <div class="detail-label">Phone</div>
-                    <div class="detail-value" style="font-size:15px;">{{ nominee.nominee_phone|default:"Not provided" }}</div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
+                {% endif %}
 
         <!-- Financial Summary -->
         <div class="card animate-fade-up stagger-3">

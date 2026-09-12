@@ -6,15 +6,54 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Real Estate Management ERP + corporate website for Samana Builders & Developers. Django 6.0 + Django REST Framework backend serving two frontends: a server-rendered ERP (Django templates) and a corporate marketing site (also Django templates, with a compiled React build artifact in `frontend/dist/`). SQLite for dev, PostgreSQL for production.
 
+## Work status (last updated 2026-09-12)
+
+### Uncommitted batch: client-feedback round (NOT committed yet)
+
+The working tree holds an uncommitted round of client-feedback fixes — **43 modified + 12 new files** across bookings, payments/refunds, expenses, finance, HR, properties, notifications, core views, and templates. It is fully implemented and the affected pages were verified in the browser, but nothing is committed yet; it still needs review + commit + push. (This CLAUDE.md refresh is uncommitted as well.)
+
+What the batch delivers:
+
+1. **Booking pricing guardrails** — `Plot` gained `development_charge`, `lease_charge`, `other_charges`; `Plot.total_charges` and `Plot.total_cost` (price + charges) are the single source of truth. Booking create/edit forms and the API serializer reject a `total_amount` below `plot.total_cost` and an `advance_paid` below `plot.holding_deposit`. `Booking` also gained `payment_plan` / `amount_paid` / `total_charges` display helpers.
+2. **Confirm requires an advance** — `booking_confirm_view` and the API `confirm` action refuse to confirm when `advance_paid <= 0`.
+3. **Cancel / reopen bookings** — new `booking_cancel_view` / `booking_reopen_view` (+ `booking_cancel.html`, `booking_reopen.html`, URL routes). Cancel is blocked while verified payments exist (refund first); it releases the plot to `available` and records `cancelled_at` / `cancelled_by` / `cancelled_reason`. Reopen returns the booking to `pending`, stamps `reopened_at`, and re-reserves the plot. Both write AuditLog entries.
+4. **Refund workflow upgrade** — `Refund` gained `refund_method`, `refund_date`, `supporting_document`, `processed_by`, `updated_at`, an `amount > 0` constraint, and `-created_at` ordering. Computed helpers: `total_paid`, `total_refunded`, `refundable_amount` (verified payments − non-rejected refunds), `refund_percentage`. Lifecycle: `pending → approved → processed | rejected`; `process()` marks it processed and posts exactly one ledger row (idempotent, skips if already posted). Validation enforced on model + form + serializer. UI: process button on `refunds.html`; API: `approve` / `reject` / `process` actions with audit logging.
+5. **Expense approval workflow** — `Expense` gained `status` (`pending → approved → paid | rejected`), `approved_by` / `approved_at`, `payment_reference`, `receipt_attachment`. New approve / reject / mark-paid views + URLs; approve and mark-paid post the expense to the ledger exactly once; approved/paid expenses are locked from editing.
+6. **Ledger de-duplication** — unique constraint on `AccountTransaction` (`reference_type`, `reference_id`); refunds, expenses, and salary payments post via idempotent `update_or_create` keyed on that pair.
+7. **Deletion guards** — a project with plots cannot be deleted; an office with expenses or ledger transactions cannot be deleted.
+8. **Nominee management** — `customer_nominee_manage_view` + `customer_nominee_form.html` lets staff add/edit/remove a customer's nominee (also shown on customer detail + the portal).
+9. **Customer welcome email** — `NotificationService.send_customer_welcome()` fires on customer create (UI + API) and lead conversion; failure-safe and skipped when no email. New `customer_welcome` notification type.
+10. **Milestones** — `ProjectMilestone` gained `start_date`, `milestone_type`, `completion_percent`, `progress_date`; form, list (progress bar), and detail updated.
+11. **UI polish** — `money` template filter; print stylesheet (hides chrome) + Print button on the sales report; refreshed properties / expenses / refunds / offices / milestones tables.
+
+New files in the batch: `api/tests_booking_pricing.py`; 7 migrations (`bookings/0005`, `expenses/0003`, `finance/0004`, `notifications/0003`, `payments/0007`, `properties/0006`, `properties/0007`); `templates/booking_cancel.html`, `templates/booking_reopen.html`, `templates/customer_nominee_form.html`; `Business_SMS_API_3.0.pdf`.
+
+**Verification (2026-09-12):** full Django suite green — 663/663, `OK` — when run with `DJANGO_DEBUG=True` and the shared venv (see the Commands notes), plus a browser walkthrough of the affected pages.
+
+**Next step:** review + commit + push the batch.
+
+### SMS (SendPK) status
+
+The SMS channel is wired to the SendPK HTTP API (`SMSService`) but **disabled in the local `.env`** (`SENDPK_ENABLED=False`, no `SENDPK_API_KEY`). Reference docs: `sendpk_documentation.md` (gitignored) and `Business_SMS_API_3.0.pdf`. Live account findings (2026-09):
+
+- Sends work and are billed (~3.9 PKR/SMS). "Accepted for delivery" only means queued; the delivery report is where real per-number status shows.
+- On the shared sender route the message arrived on Telenor showing a generic "TEXT SMS" sender — shared sender names are not carried reliably, and the brand only appears in the auto-appended footer.
+- Showing **SAMANA** as the sender requires a branded sender mask approval (one-time; account verification documents needed). After approval set `SENDPK_SENDER_ID=SAMANA` (see the comment in `settings.py`).
+- A ported number (Ufone → Jazz) did not receive the shared-route message (routing follows the original operator). For ported numbers pass the `network` parameter (Jazz/Zong/Ufone/Telenor), or verify the branded route resolves MNP automatically.
+
+### Production deploy notes
+
+Recent commits on `main` (through `6fceafa`, Aug 31) cover prod safety: `DEBUG` defaults to False in production, CSRF trusted origins + secure proxy/cookie settings, and AI/DeepSeek env mappings in compose. Prod is docker-compose on the VPS; env vars (`DJANGO_SECRET_KEY`, `DB_*`, `EMAIL_*`, `SENDPK_*`, `DEEPSEEK_API_KEY`) must be supplied there. The uncommitted batch above is not deployed.
+
 ## Commands
 
-The virtualenv is **`.venv312`** (Python 3.12), not `venv` as the README says.
+The working virtualenv is **`D:\samana\.venv312`** (Python 3.12) — activate it as below, or call its `Scripts\python.exe` directly. Always run with `PYTHONPATH` unset (`env -u PYTHONPATH` in bash): a stray `PYTHONPATH` from the surrounding tooling can shadow the venv packages and break imports. Note: the `.venv312` inside this checkout is an incomplete copy (no pydantic / langchain, so the AI-backed tests fail under it) — use the shared venv for the full run. The README's `venv` is stale.
 
 ```powershell
 # Activate (PowerShell)
-.\.venv312\Scripts\Activate.ps1
+D:\samana\.venv312\Scripts\Activate.ps1
 # or Bash
-source .venv312/Scripts/activate
+source /d/samana/.venv312/Scripts/activate
 
 # Run dev server
 python manage.py runserver
@@ -23,16 +62,21 @@ python manage.py runserver
 python manage.py makemigrations
 python manage.py migrate
 
-# Tests — full suite, one app, or a single test
-python manage.py test
-python manage.py test payments
-python manage.py test payments.tests.PaymentModelTest.test_payment_id_generation
+# Tests — full suite, one app, or a single test.
+# IMPORTANT: prefix DJANGO_DEBUG=True (bash) or set $env:DJANGO_DEBUG='True'
+# (PowerShell) — see the note below the commands. Without it the suite
+# mass-fails with 301 redirects (SECURE_SSL_REDIRECT is `not DEBUG`).
+DJANGO_DEBUG=True python manage.py test
+DJANGO_DEBUG=True python manage.py test payments
+DJANGO_DEBUG=True python manage.py test payments.tests.PaymentModelTest.test_payment_id_generation
 
 # Django shell / superuser / migrations check
 python manage.py shell
 python manage.py createsuperuser
 python manage.py showmigrations
 ```
+
+**Set `DJANGO_DEBUG=True` when running tests.** With the `.env` default (`DJANGO_DEBUG=False`), `SECURE_SSL_REDIRECT` redirects every test-client request (301), so the suite mass-fails with hundreds of bogus failures. Full suite: 663 tests, ~9 minutes.
 
 Default login: `admin` / `admin123`. Login URL `/login/`, post-login staff land on `/dashboard/`, customers on `/portal/`.
 
@@ -64,6 +108,9 @@ Customer ──< Booking / CustomerLedgerEntry / CustomerNominee / ReceivableAgi
 - **Booking.installment_plan** is a `OneToOneField`; `InstallmentPlan.auto_generate()` creates `Installment` rows on demand.
 - **Payments** have a status workflow (`draft → pending → verified / rejected / bounced / reversed`) and `PaymentAllocation` joins payments to installments.
 - **Expenses** are project-scoped and standalone (no customer/booking linkage).
+- **Booking lifecycle**: `pending → confirmed → ...`, plus `cancelled` (cancel releases the plot to `available`; reopen returns it to `pending` and re-reserves it). Confirming requires `advance_paid > 0`; cancelling is blocked while verified payments exist (refund first). Booking amounts are validated against `Plot.total_cost` (price + development/lease/other charges) and `plot.holding_deposit`.
+- **Refunds**: `pending → approved → processed | rejected`; `refundable_amount` = verified payments − non-rejected refunds. Processing posts exactly one ledger row (idempotent).
+- **Account ledger**: `AccountTransaction` is uniquely constrained on (`reference_type`, `reference_id`); refunds, expenses, and salary payments post via idempotent `update_or_create` keyed on that pair.
 
 ### Auto-generated IDs
 
@@ -88,7 +135,12 @@ Generated from Django templates via **xhtml2pdf** (`pisa`) in `payments/pdf_util
 
 ### Notifications
 
-`notifications/services.py` provides `EmailService`, `SMSService`, `WhatsAppService`, and a `NotificationService` facade that logs every send to `NotificationLog`. Email uses Django's console backend in dev; SMS and WhatsApp are stubs (WhatsApp returns a `wa.me` click-to-chat URL). Existing triggers: payment confirmation, booking notification, installment reminder, overdue alert, receipt notification.
+`notifications/services.py` provides `EmailService`, `SMSService`, `WhatsAppService`, and a `NotificationService` facade that logs every send to `NotificationLog` (with `provider_message_id` for SMS).
+
+- **Email** — uses SMTP (Brevo relay) when `EMAIL_HOST` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` are set, otherwise Django's console backend. Gated by `EMAIL_ENABLED`.
+- **SMS** — real SendPK HTTP API integration (not a stub): posts to `sms.php` with `format=json`, normalizes Pakistani numbers to `92XXXXXXXXXX`, stores the returned message id, and has `check_delivery()` / `check_balance()` helpers. Env: `SENDPK_ENABLED`, `SENDPK_API_KEY`, `SENDPK_SENDER_ID`, `SENDPK_BASE_URL`. Currently disabled in the local `.env` (see Work status above).
+- **WhatsApp** — returns a `wa.me` click-to-chat URL only (no Business API).
+- Triggers: payment confirmation, booking notification, installment reminder, overdue alert, receipt notification, and customer welcome (fires on customer create via UI + API and on lead conversion; failure-safe so a broken email can never break the customer transaction).
 
 ### Backup / restore
 

@@ -78,13 +78,14 @@ def expenses_view(request):
 @finance_or_above
 def expense_create_view(request):
     if request.method == 'POST':
-        form = ExpenseForm(request.POST)
+        form = ExpenseForm(request.POST, request.FILES)
         if form.is_valid():
             expense = form.save(commit=False)
             expense.created_by = request.user
+            expense.status = 'pending'
             expense.save()
             _expense_log(request, 'create', expense)
-            messages.success(request, 'Expense recorded successfully!')
+            messages.success(request, 'Expense recorded successfully. It is now Pending Approval.')
             return redirect('expenses')
     else:
         form = ExpenseForm()
@@ -96,8 +97,11 @@ def expense_create_view(request):
 @finance_or_above
 def expense_edit_view(request, pk):
     expense = get_object_or_404(Expense, pk=pk)
+    if expense.status in ('approved', 'paid'):
+        messages.error(request, 'An approved/paid expense can no longer be edited.')
+        return redirect('expense_detail', pk=expense.pk)
     if request.method == 'POST':
-        form = ExpenseForm(request.POST, instance=expense)
+        form = ExpenseForm(request.POST, request.FILES, instance=expense)
         if form.is_valid():
             form.save()
             _expense_log(request, 'update', expense)
@@ -111,9 +115,74 @@ def expense_edit_view(request, pk):
 
 @login_required
 @finance_or_above
+def expense_approve_view(request, pk):
+    expense = get_object_or_404(Expense, pk=pk)
+    if expense.status in ('paid', 'rejected'):
+        messages.error(
+            request,
+            'This expense is already %s and cannot be approved.' % expense.get_status_display(),
+        )
+        return redirect('expense_detail', pk=expense.pk)
+    from django.utils import timezone
+    expense.status = 'approved'
+    expense.approved_by = request.user
+    expense.approved_at = timezone.now()
+    expense.save()
+    # Post to the final ledger exactly once (idempotent update_or_create).
+    expense.post_to_ledger(user=request.user)
+    _expense_log(request, 'verify', expense)
+    messages.success(
+        request,
+        f'Expense approved. Posted to Financial Ledger ({expense.amount}).',
+    )
+    return redirect('expenses')
+
+
+@login_required
+@finance_or_above
+def expense_mark_paid_view(request, pk):
+    expense = get_object_or_404(Expense, pk=pk)
+    if expense.status == 'rejected':
+        messages.error(request, 'A rejected expense cannot be marked paid.')
+        return redirect('expense_detail', pk=expense.pk)
+
+    was_pending = expense.status == 'pending'
+    expense.status = 'paid'
+    if was_pending and not expense.approved_by:
+        # Payment without a prior explicit approval: treat this action as
+        # approval + payment in one step.
+        from django.utils import timezone
+        expense.approved_by = request.user
+        expense.approved_at = timezone.now()
+    expense.save()
+
+    # Idempotent: update_or_create keyed on (Expense, pk) — never duplicates
+    # the ledger entry, whether or not it was already posted at approval time.
+    expense.post_to_ledger(user=request.user)
+    _expense_log(request, 'update', expense, ' (marked PAID, posted to ledger)')
+    messages.success(request, 'Expense marked as Paid and posted to the Financial Ledger.')
+    return redirect('expenses')
+
+
+@login_required
+@finance_or_above
+def expense_reject_view(request, pk):
+    expense = get_object_or_404(Expense, pk=pk)
+    if expense.status == 'paid':
+        messages.error(request, 'A paid expense cannot be rejected.')
+        return redirect('expense_detail', pk=expense.pk)
+    expense.status = 'rejected'
+    expense.save()
+    _expense_log(request, 'reject', expense)
+    messages.success(request, 'Expense rejected.')
+    return redirect('expenses')
+
+
+@login_required
+@finance_or_above
 def expense_detail_view(request, pk):
     expense = get_object_or_404(
-        Expense.objects.select_related('project', 'created_by'),
+        Expense.objects.select_related('project', 'created_by', 'approved_by'),
         pk=pk,
     )
     return render(request, 'expense_detail.html', {'expense': expense})

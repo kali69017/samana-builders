@@ -768,6 +768,8 @@ class RefundFlowTests(AuditBase):
         self.assertEqual(resp.data['status'], 'pending')
 
     def test_refund_approve(self):
+        # Refund must be backed by verified payments (refundable amount).
+        self.make_payment(amount='10000', status='verified')
         refund = Refund.objects.create(
             booking=self.booking, amount=Decimal('10000'),
             reason='overpayment', status='pending',
@@ -839,7 +841,7 @@ class NotificationFlowTests(AuditBase):
         plot = self.new_plot('AP-050')
         self.client.post(reverse('booking-list'), {
             'customer': self.customer.pk, 'plot': plot.pk,
-            'total_amount': '500000', 'advance_paid': '50000',
+            'total_amount': '800000', 'advance_paid': '50000',
         }, format='json')
         self.assertTrue(NotificationLog.objects.filter(related_booking_id__isnull=False).exists())
 
@@ -847,7 +849,7 @@ class NotificationFlowTests(AuditBase):
         plot = self.new_plot('AP-051')
         resp = self.client.post(reverse('booking-list'), {
             'customer': self.customer.pk, 'plot': plot.pk,
-            'total_amount': '500000', 'advance_paid': '0',
+            'total_amount': '800000', 'advance_paid': '0',
         }, format='json')
         b = Booking.objects.get(plot=plot)
         logs = NotificationLog.objects.filter(related_booking_id=str(b.pk))

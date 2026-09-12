@@ -275,16 +275,71 @@ class ReceiptViewSet(viewsets.ReadOnlyModelViewSet):
 
 class RefundViewSet(viewsets.ModelViewSet):
     queryset = Refund.objects.select_related(
-        'booking', 'original_payment', 'approved_by'
+        'booking', 'original_payment', 'approved_by', 'processed_by'
     ).all()
     serializer_class = RefundSerializer
     permission_classes = [IsStaffReadAdminWrite]
-    
+
+    def _audit(self, request, action, refund, note=None):
+        from core.models import AuditLog
+        AuditLog.objects.create(
+            user=request.user, action=action, model_name='Refund',
+            object_id=str(refund.pk),
+            description=note or f'{action.title()} refund of {refund.amount} '
+                                f'for booking {refund.booking.booking_id} via API'
+        )
+
+    def perform_create(self, serializer):
+        refund = serializer.save()
+        self._audit(self.request, 'create', refund)
+
+    def perform_update(self, serializer):
+        refund = serializer.save()
+        self._audit(self.request, 'update', refund)
+
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
-            refund = self.get_object()
+        refund = self.get_object()
+        if refund.status != 'pending':
+            return Response(
+                {'detail': f'Refund is already {refund.get_status_display()}.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
             refund.apply_approval(user=request.user)
-            return Response(RefundSerializer(refund).data)
+        except Exception as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit(request, 'approve', refund)
+        return Response(RefundSerializer(
+            refund, context=self.get_serializer_context()).data)
+
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        refund = self.get_object()
+        if refund.status != 'pending':
+            return Response(
+                {'detail': f'Refund is already {refund.get_status_display()}.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        refund.reject(notes=request.data.get('notes', ''), user=request.user)
+        self._audit(request, 'reject', refund)
+        return Response(RefundSerializer(
+            refund, context=self.get_serializer_context()).data)
+
+    @action(detail=True, methods=['post'])
+    def process(self, request, pk=None):
+        """Mark an approved refund as processed and post it to the ledger exactly once."""
+        refund = self.get_object()
+        if refund.status != 'approved':
+            return Response(
+                {'detail': f'Only an approved refund can be processed '
+                           f'(current status: {refund.get_status_display()}).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        refund.process(user=request.user)
+        self._audit(request, 'process', refund)
+        return Response(RefundSerializer(
+            refund, context=self.get_serializer_context()).data)
 
 
 class PaymentAllocationViewSet(viewsets.ModelViewSet):

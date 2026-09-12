@@ -26,11 +26,27 @@
                 <div class="detail-item"><div class="detail-label">Amount</div><div class="detail-value" style="color:var(--accent-red); font-weight:700; font-size:22px;">Rs. {{ expense.amount|floatformat:0 }}</div></div>
                 <div class="detail-item"><div class="detail-label">Type</div><div class="detail-value"><span class="badge badge-info">{{ expense.get_expense_type_display }}</span></div></div>
                 <div class="detail-item"><div class="detail-label">Date</div><div class="detail-value">{{ expense.expense_date|date:"d M Y" }}</div></div>
+                <div class="detail-item"><div class="detail-label">Status</div><div class="detail-value"><span class="badge badge-{% if expense.status == 'paid' %}success{% elif expense.status == 'approved' %}info{% elif expense.status == 'rejected' %}danger{% else %}warning{% endif %}">{{ expense.get_status_display }}</span></div></div>
             </div>
             <div class="card">
                 <div class="detail-item"><div class="detail-label">Project</div><div class="detail-value">{{ expense.project.name }}</div></div>
                 <div class="detail-item"><div class="detail-label">Paid To</div><div class="detail-value">{{ expense.paid_to|default:"—" }}</div></div>
+                <div class="detail-item"><div class="detail-label">Payment Reference / Cheque No.</div><div class="detail-value">{{ expense.payment_reference|default:"—" }}</div></div>
+                <div class="detail-item"><div class="detail-label">Receipt / Bill</div><div class="detail-value">{% if expense.receipt_attachment %}<a href="{{ expense.receipt_attachment.url }}" target="_blank">Download 📎</a>{% else %}—{% endif %}</div></div>
+                <div class="detail-item"><div class="detail-label">Approved By</div><div class="detail-value">{{ expense.approved_by.username|default:"—" }}{% if expense.approved_at %} on {{ expense.approved_at|date:"d M Y H:i" }}{% endif %}</div></div>
                 <div class="detail-item"><div class="detail-label">Recorded By</div><div class="detail-value">{{ expense.created_by.username }}</div></div>
+            </div>
+        </div>
+
+        <div class="page-header">
+            <div class="page-actions">
+                {% if expense.status == 'pending' %}
+                <form method="post" action="{% url 'expense_approve' expense.pk %}" class="d-inline">{% csrf_token %}<button type="submit" class="btn btn-success">✓ Approve</button></form>
+                <form method="post" action="{% url 'expense_reject' expense.pk %}" class="d-inline">{% csrf_token %}<button type="submit" class="btn btn-danger">✗ Reject</button></form>
+                {% endif %}
+                {% if expense.status == 'approved' %}
+                <form method="post" action="{% url 'expense_mark_paid' expense.pk %}" class="d-inline">{% csrf_token %}<button type="submit" class="btn btn-success">Mark Paid</button></form>
+                {% endif %}
             </div>
         </div>
 
