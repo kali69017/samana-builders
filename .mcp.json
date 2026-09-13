@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "playwright-test": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "playwright",
+        "run-test-mcp-server"
+      ]
+    },
+    "playwright": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "@playwright/mcp",
+        "--browser",
+        "chrome",
+        "--caps",
+        "vision,pdf,devtools"
+      ]
+    }
+  }
+}

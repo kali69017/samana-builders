@@ -1,0 +1,16 @@
+{
+  "name": "samana-erp-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright E2E + browser-MCP tooling for the Samana Builders ERP",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report",
+    "agents": "playwright init-agents --loop=claude"
+  },
+  "devDependencies": {
+    "@playwright/mcp": "^0.0.80",
+    "@playwright/test": "^1.63.0"
+  }
+}
