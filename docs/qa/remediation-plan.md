@@ -1,5 +1,16 @@
 # Remediation Plan — Samana Builders ERP
 
+> **STATUS (2026-09-14):** FIXED — F1/F2, F3 (API reads + web views + audit-logs + receipts),
+> F4, F5, F6 (reverse/approve guards), F7, F8, open redirect, approval bypass, office-delete
+> guard, booked-plot re-list, zero-net slip, XSS (AI insights/hr chat/project-delete), upload XSS
+> (+ migration `expenses/0004`), profile-save, UserCreateSerializer `write_only`, pay-before-process,
+> slip-item edit guard, non-numeric slip amount, nominee `blank=True` (+ migration `customers/0005`).
+> DEFERRED (design/complex): media gating (EXP-SEC-06), CustomerLedgerEntry auto-creation,
+> auto-ID race, leave over-allowance, reservation expiry, money serialization, and the
+> out-of-scope API-SEC-10 (enumeration) / API-SEC-14 (confirm BOLA).
+
+---
+
 Merged, deduplicated defect register. Source: `docs/qa/findings-confirmed.md` (F1–F8),
 `test_report.md` §3–§4, and the ~30 deterministic RED tests from the browser/API suite runs.
 Read-only register — no application code changes have been applied.

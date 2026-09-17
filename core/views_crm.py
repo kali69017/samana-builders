@@ -9,6 +9,7 @@ from django.contrib import messages
 from django.db.models import Q, Sum, Count
 from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from .models import AuditLog, Lead, LeadNote, Agent
 from .forms import LeadForm, LeadNoteForm, AgentForm
@@ -134,7 +135,10 @@ def lead_status_update_view(request, pk):
             _log(request, 'update', 'Lead', lead.pk,
                  f'Changed lead {lead.display_name} status from {old} to {valid[status]}')
             messages.success(request, f'Lead status updated to {valid[status]}.')
-    return redirect(request.POST.get('next') or 'leads')
+    next_url = request.POST.get('next') or ''
+    if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+        next_url = 'leads'
+    return redirect(next_url)
 
 
 @login_required

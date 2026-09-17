@@ -127,6 +127,9 @@ def payment_bounce_view(request, pk):
 def payment_reverse_view(request, pk):
     payment = get_object_or_404(Payment.objects.select_related('booking', 'installment'), pk=pk)
     if request.method == 'POST':
+        if payment.status != 'verified':
+            messages.error(request, f'Only verified payments can be reversed.')
+            return redirect('payment_detail', pk=pk)
         with transaction.atomic():
             payment.status = 'reversed'
             payment.save()
@@ -195,6 +198,9 @@ def refund_create_view(request):
 def refund_approve_view(request, pk):
     refund = get_object_or_404(Refund.objects.select_related('booking'), pk=pk)
     if request.method == 'POST':
+        if refund.status != 'pending':
+            messages.error(request, f'Refund is already {refund.get_status_display()}; cannot approve/reject again.')
+            return redirect('refunds')
         action = request.POST.get('action', 'approve')
         try:
             if action == 'reject':

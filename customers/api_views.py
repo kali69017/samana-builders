@@ -17,7 +17,8 @@ class IsAdminOrSuperAdmin(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
         if request.method in permissions.SAFE_METHODS:
-            return True
+            from core.permissions import is_portal_customer
+            return not is_portal_customer(request.user)
         if request.user.is_superuser:
             return True
         if hasattr(request.user, 'profile'):

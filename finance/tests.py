@@ -68,12 +68,20 @@ class FinanceAPITest(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 
     def test_create_office_expense_posts_ledger(self):
+        # status is read-only on the API (server default 'pending'); a create
+        # never auto-posts. Paying via the 'pay' action posts the ledger row.
         resp = self.client.post(reverse('officeexpense-list'), {
             'office': self.office.pk, 'category': self.category.pk, 'amount': '25000',
-            'expense_date': date.today().isoformat(), 'status': 'paid',
+            'expense_date': date.today().isoformat(),
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(AccountTransaction.objects.filter(transaction_type='office_expense').exists())
+        oe_id = resp.data['id']
+        self.assertFalse(AccountTransaction.objects.filter(
+            reference_type='OfficeExpense', reference_id=oe_id).exists())
+        pay_resp = self.client.post(reverse('officeexpense-pay', args=[oe_id]), format='json')
+        self.assertEqual(pay_resp.status_code, status.HTTP_200_OK)
+        self.assertTrue(AccountTransaction.objects.filter(
+            reference_type='OfficeExpense', reference_id=oe_id).exists())
 
     def test_create_office_expense_zero_rejected(self):
         resp = self.client.post(reverse('officeexpense-list'), {
@@ -82,12 +90,17 @@ class FinanceAPITest(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_create_project_cost_posts_ledger(self):
+        # status is read-only on the API (server default 'pending'); a create
+        # never auto-posts to the ledger.
         resp = self.client.post(reverse('projectcost-list'), {
             'project': self.project.pk, 'cost_category': 'material', 'amount': '50000',
-            'cost_date': date.today().isoformat(), 'status': 'paid',
+            'cost_date': date.today().isoformat(),
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(AccountTransaction.objects.filter(transaction_type='project_cost').exists())
+        pc = ProjectCost.objects.get(pk=resp.data['id'])
+        self.assertEqual(pc.status, 'pending')
+        self.assertFalse(AccountTransaction.objects.filter(
+            reference_type='ProjectCost', reference_id=pc.pk).exists())
 
     def test_office_expense_approve_action(self):
         expense = OfficeExpense.objects.create(office=self.office, amount=Decimal('10000'), expense_date=date.today())

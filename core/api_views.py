@@ -16,7 +16,8 @@ class IsAdminOrReadOnly(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
         if request.method in permissions.SAFE_METHODS:
-            return True
+            from core.permissions import is_portal_customer
+            return not is_portal_customer(request.user)
         return (
             request.user.is_superuser or
             (hasattr(request.user, 'profile') and
@@ -46,6 +47,18 @@ class IsStaffOrAbove(permissions.BasePermission):
             return True
         if hasattr(request.user, 'profile'):
             return request.user.profile.role in ['super_admin', 'admin']
+        return False
+
+
+class IsManagementOrAbove(permissions.BasePermission):
+    """Allow super_admin/admin/management (audit logs, booking state transitions)."""
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.is_superuser:
+            return True
+        if hasattr(request.user, 'profile'):
+            return request.user.profile.role in ['super_admin', 'admin', 'management']
         return False
 
 
@@ -102,7 +115,7 @@ class UserViewSet(viewsets.ModelViewSet):
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = AuditLog.objects.select_related('user').all()
     serializer_class = AuditLogSerializer
-    permission_classes = [IsAdminOrReadOnly]
+    permission_classes = [IsManagementOrAbove]
     
     def get_queryset(self):
         qs = super().get_queryset()

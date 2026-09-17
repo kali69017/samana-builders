@@ -164,7 +164,7 @@ class ReceivableAging(models.Model):
 
 class CustomerNominee(models.Model):
     customer = models.OneToOneField(Customer, on_delete=models.CASCADE, related_name='nominee')
-    nominee_name = models.CharField(max_length=200)
+    nominee_name = models.CharField(max_length=200, blank=True)
     nominee_cnic = models.CharField(max_length=15, blank=True)
     nominee_phone = models.CharField(max_length=20, blank=True)
     relationship = models.CharField(max_length=50, blank=True)

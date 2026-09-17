@@ -714,10 +714,13 @@ class UserProfileTests(CrmHrBase):
         self.assertEqual(profile.role, 'admin')
 
     def test_profile_invalid_role_rejected(self):
-        # Django enforces choices at the form/serializer layer, not the ORM.
-        profile = UserProfile.objects.create(user=self.admin, role='admin')
-        resp = self.client.patch(reverse('profile-update-profile'), {'role': 'wizard'}, format='json')
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+            # Role is no longer self-editable (removed from the profile form), so
+            # a PATCH that tries to set it is ignored rather than rejected.
+            profile = UserProfile.objects.create(user=self.admin, role='admin')
+            resp = self.client.patch(reverse('profile-update-profile'), {'role': 'wizard'}, format='json')
+            self.assertEqual(resp.status_code, status.HTTP_200_OK)
+            profile.refresh_from_db()
+            self.assertEqual(profile.role, 'admin')
 
     def test_profile_api(self):
         profile = UserProfile.objects.create(user=self.admin, role='super_admin')

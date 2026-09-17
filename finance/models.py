@@ -228,7 +228,7 @@ class ProjectCost(models.Model):
     cost_date = models.DateField()
     vendor = models.CharField(max_length=200, blank=True)
     invoice_ref = models.CharField(max_length=100, blank=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='paid')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     description = models.TextField(blank=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='project_costs_created')
     created_at = models.DateTimeField(auto_now_add=True)

@@ -601,6 +601,7 @@ def financial_reports_view(request):
 # ─── CUSTOMERS ───────────────────────────────────────────────────────────────────
 
 @login_required
+@management_or_above
 def customers_view(request):
     search = request.GET.get('search', '')
     customers = Customer.objects.all()
@@ -691,6 +692,7 @@ def customer_profile_create_view(request):
 
 
 @login_required
+@management_or_above
 def customer_edit_view(request, pk):
     from customers.forms import CustomerForm, CustomerNomineeForm
     
@@ -730,6 +732,7 @@ def customer_edit_view(request, pk):
     })
 
 @login_required
+@management_or_above
 def customer_nominee_manage_view(request, pk):
     """Add or edit a nominee for a customer from the Customer detail page.
 
@@ -807,6 +810,7 @@ def customer_delete_view(request, pk):
 
 
 @login_required
+@management_or_above
 def customer_detail_view(request, pk):
     customer = get_object_or_404(Customer, pk=pk)
     bookings = customer.bookings.select_related('plot', 'plot__project').all()
@@ -853,6 +857,7 @@ def properties_view(request):
 
 
 @login_required
+@management_or_above
 def project_create_view(request):
     from properties.forms import ProjectForm
     
@@ -925,6 +930,7 @@ def project_delete_view(request, pk):
 
 
 @login_required
+@management_or_above
 def plot_create_view(request):
     from properties.forms import PlotForm
     
@@ -946,10 +952,14 @@ def plot_create_view(request):
 
 
 @login_required
+@management_or_above
 def plot_edit_view(request, pk):
     from properties.forms import PlotForm
     
     plot = get_object_or_404(Plot, pk=pk)
+    if plot.status in ('booked', 'sold'):
+        messages.error(request, f'Plot {plot.plot_number} is {plot.get_status_display()} and cannot be edited.')
+        return redirect('properties')
     if request.method == 'POST':
         form = PlotForm(request.POST, instance=plot)
         if form.is_valid():
@@ -1012,6 +1022,7 @@ def plot_detail_view(request, pk):
 # ─── BOOKINGS ────────────────────────────────────────────────────────────────────
 
 @login_required
+@management_or_above
 def bookings_view(request):
     bookings = Booking.objects.select_related('customer', 'plot', 'plot__project').all()
     status_filter = request.GET.get('status', '')
@@ -1174,6 +1185,7 @@ def plan_templates_api_view(request):
 
 
 @login_required
+@management_or_above
 def booking_detail_view(request, pk):
     booking = get_object_or_404(
         Booking.objects.select_related('customer', 'plot', 'plot__project'),
@@ -1191,6 +1203,7 @@ def booking_detail_view(request, pk):
 
 
 @login_required
+@management_or_above
 def booking_edit_view(request, pk):
     from bookings.forms import BookingForm
     
@@ -1304,6 +1317,14 @@ def booking_reopen_view(request, pk):
 
     if request.method == 'POST':
         plot = booking.plot
+        # Guard: do not re-reserve a plot that now has another active booking.
+        from bookings.models import Booking as BookingModel
+        conflict = BookingModel.objects.filter(
+            plot=plot, status__in=['pending', 'confirmed', 'active']
+        ).exclude(pk=booking.pk).exists()
+        if conflict:
+            messages.error(request, f'Plot {plot.plot_number} has been re-booked; cannot reopen.')
+            return redirect('booking_detail', pk=pk)
         plot.status = 'reserved'
         plot.save(update_fields=['status', 'updated_at'])
 
@@ -1446,6 +1467,7 @@ def booking_transfer_view(request, pk):
 # ─── RESERVATION ──────────────────────────────────────────────────────────────
 
 @login_required
+@management_or_above
 def reservation_create_view(request):
     from bookings.models import Reservation
     from bookings.forms import ReservationForm
@@ -1809,6 +1831,7 @@ def invoice_pdf_view(request, pk):
 
 
 @login_required
+@management_or_above
 def customer_profile_pdf_view(request, pk):
     from payments.pdf_utils import generate_customer_profile_pdf
 

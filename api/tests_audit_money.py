@@ -411,15 +411,21 @@ class OfficeExpenseLedgerTests(MoneyBase):
         self.assertEqual(tx.office, self.office)
 
     def test_office_expense_api_create_paid_posts(self):
-        resp = self.client.post(reverse('officeexpense-list'), {
-            'office': self.office.pk, 'category': self.cat.pk,
-            'amount': '15000', 'expense_date': date.today().isoformat(),
-            'payment_method': 'cash', 'status': 'paid',
-            'description': 'Rent',
-        }, format='json')
-        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-        oe = OfficeExpense.objects.get(pk=resp.data['id'])
-        self.assertTrue(AccountTransaction.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).exists())
+            # status is read-only on the API (server-controlled default 'pending'),
+            # so a create never auto-posts; paying via the 'pay' action posts once.
+            resp = self.client.post(reverse('officeexpense-list'), {
+                'office': self.office.pk, 'category': self.cat.pk,
+                'amount': '15000', 'expense_date': date.today().isoformat(),
+                'payment_method': 'cash',
+                'description': 'Rent',
+            }, format='json')
+            self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+            oe = OfficeExpense.objects.get(pk=resp.data['id'])
+            self.assertEqual(oe.status, 'pending')
+            self.assertFalse(AccountTransaction.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).exists())
+            pay_resp = self.client.post(reverse('officeexpense-pay', args=[oe.pk]), format='json')
+            self.assertEqual(pay_resp.status_code, status.HTTP_200_OK)
+            self.assertTrue(AccountTransaction.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).exists())
 
     def test_office_expense_api_create_pending_no_ledger(self):
         resp = self.client.post(reverse('officeexpense-list'), {
@@ -517,6 +523,8 @@ class ProjectCostLedgerTests(MoneyBase):
         self.assertEqual(tx.direction, 'out')
 
     def test_project_cost_api_paid_posts(self):
+        # status is read-only on the API (server default 'pending'); posting
+        # 'paid' on create is ignored and no ledger row is auto-created.
         resp = self.client.post(reverse('projectcost-list'), {
             'project': self.project.pk, 'cost_category': 'labor',
             'amount': '30000', 'cost_date': date.today().isoformat(),
@@ -524,10 +532,12 @@ class ProjectCostLedgerTests(MoneyBase):
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         pc = ProjectCost.objects.get(pk=resp.data['id'])
-        self.assertTrue(AccountTransaction.objects.filter(reference_type='ProjectCost', reference_id=pc.pk).exists())
+        self.assertEqual(pc.status, 'pending')
+        self.assertFalse(AccountTransaction.objects.filter(reference_type='ProjectCost', reference_id=pc.pk).exists())
 
     def test_project_cost_api_pending_no_ledger(self):
-        # ProjectCost statuses: draft/approved/paid (no 'pending').
+        # A project cost created through the API stays 'pending' (status is
+        # read-only), so no ledger row is created until it is approved/paid.
         resp = self.client.post(reverse('projectcost-list'), {
             'project': self.project.pk, 'cost_category': 'labor',
             'amount': '30000', 'cost_date': date.today().isoformat(),

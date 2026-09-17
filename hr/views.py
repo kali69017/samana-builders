@@ -1,5 +1,6 @@
 """HR and Payroll ERP views."""
 from datetime import date
+from decimal import InvalidOperation
 
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -394,9 +395,14 @@ def payroll_run_process_view(request, pk):
 def payroll_run_pay_view(request, pk):
     run = get_object_or_404(PayrollRun, pk=pk)
     if request.method == 'POST':
+        if run.status != 'processed':
+            messages.error(request, 'Payroll run must be processed before it can be paid.')
+            return redirect('hr_payroll_run_detail', pk=pk)
         with transaction.atomic():
             paid = 0
             for slip in run.slips.filter(status='approved'):
+                if not slip.net or slip.net <= 0:
+                    continue  # skip zero/negative-net slips (ledger requires amount > 0)
                 payment, created = SalaryPayment.objects.get_or_create(
                     slip=slip,
                     defaults={'amount': slip.net, 'payment_date': date.today(),
@@ -430,6 +436,9 @@ def salary_slip_detail_view(request, pk):
 @hr_required
 def salary_slip_add_item_view(request, pk):
     slip = get_object_or_404(SalarySlip, pk=pk)
+    if slip.status != 'draft':
+        messages.error(request, 'Slip items cannot be edited once the slip is processed/paid.')
+        return redirect('hr_salary_slip_detail', pk=pk)
     if request.method == 'POST':
         component_id = request.POST.get('component')
         amount = request.POST.get('amount', '0')
@@ -442,7 +451,7 @@ def salary_slip_add_item_view(request, pk):
                 item.save()
             slip.recalculate()
             messages.success(request, f'Item {component.name} added/updated.')
-        except (SalaryComponent.DoesNotExist, ValueError):
+        except (SalaryComponent.DoesNotExist, ValueError, InvalidOperation):
             messages.error(request, 'Invalid component or amount.')
     return redirect('hr_salary_slip_detail', pk=pk)
 
@@ -452,6 +461,9 @@ def salary_slip_add_item_view(request, pk):
 def salary_slip_remove_item_view(request, pk):
     item = get_object_or_404(SalarySlipItem, pk=pk)
     slip_pk = item.slip.pk
+    if item.slip.status != 'draft':
+        messages.error(request, 'Slip items cannot be edited once the slip is processed/paid.')
+        return redirect('hr_salary_slip_detail', pk=slip_pk)
     if request.method == 'POST':
         item.delete()
         item.slip.recalculate()

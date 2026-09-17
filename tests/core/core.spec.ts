@@ -568,7 +568,7 @@ test.describe('CORE-SEC', () => {
       await loginViaApi(request, 'sales');
       const customers = unwrapList(await (await request.get('/api/customers/')).json());
       expect(customers.length).toBeGreaterThan(0);
-      const res = await request.get(`/customers/${customers[0].id}/`);
+      const res = await request.get(`/customers/${customers[0].id}/`, { maxRedirects: 0 });
       // Non-privileged role must be denied (302); buggy app returns 200 with PII.
       expect([302, 403]).toContain(res.status());
     });
@@ -577,7 +577,7 @@ test.describe('CORE-SEC', () => {
       await loginViaApi(request, 'sales');
       const customers = unwrapList(await (await request.get('/api/customers/')).json());
       expect(customers.length).toBeGreaterThan(0);
-      const res = await request.get(`/customers/${customers[0].id}/pdf/`);
+      const res = await request.get(`/customers/${customers[0].id}/pdf/`, { maxRedirects: 0 });
       expect([302, 403]).toContain(res.status());
     });
 
@@ -585,7 +585,7 @@ test.describe('CORE-SEC', () => {
       await loginViaApi(request, 'sales');
       const bookings = unwrapList(await (await request.get('/api/bookings/')).json());
       expect(bookings.length).toBeGreaterThan(0);
-      const res = await request.get(`/bookings/${bookings[0].id}/edit/`);
+      const res = await request.get(`/bookings/${bookings[0].id}/edit/`, { maxRedirects: 0 });
       expect([302, 403]).toContain(res.status());
     });
 
@@ -593,7 +593,7 @@ test.describe('CORE-SEC', () => {
       await loginViaApi(request, 'sales');
       const plots = unwrapList(await (await request.get('/api/plots/')).json());
       expect(plots.length).toBeGreaterThan(0);
-      const res = await request.get(`/properties/plot/${plots[0].id}/edit/`);
+      const res = await request.get(`/properties/plot/${plots[0].id}/edit/`, { maxRedirects: 0 });
       expect([302, 403]).toContain(res.status());
     });
   });

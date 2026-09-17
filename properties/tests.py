@@ -53,12 +53,16 @@ class PlotFormTest(TestCase):
 
 class PropertyViewTest(TestCase):
     def setUp(self):
-        self.client = Client()
-        self.user = User.objects.create_user('testuser', 'test@example.com', 'testpass123')
-        self.client.login(username='testuser', password='testpass123')
-        self.project = Project.objects.create(
-            name='Test Project', location='Lahore', total_plots=100
-        )
+            self.client = Client()
+            self.user = User.objects.create_user('testuser', 'test@example.com', 'testpass123')
+            # project/plot create now require management_or_above; give the test
+            # user an admin profile so they pass the gate.
+            from core.models import UserProfile
+            UserProfile.objects.create(user=self.user, role='admin')
+            self.client.login(username='testuser', password='testpass123')
+            self.project = Project.objects.create(
+                name='Test Project', location='Lahore', total_plots=100
+            )
     
     def test_properties_list_view(self):
         response = self.client.get('/properties/')

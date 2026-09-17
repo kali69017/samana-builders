@@ -12,6 +12,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
         fields = ['role', 'role_display', 'phone', 'cnic', 'is_active']
+        read_only_fields = ['role', 'is_active']
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -31,9 +32,9 @@ class UserCreateSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
     first_name = serializers.CharField(max_length=30)
     last_name = serializers.CharField(max_length=30)
-    role = serializers.ChoiceField(choices=['super_admin', 'admin', 'sales', 'accounts', 'management'])
-    phone = serializers.CharField(max_length=20, required=False, allow_blank=True)
-    cnic = serializers.CharField(max_length=15, required=False, allow_blank=True)
+    role = serializers.ChoiceField(choices=['super_admin', 'admin', 'sales', 'accounts', 'management'], write_only=True)
+    phone = serializers.CharField(max_length=20, required=False, allow_blank=True, write_only=True)
+    cnic = serializers.CharField(max_length=15, required=False, allow_blank=True, write_only=True)
 
     def validate_username(self, value):
         if User.objects.filter(username=value).exists():

@@ -1,4 +1,4 @@
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import (
@@ -18,7 +18,8 @@ class IsFinanceOrAbove(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
         if request.method in permissions.SAFE_METHODS:
-            return True
+            from core.permissions import is_portal_customer
+            return not is_portal_customer(request.user)
         if request.user.is_superuser:
             return True
         role = getattr(getattr(request.user, 'profile', None), 'role', None)
@@ -51,6 +52,16 @@ class OfficeViewSet(viewsets.ModelViewSet):
     queryset = Office.objects.all()
     serializer_class = OfficeSerializer
     permission_classes = [IsFinanceOrAbove]
+
+    def destroy(self, request, *args, **kwargs):
+        office = self.get_object()
+        if office.expenses.exists() or office.transactions.exists():
+            return Response(
+                {'error': f"Cannot delete office '{office.name}' — it still has "
+                          'expenses or ledger transactions.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
 
 
 class ExpenseCategoryViewSet(viewsets.ModelViewSet):

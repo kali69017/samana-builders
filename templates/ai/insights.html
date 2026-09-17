@@ -253,7 +253,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 item.className = 'history-item';
                 item.setAttribute('data-response', data.result.replace(/"/g, '&quot;'));
                 item.style.cssText = 'cursor:pointer; padding:10px 12px; background:var(--bg); border:1px solid var(--border); border-radius:10px; font-size:13px;';
-                const preview = data.result.slice(0, 140);
+                const preview = String(data.result || '').slice(0, 140).replace(/[&<>"']/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});
                 item.innerHTML = '<div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">' +
                     '<span class="badge badge-info">Insights</span>' +
                     '<span style="color:var(--text-3); font-size:11px;">just now</span></div>' +

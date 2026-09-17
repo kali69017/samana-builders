@@ -57,7 +57,7 @@ class OfficeExpenseSerializer(serializers.ModelSerializer):
         fields = ['id', 'office', 'office_name', 'category', 'category_name', 'amount',
                   'expense_date', 'paid_to', 'payment_method', 'status', 'status_display',
                   'description', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        read_only_fields = ['id', 'created_at', 'status']
 
     def validate_amount(self, value):
         if value is not None and value <= 0:
@@ -75,7 +75,7 @@ class ProjectCostSerializer(serializers.ModelSerializer):
         fields = ['id', 'project', 'project_name', 'cost_category', 'cost_category_display',
                   'amount', 'cost_date', 'vendor', 'invoice_ref', 'status', 'status_display',
                   'description', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        read_only_fields = ['id', 'created_at', 'status']
 
     def validate_amount(self, value):
         if value is not None and value <= 0:

@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 from django.contrib import messages
 from django.db.models import Sum, Count
 from django.shortcuts import render, redirect, get_object_or_404
@@ -115,6 +116,7 @@ def expense_edit_view(request, pk):
 
 @login_required
 @finance_or_above
+@require_POST
 def expense_approve_view(request, pk):
     expense = get_object_or_404(Expense, pk=pk)
     if expense.status in ('paid', 'rejected'):
@@ -140,6 +142,7 @@ def expense_approve_view(request, pk):
 
 @login_required
 @finance_or_above
+@require_POST
 def expense_mark_paid_view(request, pk):
     expense = get_object_or_404(Expense, pk=pk)
     if expense.status == 'rejected':
@@ -166,6 +169,7 @@ def expense_mark_paid_view(request, pk):
 
 @login_required
 @finance_or_above
+@require_POST
 def expense_reject_view(request, pk):
     expense = get_object_or_404(Expense, pk=pk)
     if expense.status == 'paid':

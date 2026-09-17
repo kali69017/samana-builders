@@ -29,7 +29,7 @@ class OfficeExpenseForm(forms.ModelForm):
     class Meta:
         model = OfficeExpense
         fields = ['office', 'category', 'amount', 'expense_date', 'paid_to',
-                  'payment_method', 'status', 'description']
+                  'payment_method', 'description']
         widgets = {
             'office': forms.Select(attrs={'class': 'form-control'}),
             'category': forms.Select(attrs={'class': 'form-control'}),
@@ -57,7 +57,7 @@ class ProjectCostForm(forms.ModelForm):
     class Meta:
         model = ProjectCost
         fields = ['project', 'cost_category', 'amount', 'cost_date', 'vendor',
-                  'invoice_ref', 'status', 'description']
+                  'invoice_ref', 'description']
         widgets = {
             'project': forms.Select(attrs={'class': 'form-control'}),
             'cost_category': forms.Select(attrs={'class': 'form-control'}),

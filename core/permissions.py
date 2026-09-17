@@ -27,6 +27,15 @@ HR_MANAGEMENT_ROLES = (SUPER_ADMIN, ADMIN, MANAGEMENT, HR)
 PAYROLL_ROLES = (SUPER_ADMIN, ADMIN, MANAGEMENT, HR, ACCOUNTS)
 
 
+def is_portal_customer(user):
+    """True if the (authenticated) user is a portal customer — i.e. linked to a
+    Customer row. Portal customers must not read staff/financial data via the API."""
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    from customers.models import Customer
+    return Customer.objects.filter(user=user).exists()
+
+
 def get_user_role(request):
     """Return the effective ERP role for the request user (or None)."""
     if not request.user.is_authenticated:

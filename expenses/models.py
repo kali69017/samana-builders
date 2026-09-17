@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.core.validators import FileExtensionValidator
 
 
 class Expense(models.Model):
@@ -38,6 +39,7 @@ class Expense(models.Model):
     )
     receipt_attachment = models.FileField(
         upload_to='expenses/receipts/', blank=True, null=True,
+        validators=[FileExtensionValidator(['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp'])],
         verbose_name='Receipt / Bill Attachment',
         help_text='Upload a scanned receipt, bill, or invoice as proof.',
     )

@@ -148,4 +148,4 @@ class LeaveSerializer(serializers.ModelSerializer):
         fields = ['id', 'employee', 'employee_name', 'leave_type', 'leave_type_display',
                   'start_date', 'end_date', 'days', 'reason', 'status', 'status_display',
                   'approved_by', 'applied_on']
-        read_only_fields = ['id', 'applied_on', 'approved_by']
+        read_only_fields = ['id', 'applied_on', 'approved_by', 'status']

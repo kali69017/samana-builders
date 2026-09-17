@@ -8,7 +8,7 @@ class UserForm(forms.ModelForm):
     """Form for editing User fields."""
     class Meta:
         model = User
-        fields = ['first_name', 'last_name', 'email', 'is_active']
+        fields = ['first_name', 'last_name', 'email']
         widgets = {
             'first_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
             'last_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
@@ -18,10 +18,10 @@ class UserForm(forms.ModelForm):
 
 
 class UserProfileForm(forms.ModelForm):
-    """Form for editing UserProfile fields."""
+    """Form for editing UserProfile fields (self-service: role/is_active are not user-editable)."""
     class Meta:
         model = UserProfile
-        fields = ['role', 'theme', 'is_active']
+        fields = ['theme']
         widgets = {
             'role': forms.Select(attrs={'class': 'form-control'}),
             'theme': forms.Select(attrs={'class': 'form-control'}),

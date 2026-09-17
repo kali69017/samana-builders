@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const q = hrInput.value.trim();
         if (!q) return;
         if (askBtn) { askBtn.classList.add('loading'); askBtn.disabled = true; }
-        hrChat.insertAdjacentHTML('beforeend', '<div class="msg user">' + q.replace(/</g, '&lt;') + '</div>');
+        hrChat.insertAdjacentHTML('beforeend', '<div class="msg user">' + q.replace(/[&<>"']/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}) + '</div>');
         hrInput.value = '';
         const bot = document.createElement('div');
         bot.className = 'msg bot';

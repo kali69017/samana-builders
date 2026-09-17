@@ -120,7 +120,7 @@
                                                     <td>
                                                         <div class="table-actions">
                                                             <a href="{% url 'project_edit' project.pk %}" class="btn btn-secondary btn-sm">Edit</a>
-                                                            <a href="{% url 'project_delete' project.pk %}" class="btn btn-danger btn-sm" onclick="return confirm('Delete project \'{{ project.name }}\'? This cannot be undone.');">Delete</a>
+                                                            <a href="{% url 'project_delete' project.pk %}" class="btn btn-danger btn-sm" onclick="return confirm('Delete project \'{{ project.name|escapejs }}\'? This cannot be undone.');">Delete</a>
                                                         </div>
                                                     </td>
                                                 </tr>
