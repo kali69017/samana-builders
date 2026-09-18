@@ -18,7 +18,7 @@ from customers.models import Customer
 from expenses.models import Expense
 from finance.models import (
     AccountTransaction, Office, ExpenseCategory, OfficeExpense, ProjectCost,
-    ProjectBudget, ProjectInvestment,
+    ProjectBudget, ProjectInvestment, Voucher,
 )
 from notifications.models import NotificationLog
 from payments.models import Payment, Receipt, Refund, PaymentAllocation
@@ -392,8 +392,8 @@ class OfficeExpenseLedgerTests(MoneyBase):
             description='Electricity', created_by=self.admin,
         )
         self.assertEqual(oe.status, 'pending')
-        # pending expense must NOT post to ledger yet
-        self.assertFalse(AccountTransaction.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).exists())
+        # pending expense must NOT post to the ledger yet
+        self.assertFalse(Voucher.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).exists())
 
     def test_office_expense_paid_posts_to_ledger(self):
         oe = OfficeExpense.objects.create(
@@ -404,11 +404,12 @@ class OfficeExpenseLedgerTests(MoneyBase):
         oe.status = 'paid'
         oe.save()
         oe.post_to_ledger()
-        tx = AccountTransaction.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).first()
-        self.assertIsNotNone(tx)
-        self.assertEqual(tx.amount, Decimal('10000'))
-        self.assertEqual(tx.direction, 'out')
-        self.assertEqual(tx.office, self.office)
+        voucher = Voucher.objects.get(reference_type='OfficeExpense', reference_id=oe.pk)
+        self.assertEqual(voucher.voucher_type, 'CP')
+        self.assertEqual(
+            sum((line.credit for line in voucher.lines.all()), Decimal('0.00')),
+            Decimal('10000'),
+        )
 
     def test_office_expense_api_create_paid_posts(self):
             # status is read-only on the API (server-controlled default 'pending'),
@@ -422,10 +423,10 @@ class OfficeExpenseLedgerTests(MoneyBase):
             self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
             oe = OfficeExpense.objects.get(pk=resp.data['id'])
             self.assertEqual(oe.status, 'pending')
-            self.assertFalse(AccountTransaction.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).exists())
+            self.assertFalse(Voucher.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).exists())
             pay_resp = self.client.post(reverse('officeexpense-pay', args=[oe.pk]), format='json')
             self.assertEqual(pay_resp.status_code, status.HTTP_200_OK)
-            self.assertTrue(AccountTransaction.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).exists())
+            self.assertTrue(Voucher.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).exists())
 
     def test_office_expense_api_create_pending_no_ledger(self):
         resp = self.client.post(reverse('officeexpense-list'), {
@@ -436,7 +437,7 @@ class OfficeExpenseLedgerTests(MoneyBase):
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         oe = OfficeExpense.objects.get(pk=resp.data['id'])
-        self.assertFalse(AccountTransaction.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).exists())
+        self.assertFalse(Voucher.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).exists())
 
     def test_office_expense_pay_action_posts_ledger(self):
         oe = OfficeExpense.objects.create(
@@ -446,7 +447,7 @@ class OfficeExpenseLedgerTests(MoneyBase):
         )
         resp = self.client.post(reverse('officeexpense-pay', args=[oe.pk]), {}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertTrue(AccountTransaction.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).exists())
+        self.assertTrue(Voucher.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).exists())
 
     def test_office_expense_approve(self):
         oe = OfficeExpense.objects.create(
@@ -466,8 +467,8 @@ class OfficeExpenseLedgerTests(MoneyBase):
             created_by=self.admin,
         )
         oe.post_to_ledger()
-        oe.post_to_ledger()  # update_or_create → no duplicate
-        count = AccountTransaction.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).count()
+        oe.post_to_ledger()  # idempotent → no duplicate
+        count = Voucher.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).count()
         self.assertEqual(count, 1)
 
     def test_office_expense_negative_amount_rejected(self):
@@ -494,8 +495,8 @@ class OfficeExpenseLedgerTests(MoneyBase):
             created_by=self.admin,
         )
         oe.post_to_ledger()
-        tx = AccountTransaction.objects.get(reference_type='OfficeExpense', reference_id=oe.pk)
-        self.assertEqual(tx.category, 'Utilities')
+        voucher = Voucher.objects.get(reference_type='OfficeExpense', reference_id=oe.pk)
+        self.assertIn('Utilities', voucher.narration)
 
 
 # ─── FINANCE: PROJECT COSTS → LEDGER ────────────────────────────────────────
@@ -516,11 +517,12 @@ class ProjectCostLedgerTests(MoneyBase):
             created_by=self.admin,
         )
         pc.post_to_ledger()
-        tx = AccountTransaction.objects.filter(reference_type='ProjectCost', reference_id=pc.pk).first()
-        self.assertIsNotNone(tx)
-        self.assertEqual(tx.amount, Decimal('50000'))
-        self.assertEqual(tx.project, self.project)
-        self.assertEqual(tx.direction, 'out')
+        voucher = Voucher.objects.get(reference_type='ProjectCost', reference_id=pc.pk)
+        self.assertEqual(voucher.voucher_type, 'CP')
+        self.assertEqual(
+            sum((line.debit for line in voucher.lines.all()), Decimal('0.00')),
+            Decimal('50000'),
+        )
 
     def test_project_cost_api_paid_posts(self):
         # status is read-only on the API (server default 'pending'); posting
@@ -533,7 +535,7 @@ class ProjectCostLedgerTests(MoneyBase):
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         pc = ProjectCost.objects.get(pk=resp.data['id'])
         self.assertEqual(pc.status, 'pending')
-        self.assertFalse(AccountTransaction.objects.filter(reference_type='ProjectCost', reference_id=pc.pk).exists())
+        self.assertFalse(Voucher.objects.filter(reference_type='ProjectCost', reference_id=pc.pk).exists())
 
     def test_project_cost_api_pending_no_ledger(self):
         # A project cost created through the API stays 'pending' (status is
@@ -545,7 +547,7 @@ class ProjectCostLedgerTests(MoneyBase):
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         pc = ProjectCost.objects.get(pk=resp.data['id'])
-        self.assertFalse(AccountTransaction.objects.filter(reference_type='ProjectCost', reference_id=pc.pk).exists())
+        self.assertFalse(Voucher.objects.filter(reference_type='ProjectCost', reference_id=pc.pk).exists())
 
     def test_project_cost_double_post_idempotent(self):
         pc = ProjectCost.objects.create(
@@ -554,7 +556,7 @@ class ProjectCostLedgerTests(MoneyBase):
         )
         pc.post_to_ledger()
         pc.post_to_ledger()
-        count = AccountTransaction.objects.filter(reference_type='ProjectCost', reference_id=pc.pk).count()
+        count = Voucher.objects.filter(reference_type='ProjectCost', reference_id=pc.pk).count()
         self.assertEqual(count, 1)
 
     def test_project_cost_negative_rejected(self):
@@ -804,7 +806,12 @@ class MoneyConsistencyTests(MoneyBase):
         oe.amount = Decimal('6000')
         oe.save()
         oe.post_to_ledger()
-        count = AccountTransaction.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).count()
+        count = Voucher.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).count()
         self.assertEqual(count, 1)
-        tx = AccountTransaction.objects.get(reference_type='OfficeExpense', reference_id=oe.pk)
-        self.assertEqual(tx.amount, Decimal('6000'))
+        # Posted vouchers are immutable (spec §3.2): the edit does not rewrite
+        # the already-posted voucher, so the original amount is retained.
+        voucher = Voucher.objects.get(reference_type='OfficeExpense', reference_id=oe.pk)
+        self.assertEqual(
+            sum((line.credit for line in voucher.lines.all()), Decimal('0.00')),
+            Decimal('5000'),
+        )

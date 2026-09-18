@@ -541,14 +541,14 @@ class PayrollFlowTests(CrmHrBase):
         self.assertTrue(SalaryPayment.objects.filter(slip__run=run).exists())
 
     def test_payroll_pay_creates_ledger_entry(self):
-        from finance.models import AccountTransaction
+        from finance.models import Voucher
         from hr.models import SalaryPayment
         run = self.make_run()
         run.generate_slips()
         self.client.post(reverse('payrollrun-process', args=[run.pk]), {}, format='json')
         self.client.post(reverse('payrollrun-pay', args=[run.pk]), {}, format='json')
         payment = SalaryPayment.objects.filter(slip__run=run).first()
-        self.assertTrue(AccountTransaction.objects.filter(
+        self.assertTrue(Voucher.objects.filter(
             reference_type='SalaryPayment', reference_id=payment.pk).exists())
 
     def test_payroll_slip_api_list(self):

@@ -9,7 +9,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core.models import UserProfile
-from finance.models import AccountTransaction
+from finance.models import AccountTransaction, Voucher
 from .models import (
     Department, Designation, SalaryComponent, Employee, EmployeeSalary,
     PayrollRun, SalarySlip, SalarySlipItem, SalaryPayment, Attendance, Leave,
@@ -90,11 +90,14 @@ class PayrollWorkflowTest(TestCase):
         run.status = 'paid'
         run.save(update_fields=['status'])
 
-        tx = AccountTransaction.objects.get(transaction_type='payroll')
-        self.assertEqual(tx.reference_type, 'SalaryPayment')
-        self.assertEqual(tx.amount, Decimal('58000'))
-        self.assertEqual(tx.direction, 'out')
-        self.assertEqual(tx.employee, self.emp)
+        payment = SalaryPayment.objects.get(slip__run=run)
+        voucher = Voucher.objects.get(
+            reference_type='SalaryPayment', reference_id=payment.pk)
+        self.assertEqual(voucher.voucher_type, 'BP')
+        self.assertEqual(
+            sum((line.debit for line in voucher.lines.all()), Decimal('0.00')),
+            Decimal('58000'),
+        )
 
 
 class HRAPITest(APITestCase):
@@ -132,7 +135,7 @@ class HRAPITest(APITestCase):
         resp = self.client.post(reverse('payrollrun-pay', args=[run.pk]), format='json')
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp.data['paid'], 1)
-        self.assertTrue(AccountTransaction.objects.filter(transaction_type='payroll').exists())
+        self.assertTrue(Voucher.objects.filter(reference_type='SalaryPayment').exists())
 
     def test_leave_approve_action(self):
         emp = Employee.objects.create(first_name='Ali', last_name='Khan', department=self.dept, joining_date=date.today())

@@ -264,29 +264,28 @@ class SalaryPayment(models.Model):
         return f"Payment for {self.slip.employee.full_name} - {self.amount}"
 
     def post_to_ledger(self):
-            """Record this payment in the unified financial ledger.
+        """Idempotently post a Cash/Bank Payment voucher for this salary payment.
 
-            Idempotent: a payment maps to exactly one ``AccountTransaction`` row
-            (enforced by the DB unique constraint on reference_type/reference_id).
-            Re-posting the same payment updates the existing row instead of creating
-            a duplicate, matching the constraint. The pay views also guard at the
-            call site so a payroll run is only ever posted once.
-            """
-            from finance.models import AccountTransaction
-            employee = self.slip.employee
-            AccountTransaction.objects.update_or_create(
-                reference_type='SalaryPayment', reference_id=self.pk,
-                defaults={
-                    'date': self.payment_date,
-                    'amount': self.amount,
-                    'direction': 'out',
-                    'transaction_type': 'payroll',
-                    'category': 'Salary',
-                    'employee': employee,
-                    'description': f'Salary payment for {employee.full_name} ({self.slip.run.period_label})',
-                    'created_by': self.created_by,
-                },
-            )
+        Spec §3.17: posts against the Salaries head (5200), keyed on
+        ``reference_type='SalaryPayment'`` + ``reference_id=self.pk``.
+        """
+        from decimal import Decimal
+        from finance.accounting import (
+            cash_bank_head, post_source_voucher, salaries_head, voucher_type_for,
+        )
+        employee = self.slip.employee
+        return post_source_voucher(
+            reference_type='SalaryPayment', reference_id=self.pk,
+            voucher_type=voucher_type_for(self.method, 'payment'),
+            date=self.payment_date,
+            narration=f'Salary payment for {employee.full_name} '
+                      f'({self.slip.run.period_label})',
+            lines=[
+                (salaries_head(), self.amount, Decimal('0.00')),
+                (cash_bank_head(self.method), Decimal('0.00'), self.amount),
+            ],
+            user=self.created_by,
+        )
 
     class Meta:
         ordering = ['-payment_date']

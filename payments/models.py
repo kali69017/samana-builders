@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -76,6 +78,30 @@ class Payment(models.Model):
                 else:
                     self.payment_id = 'PAY-00001'
         super().save(*args, **kwargs)
+        self.post_to_ledger()
+
+    def post_to_ledger(self):
+        """Create the Cash/Bank Receipt voucher for this payment (idempotent).
+
+        Spec §3.7/§3.8: vouchers replace the ledger as the books of record, but
+        this does **not** touch ``Booking.advance_paid`` — headline revenue stays
+        ``advance_paid``-based, and voucher income is never summed into revenue.
+        Keyed on ``(reference_type, reference_id)`` so re-saves never duplicate.
+        """
+        from finance.accounting import (
+            cash_bank_head, post_source_voucher, receivable_head, voucher_type_for,
+        )
+        return post_source_voucher(
+            reference_type='Payment', reference_id=self.pk,
+            voucher_type=voucher_type_for(self.payment_method, 'receipt'),
+            date=self.payment_date,
+            narration=f'Payment {self.payment_id} - {self.get_payment_method_display()}',
+            lines=[
+                (cash_bank_head(self.payment_method), self.amount, Decimal('0.00')),
+                (receivable_head(), Decimal('0.00'), self.amount),
+            ],
+            user=self.created_by,
+        )
     
     def __str__(self):
         return f"{self.payment_id} - {self.booking.booking_id}"
@@ -242,42 +268,43 @@ class Refund(models.Model):
         self.save(update_fields=['status', 'notes', 'updated_at'])
 
     def post_to_ledger(self):
-        """Idempotently post a single ledger row for this refund.
+        """Idempotently post an independent payment voucher for this refund.
 
-        Uses ``reference_type='Refund'`` + ``reference_id=self.pk`` so the unique
-        constraint ``account_transaction_reference_unique`` plus ``update_or_create``
-        guarantee the refund is never doubled in the ledger even if called twice.
+        Spec §3.15: a refund never reverses or mutates the original receipt
+        voucher. It is a separate Cash/Bank Payment voucher — debit Accounts
+        Receivable, credit Cash/Bank (resolved from ``refund_method``) — keyed on
+        ``reference_type='Refund'`` + ``reference_id``.
         """
-        from finance.models import AccountTransaction
         from datetime import date
+        from finance.accounting import (
+            cash_bank_head, post_source_voucher, receivable_head, voucher_type_for,
+        )
         post_date = self.refund_date
         if not post_date:
             post_date = self.processed_date.date() if self.processed_date else date.today()
-        AccountTransaction.objects.update_or_create(
+        return post_source_voucher(
             reference_type='Refund', reference_id=self.pk,
-            defaults={
-                'date': post_date,
-                'amount': self.amount,
-                'direction': 'out',
-                'transaction_type': 'refund',
-                'category': 'Refund',
-                'project': self.project,
-                'description': f'Refund of Rs. {self.amount} for booking '
-                               f'{self.booking.booking_id} - {self.get_reason_display()}',
-                'created_by': self.processed_by,
-            },
+            voucher_type=voucher_type_for(self.refund_method, 'payment'),
+            date=post_date,
+            narration=f'Refund of Rs. {self.amount} for booking '
+                      f'{self.booking.booking_id} - {self.get_reason_display()}',
+            lines=[
+                (receivable_head(), self.amount, Decimal('0.00')),
+                (cash_bank_head(self.refund_method), Decimal('0.00'), self.amount),
+            ],
+            user=self.processed_by,
         )
 
     def process(self, user=None):
         """Mark the approved refund as processed and post it to the ledger exactly once."""
         from django.core.exceptions import ValidationError
-        from finance.models import AccountTransaction
+        from finance.models import Voucher
 
         if self.status != 'approved':
             raise ValidationError('Only an approved refund can be processed.')
 
         # Guard: never double-post to the ledger.
-        already_posted = AccountTransaction.objects.filter(
+        already_posted = Voucher.objects.filter(
             reference_type='Refund', reference_id=self.pk
         ).exists()
 

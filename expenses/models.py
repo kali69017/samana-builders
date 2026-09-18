@@ -65,32 +65,32 @@ class Expense(models.Model):
         return self.status in ('approved', 'paid') and not self.status == 'rejected'
 
     def post_to_ledger(self, user=None):
-        """Post this expense to the Financial Ledger exactly once (idempotent).
+        """Post this expense to the ledger exactly once (idempotent).
 
-        Reuses the same ``AccountTransaction.update_or_create`` pattern as
-        ``OfficeExpense.post_to_ledger`` / ``ProjectCost.post_to_ledger``,
-        keyed on ``reference_type='Expense'`` + ``reference_id=self.pk`` so
-        re-posting can never create a duplicate ledger entry.
+        Spec §3.16: posts a Cash/Bank Payment voucher against the Project Costs
+        head, keyed on ``reference_type='Expense'`` + ``reference_id=self.pk``.
+        ``Expense`` has no ``payment_method`` field, so the Cash head is assumed.
         """
-        from finance.models import AccountTransaction
-        AccountTransaction.objects.update_or_create(
+        from decimal import Decimal
+        from finance.accounting import (
+            cash_bank_head, post_source_voucher, project_cost_head, voucher_type_for,
+        )
+        return post_source_voucher(
             reference_type='Expense', reference_id=self.pk,
-            defaults={
-                'date': self.expense_date,
-                'amount': self.amount,
-                'direction': 'out',
-                'transaction_type': 'project_cost',
-                'category': self.get_expense_type_display(),
-                'project': self.project,
-                'description': f"{self.project.name} - {self.get_expense_type_display()}: "
-                               f"{self.description or self.paid_to}",
-                'created_by': user or self.created_by,
-            },
+            voucher_type=voucher_type_for('cash', 'payment'),
+            date=self.expense_date,
+            narration=f"{self.project.name} - {self.get_expense_type_display()}: "
+                      f"{self.description or self.paid_to}",
+            lines=[
+                (project_cost_head(), self.amount, Decimal('0.00')),
+                (cash_bank_head('cash'), Decimal('0.00'), self.amount),
+            ],
+            user=user or self.created_by,
         )
 
     def is_posted_to_ledger(self):
-        from finance.models import AccountTransaction
-        return AccountTransaction.objects.filter(
+        from finance.models import Voucher
+        return Voucher.objects.filter(
             reference_type='Expense', reference_id=self.pk,
         ).exists()
 
