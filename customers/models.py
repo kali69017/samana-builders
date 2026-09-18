@@ -47,6 +47,11 @@ class Customer(models.Model):
     document = models.FileField(upload_to='customers/documents/', blank=True, null=True)
     image = models.ImageField(upload_to='customers/images/', blank=True, null=True)
     is_active = models.BooleanField(default=True)
+    account_head = models.ForeignKey(
+        'finance.AccountHead', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='customers',
+        help_text='Shared receivable control head this customer is linked to once mature.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='customers_created')
@@ -69,6 +74,19 @@ class Customer(models.Model):
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}"
+
+    def link_account_head(self):
+        """Link this customer to the shared Accounts Receivable control head.
+
+        Spec §3.12/§3.18: a "mature" customer (one with a confirmed booking) is
+        linked to the shared ``1100`` control head — no per-customer head is
+        created. Idempotent.
+        """
+        if self.account_head_id is None:
+            from finance.accounting import receivable_head
+            self.account_head = receivable_head()
+            self.save(update_fields=['account_head'])
+        return self.account_head
     
     @property
     def formatted_phone(self):

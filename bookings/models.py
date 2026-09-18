@@ -124,18 +124,23 @@ class Booking(models.Model):
                     self.booking_id = 'BKG-00001'
         
         # Track status change for audit
-        if self.pk:
-            original = Booking.objects.get(pk=self.pk)
-            if original.status != self.status:
-                from core.models import AuditLog
-                AuditLog.objects.create(
-                    action='update',
-                    model_name='Booking',
-                    object_id=self.booking_id,
-                    description=f'Booking status changed from {original.status} to {self.status}'
-                )
-        
+        original = Booking.objects.filter(pk=self.pk).first() if self.pk else None
+        if original is not None and original.status != self.status:
+            from core.models import AuditLog
+            AuditLog.objects.create(
+                action='update',
+                model_name='Booking',
+                object_id=self.booking_id,
+                description=f'Booking status changed from {original.status} to {self.status}'
+            )
+
         super().save(*args, **kwargs)
+
+        # Spec §3.12/§3.18: a customer becomes "mature" (linked to the shared
+        # Accounts Receivable control head) on the confirmed transition — and
+        # not before.
+        if self.status == 'confirmed' and (original is None or original.status != 'confirmed'):
+            self.customer.link_account_head()
     
     def __str__(self):
         return f"{self.booking_id} - {self.customer.full_name}"
