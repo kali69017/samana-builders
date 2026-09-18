@@ -105,7 +105,17 @@ class VoucherUiTests(AccountingUiBase):
         self.assertEqual(Voucher.objects.count(), 1)
         self.assertEqual(Voucher.objects.first().lines.count(), 1)
 
-    def test_finance_can_post_voucher_via_ui(self):
+    def test_supervisor_can_post_voucher_via_ui(self):
+        voucher = Voucher.objects.create(voucher_type='JV', date=date.today(), created_by=self.finance)
+        VoucherLine.objects.create(voucher=voucher, account_head=self.cash, debit=Decimal('100'))
+        VoucherLine.objects.create(voucher=voucher, account_head=self.capital, credit=Decimal('100'))
+        self.login(self.supervisor)
+        resp = self.client.post(reverse('finance_voucher_post', args=[voucher.pk]))
+        self.assertEqual(resp.status_code, 302)
+        voucher.refresh_from_db()
+        self.assertEqual(voucher.status, 'posted')
+
+    def test_finance_cannot_post_voucher_via_ui(self):
         voucher = Voucher.objects.create(voucher_type='JV', date=date.today(), created_by=self.finance)
         VoucherLine.objects.create(voucher=voucher, account_head=self.cash, debit=Decimal('100'))
         VoucherLine.objects.create(voucher=voucher, account_head=self.capital, credit=Decimal('100'))
@@ -113,7 +123,10 @@ class VoucherUiTests(AccountingUiBase):
         resp = self.client.post(reverse('finance_voucher_post', args=[voucher.pk]))
         self.assertEqual(resp.status_code, 302)
         voucher.refresh_from_db()
-        self.assertEqual(voucher.status, 'posted')
+        self.assertEqual(voucher.status, 'draft')
+        # The UI must not offer the post action to a non-supervisor.
+        detail = self.client.get(reverse('finance_voucher_detail', args=[voucher.pk]))
+        self.assertNotContains(detail, 'Post &amp; Lock')
 
     def test_supervisor_unlock_requires_reason(self):
         voucher = self.posted_voucher()

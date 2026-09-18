@@ -43,7 +43,8 @@ def _validation_messages(exc):
     return getattr(exc, 'messages', [str(exc)])
 
 
-def _can_unlock(request):
+def _is_supervisor(request):
+    """True for supervisor-tier users (management or above) — spec §3.6."""
     role = getattr(getattr(request.user, 'profile', None), 'role', None)
     return request.user.is_superuser or role in MANAGEMENT_ROLES
 
@@ -514,7 +515,8 @@ def voucher_detail_view(request, pk):
     )
     return render(request, 'finance/voucher_detail.html', {
         'voucher': voucher,
-        'can_unlock': _can_unlock(request),
+        'can_post': _is_supervisor(request),
+        'can_unlock': _is_supervisor(request),
     })
 
 
@@ -543,7 +545,7 @@ def voucher_create_view(request):
 
 
 @login_required
-@finance_or_above
+@management_or_above
 def voucher_post_view(request, pk):
     voucher = get_object_or_404(Voucher, pk=pk)
     if request.method == 'POST':

@@ -26,11 +26,13 @@
             {% if voucher.narration %}<p style="margin-top:14px;">{{ voucher.narration }}</p>{% endif %}
 
             <div style="margin-top:18px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                {% if voucher.is_editable %}
+                {% if can_post and voucher.is_editable %}
                 <form method="post" action="{% url 'finance_voucher_post' voucher.pk %}">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-primary">Post &amp; Lock</button>
                 </form>
+                {% elif voucher.is_editable %}
+                <span class="muted">A supervisor must post this voucher.</span>
                 {% endif %}
                 {% if can_unlock and voucher.is_locked %}
                 <form method="post" action="{% url 'finance_voucher_unlock' voucher.pk %}" style="display:flex; gap:8px; align-items:center;">

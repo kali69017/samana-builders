@@ -204,7 +204,9 @@ class VoucherViewSet(viewsets.ModelViewSet):
     permission_classes = [IsFinanceRole]
 
     def get_permissions(self):
-        if self.action == 'unlock':
+        # Posting is supervisor-only; finance users may create/edit drafts but
+        # cannot post their own vouchers (spec §3.6).
+        if self.action in ('post', 'unlock'):
             return [IsManagementOrAbove()]
         return super().get_permissions()
 

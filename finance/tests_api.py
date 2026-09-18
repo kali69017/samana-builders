@@ -104,35 +104,36 @@ class VoucherApiTests(AccountingApiBase):
         voucher = self.make_voucher()
         VoucherLine.objects.create(voucher=voucher, account_head=self.cash, debit=Decimal('100'))
         VoucherLine.objects.create(voucher=voucher, account_head=self.capital, credit=Decimal('100'))
-        self.as_user(self.finance)
+        self.as_user(self.supervisor)
         resp = self.client.post(reverse('voucher-post', args=[voucher.pk]), {}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
         voucher.refresh_from_db()
         self.assertEqual(voucher.status, 'posted')
         self.assertTrue(voucher.is_locked)
-        self.assertEqual(voucher.locked_by, self.finance)
+        self.assertEqual(voucher.locked_by, self.supervisor)
 
     def test_post_unbalanced_voucher_rejected(self):
         voucher = self.make_voucher()
         VoucherLine.objects.create(voucher=voucher, account_head=self.cash, debit=Decimal('100'))
         VoucherLine.objects.create(voucher=voucher, account_head=self.capital, credit=Decimal('99'))
-        self.as_user(self.finance)
+        self.as_user(self.supervisor)
         resp = self.client.post(reverse('voucher-post', args=[voucher.pk]), {}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_post_requires_finance_role(self):
+    def test_post_requires_supervisor_role(self):
         voucher = self.make_voucher()
         VoucherLine.objects.create(voucher=voucher, account_head=self.cash, debit=Decimal('100'))
         VoucherLine.objects.create(voucher=voucher, account_head=self.capital, credit=Decimal('100'))
-        self.as_user(self.sales)
-        resp = self.client.post(reverse('voucher-post', args=[voucher.pk]), {}, format='json')
-        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        for user in (self.sales, self.finance):
+            self.as_user(user)
+            resp = self.client.post(reverse('voucher-post', args=[voucher.pk]), {}, format='json')
+            self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_post_twice_rejected(self):
         voucher = self.make_voucher()
         VoucherLine.objects.create(voucher=voucher, account_head=self.cash, debit=Decimal('100'))
         VoucherLine.objects.create(voucher=voucher, account_head=self.capital, credit=Decimal('100'))
-        self.as_user(self.finance)
+        self.as_user(self.supervisor)
         self.client.post(reverse('voucher-post', args=[voucher.pk]), {}, format='json')
         resp = self.client.post(reverse('voucher-post', args=[voucher.pk]), {}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
