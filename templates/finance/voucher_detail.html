@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ voucher.voucher_number }} - Voucher{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>{{ voucher.voucher_number }}</h1>
+            <div class="page-actions">
+                <a href="{% url 'finance_vouchers' %}" class="btn btn-secondary">Back to Vouchers</a>
+            </div>
+        </div>
+
+        <div class="card animate-fade-up" style="margin-bottom:20px;">
+            <div style="display:flex; flex-wrap:wrap; gap:28px;">
+                <div><div class="muted">Type</div><div>{{ voucher.get_voucher_type_display }}</div></div>
+                <div><div class="muted">Date</div><div>{{ voucher.date|date:"d M Y" }}</div></div>
+                <div><div class="muted">Status</div><div><span class="badge badge-{% if voucher.status == 'posted' %}success{% else %}warning{% endif %}">{{ voucher.get_status_display }}</span> {% if voucher.is_locked %}<span class="badge badge-info">Locked</span>{% endif %}</div></div>
+                <div><div class="muted">Source</div><div>{% if voucher.reference_id %}{{ voucher.reference_type }} #{{ voucher.reference_id }}{% else %}Manual{% endif %}</div></div>
+                <div><div class="muted">Created by</div><div>{{ voucher.created_by.username|default:"-" }}</div></div>
+            </div>
+            {% if voucher.narration %}<p style="margin-top:14px;">{{ voucher.narration }}</p>{% endif %}
+
+            <div style="margin-top:18px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                {% if voucher.is_editable %}
+                <form method="post" action="{% url 'finance_voucher_post' voucher.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary">Post &amp; Lock</button>
+                </form>
+                {% endif %}
+                {% if can_unlock and voucher.is_locked %}
+                <form method="post" action="{% url 'finance_voucher_unlock' voucher.pk %}" style="display:flex; gap:8px; align-items:center;">
+                    {% csrf_token %}
+                    <input type="text" name="reason" class="form-control" placeholder="Unlock reason (required)" required style="min-width:260px;">
+                    <button type="submit" class="btn btn-danger">Unlock</button>
+                </form>
+                {% elif voucher.is_locked %}
+                <span class="muted">A supervisor can unlock this voucher if a correction is needed.</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card animate-fade-up" style="margin-bottom:20px;">
+            <div class="card-header"><h3>Lines</h3><span class="badge badge-info">{{ voucher.lines.count }} lines</span></div>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>Account</th><th>Narration</th><th>Debit</th><th>Credit</th></tr></thead>
+                    <tbody>
+                        {% for line in voucher.lines.all %}
+                        <tr>
+                            <td>{{ line.account_head.code }} - {{ line.account_head.name }}</td>
+                            <td>{{ line.narration|default:"-" }}</td>
+                            <td>Rs. {{ line.debit|floatformat:2 }}</td>
+                            <td>Rs. {{ line.credit|floatformat:2 }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>Audit History</h3><span class="badge badge-info">{{ voucher.audit_logs.count }} events</span></div>
+            <div class="table-container">
+                {% if voucher.audit_logs.all %}
+                <table>
+                    <thead><tr><th>When</th><th>Event</th><th>Actor</th><th>Reason</th></tr></thead>
+                    <tbody>
+                        {% for event in voucher.audit_logs.all %}
+                        <tr>
+                            <td>{{ event.created_at|date:"d M Y H:i" }}</td>
+                            <td><span class="badge badge-info">{{ event.get_event_display }}</span></td>
+                            <td>{{ event.actor.username|default:"-" }}</td>
+                            <td>{{ event.reason|default:"-" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state"><div class="empty-icon">🕘</div><h3>No history yet</h3></div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

@@ -3,22 +3,27 @@ from datetime import date
 
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Sum, Count, Q
+from django.db.models import Sum
+from django.http import HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
+from django.utils.dateparse import parse_date
 
 from core.models import AuditLog
-from core.permissions import finance_or_above, management_or_above
+from core.permissions import finance_or_above, management_or_above, MANAGEMENT_ROLES
 from properties.models import Project
 from bookings.models import Booking
 from .models import (
-    AccountTransaction, Office, ExpenseCategory, OfficeExpense,
-    ProjectBudget, ProjectCost, ProjectInvestment,
+    AccountHead, Office, ExpenseCategory, OfficeExpense,
+    ProjectBudget, ProjectCost, ProjectInvestment, Voucher,
 )
 from .forms import (
     OfficeForm, ExpenseCategoryForm, OfficeExpenseForm, ProjectCostForm,
-    ProjectBudgetForm, ProjectInvestmentForm,
+    ProjectBudgetForm, ProjectInvestmentForm, AccountHeadForm, VoucherForm,
+    VoucherLineFormSet,
 )
+from .reports import build_ledger_report
 
 
 def _log(request, action, model, object_id, description):
@@ -27,6 +32,20 @@ def _log(request, action, model, object_id, description):
         object_id=str(object_id), description=description,
         ip_address=request.META.get('REMOTE_ADDR'),
     )
+
+
+def _validation_messages(exc):
+    if hasattr(exc, 'message_dict'):
+        out = []
+        for msgs in exc.message_dict.values():
+            out.extend(msgs)
+        return out
+    return getattr(exc, 'messages', [str(exc)])
+
+
+def _can_unlock(request):
+    role = getattr(getattr(request.user, 'profile', None), 'role', None)
+    return request.user.is_superuser or role in MANAGEMENT_ROLES
 
 
 # ─── OFFICES ─────────────────────────────────────────────────────────────────
@@ -200,7 +219,14 @@ def office_expense_edit_view(request, pk):
             return redirect('finance_office_expenses')
     else:
         form = OfficeExpenseForm(instance=expense)
-    return render(request, 'finance/office_expense_form.html', {'form': form, 'title': 'Edit Office Expense', 'expense': expense})
+    # FIN-EC-03: a posted voucher is immutable; surface the posted voucher so the
+    # template can warn that edits won't rewrite it and offer the unlock path.
+    posted_voucher = Voucher.objects.filter(
+        reference_type='OfficeExpense', reference_id=expense.pk).first()
+    return render(request, 'finance/office_expense_form.html', {
+        'form': form, 'title': 'Edit Office Expense', 'expense': expense,
+        'posted_voucher': posted_voucher,
+    })
 
 
 @login_required
@@ -359,20 +385,78 @@ def project_investment_edit_view(request, pk):
 
 
 # ─── LEDGER & REPORTS ────────────────────────────────────────────────────────
+def _ledger_from_request(request):
+    """Build the ledger report + raw filter params from GET args."""
+    head_id = request.GET.get('head') or ''
+    date_from = request.GET.get('date_from') or ''
+    date_to = request.GET.get('date_to') or ''
+    head = get_object_or_404(AccountHead, pk=head_id) if head_id else None
+    report = build_ledger_report(
+        head=head,
+        date_from=parse_date(date_from) if date_from else None,
+        date_to=parse_date(date_to) if date_to else None,
+    )
+    return report, {
+        'head_id': str(head_id),
+        'date_from': date_from,
+        'date_to': date_to,
+    }
+
+
 @login_required
 @finance_or_above
 def ledger_view(request):
-    transactions = AccountTransaction.objects.select_related('employee', 'project', 'office').all()
-    type_filter = request.GET.get('type', '')
-    if type_filter:
-        transactions = transactions.filter(transaction_type=type_filter)
+    report, params = _ledger_from_request(request)
     context = {
-        'transactions': transactions,
-        'type_filter': type_filter,
-        'total_in': transactions.filter(direction='in').aggregate(t=Sum('amount'))['t'] or 0,
-        'total_out': transactions.filter(direction='out').aggregate(t=Sum('amount'))['t'] or 0,
+        'report': report,
+        'heads': AccountHead.objects.all(),
+        **params,
     }
     return render(request, 'finance/ledger.html', context)
+
+
+@login_required
+@finance_or_above
+def ledger_export_excel_view(request):
+    from openpyxl import Workbook
+    report, params = _ledger_from_request(request)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Ledger'
+    ws.append(['Date', 'Voucher', 'Type', 'Account', 'Narration',
+               'Debit', 'Credit', 'Ledger balance'])
+    for row in report['rows']:
+        ws.append([
+            row['date'].strftime('%Y-%m-%d'), row['voucher_number'], row['voucher_type'],
+            f"{row['account'].code} {row['account'].name}", row['narration'],
+            float(row['debit']), float(row['credit']), float(row['balance']),
+        ])
+    ws.append([])
+    ws.append(['', '', '', '', 'Opening balance', '', '',
+               float(report['opening_balance'])])
+    ws.append(['', '', '', '', 'Total debit', float(report['total_debit']), '', ''])
+    ws.append(['', '', '', '', 'Total credit', '', float(report['total_credit']), ''])
+    ws.append(['', '', '', '', 'Ledger balance', '', '',
+               float(report['closing_balance'])])
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="ledger.xlsx"'
+    wb.save(response)
+    return response
+
+
+@login_required
+@finance_or_above
+def ledger_export_pdf_view(request):
+    from payments.pdf_utils import render_to_pdf
+    report, params = _ledger_from_request(request)
+    pdf = render_to_pdf('finance/ledger_pdf.html', {'report': report, **params})
+    if not pdf:
+        messages.error(request, 'Could not generate the ledger PDF.')
+        return redirect('finance_ledger')
+    response = HttpResponse(pdf, content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment; filename="ledger.pdf"'
+    return response
 
 
 @login_required
@@ -394,3 +478,182 @@ def office_expense_report_view(request):
         'total': expenses.aggregate(t=Sum('amount'))['t'] or 0,
     }
     return render(request, 'finance/office_expense_report.html', context)
+
+
+# ─── VOUCHERS (double-entry) ─────────────────────────────────────────────────
+@login_required
+@finance_or_above
+def vouchers_view(request):
+    vouchers = (
+        Voucher.objects.select_related('created_by').prefetch_related('lines').all()
+    )
+    type_filter = request.GET.get('type', '')
+    status_filter = request.GET.get('status', '')
+    if type_filter:
+        vouchers = vouchers.filter(voucher_type=type_filter)
+    if status_filter:
+        vouchers = vouchers.filter(status=status_filter)
+    context = {
+        'vouchers': vouchers,
+        'type_filter': type_filter,
+        'status_filter': status_filter,
+        'voucher_types': Voucher.TYPE_CHOICES,
+        'voucher_statuses': Voucher.STATUS_CHOICES,
+    }
+    return render(request, 'finance/vouchers.html', context)
+
+
+@login_required
+@finance_or_above
+def voucher_detail_view(request, pk):
+    voucher = get_object_or_404(
+        Voucher.objects
+        .select_related('created_by', 'locked_by', 'unlocked_by')
+        .prefetch_related('lines__account_head', 'audit_logs__actor'),
+        pk=pk,
+    )
+    return render(request, 'finance/voucher_detail.html', {
+        'voucher': voucher,
+        'can_unlock': _can_unlock(request),
+    })
+
+
+@login_required
+@finance_or_above
+def voucher_create_view(request):
+    if request.method == 'POST':
+        form = VoucherForm(request.POST)
+        formset = VoucherLineFormSet(request.POST, prefix='lines')
+        if form.is_valid() and formset.is_valid():
+            voucher = form.save(commit=False)
+            voucher.created_by = request.user
+            voucher.save()
+            formset.instance = voucher
+            formset.save()
+            _log(request, 'create', 'Voucher', voucher.pk,
+                 f'Created voucher {voucher.voucher_number}')
+            messages.success(request, f'Voucher {voucher.voucher_number} created as a draft.')
+            return redirect('finance_voucher_detail', pk=voucher.pk)
+    else:
+        form = VoucherForm()
+        formset = VoucherLineFormSet(prefix='lines')
+    return render(request, 'finance/voucher_form.html', {
+        'form': form, 'formset': formset, 'title': 'New Voucher',
+    })
+
+
+@login_required
+@finance_or_above
+def voucher_post_view(request, pk):
+    voucher = get_object_or_404(Voucher, pk=pk)
+    if request.method == 'POST':
+        try:
+            voucher.post(request.user)
+        except ValidationError as exc:
+            messages.error(request, ' '.join(_validation_messages(exc)))
+        else:
+            _log(request, 'update', 'Voucher', voucher.pk,
+                 f'Posted voucher {voucher.voucher_number}')
+            messages.success(request, f'Voucher {voucher.voucher_number} posted and locked.')
+    return redirect('finance_voucher_detail', pk=pk)
+
+
+@login_required
+@management_or_above
+def voucher_unlock_view(request, pk):
+    voucher = get_object_or_404(Voucher, pk=pk)
+    if request.method == 'POST':
+        reason = request.POST.get('reason', '')
+        try:
+            voucher.unlock(request.user, reason=reason)
+        except ValidationError as exc:
+            messages.error(request, ' '.join(_validation_messages(exc)))
+        else:
+            _log(request, 'update', 'Voucher', voucher.pk,
+                 f'Unlocked voucher {voucher.voucher_number}: {reason}')
+            messages.success(request, f'Voucher {voucher.voucher_number} unlocked.')
+    return redirect('finance_voucher_detail', pk=pk)
+
+
+# ─── CHART OF ACCOUNTS ───────────────────────────────────────────────────────
+def _flatten_heads():
+    """Return [(head, depth), ...] in tree order for template indentation."""
+    from collections import defaultdict
+    heads = list(AccountHead.objects.select_related('parent').all())
+    by_parent = defaultdict(list)
+    for head in heads:
+        by_parent[head.parent_id].append(head)
+    ordered = []
+
+    def walk(parent_id, depth):
+        for head in by_parent.get(parent_id, []):
+            ordered.append((head, depth))
+            walk(head.pk, depth + 1)
+
+    walk(None, 0)
+    return ordered
+
+
+@login_required
+@finance_or_above
+def account_heads_view(request):
+    return render(request, 'finance/account_heads.html', {'heads': _flatten_heads()})
+
+
+@login_required
+@finance_or_above
+def account_head_create_view(request):
+    if request.method == 'POST':
+        form = AccountHeadForm(request.POST)
+        if form.is_valid():
+            head = form.save()
+            _log(request, 'create', 'AccountHead', head.pk,
+                 f'Created account head {head.code} {head.name}')
+            messages.success(request, 'Account head created successfully!')
+            return redirect('finance_account_heads')
+    else:
+        form = AccountHeadForm()
+    return render(request, 'finance/account_head_form.html', {
+        'form': form, 'title': 'Add Account Head',
+    })
+
+
+@login_required
+@finance_or_above
+def account_head_edit_view(request, pk):
+    head = get_object_or_404(AccountHead, pk=pk)
+    if request.method == 'POST':
+        form = AccountHeadForm(request.POST, instance=head)
+        if form.is_valid():
+            form.save()
+            _log(request, 'update', 'AccountHead', pk,
+                 f'Updated account head {head.code} {head.name}')
+            messages.success(request, 'Account head updated successfully!')
+            return redirect('finance_account_heads')
+    else:
+        form = AccountHeadForm(instance=head)
+    return render(request, 'finance/account_head_form.html', {
+        'form': form, 'title': 'Edit Account Head', 'head': head,
+    })
+
+
+@login_required
+@management_or_above
+def account_head_delete_view(request, pk):
+    head = get_object_or_404(AccountHead, pk=pk)
+    if request.method == 'POST':
+        if head.children.exists():
+            messages.error(request, 'Cannot delete an account head that has children.')
+            return redirect('finance_account_heads')
+        if head.voucher_lines.filter(voucher__status='posted').exists():
+            messages.error(request, 'Cannot delete an account head with posted voucher lines.')
+            return redirect('finance_account_heads')
+        _log(request, 'delete', 'AccountHead', pk,
+             f'Deleted account head {head.code} {head.name}')
+        head.delete()
+        messages.success(request, 'Account head deleted successfully!')
+        return redirect('finance_account_heads')
+    return render(request, 'confirm_delete.html', {
+        'object': head, 'title': 'Delete Account Head',
+        'cancel_url': 'finance_account_heads',
+    })

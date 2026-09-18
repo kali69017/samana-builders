@@ -4,6 +4,21 @@ from . import views
 urlpatterns = [
     # Ledger
     path('ledger/', views.ledger_view, name='finance_ledger'),
+    path('ledger/export/excel/', views.ledger_export_excel_view, name='finance_ledger_export_excel'),
+    path('ledger/export/pdf/', views.ledger_export_pdf_view, name='finance_ledger_export_pdf'),
+
+    # Vouchers (double-entry)
+    path('vouchers/', views.vouchers_view, name='finance_vouchers'),
+    path('vouchers/create/', views.voucher_create_view, name='finance_voucher_create'),
+    path('vouchers/<int:pk>/', views.voucher_detail_view, name='finance_voucher_detail'),
+    path('vouchers/<int:pk>/post/', views.voucher_post_view, name='finance_voucher_post'),
+    path('vouchers/<int:pk>/unlock/', views.voucher_unlock_view, name='finance_voucher_unlock'),
+
+    # Chart of accounts
+    path('account-heads/', views.account_heads_view, name='finance_account_heads'),
+    path('account-heads/create/', views.account_head_create_view, name='finance_account_head_create'),
+    path('account-heads/<int:pk>/edit/', views.account_head_edit_view, name='finance_account_head_edit'),
+    path('account-heads/<int:pk>/delete/', views.account_head_delete_view, name='finance_account_head_delete'),
 
     # Offices
     path('offices/', views.offices_view, name='finance_offices'),

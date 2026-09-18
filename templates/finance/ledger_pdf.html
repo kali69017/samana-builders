@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        @page { size: A4 landscape; margin: 1.5cm; }
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #222; }
+        h1 { font-size: 18px; margin: 0 0 2px; }
+        .muted { color: #666; }
+        .meta { margin-bottom: 12px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ccc; padding: 5px 6px; text-align: left; }
+        th { background: #f0f0f0; }
+        td.num, th.num { text-align: right; }
+        .totals { margin-top: 12px; width: 60%; }
+        .totals td { border: none; padding: 3px 6px; }
+        .strong { font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h2>{{ company_name|default:"Samana Builders" }} — Ledger</h2>
+    <div class="meta">
+        <div><strong>Account:</strong> {% if report.head %}{{ report.head.code }} - {{ report.head.name }}{% else %}All accounts{% endif %}</div>
+        <div><strong>Date range:</strong> {{ date_from|default:"—" }} to {{ date_to|default:"—" }}</div>
+        <div class="muted">Basis: {{ report.nature }}-normal</div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th><th>Voucher</th><th>Type</th><th>Account</th><th>Narration</th>
+                <th class="num">Debit</th><th class="num">Credit</th><th class="num">Ledger balance</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in report.rows %}
+            <tr>
+                <td>{{ row.date|date:"d M Y" }}</td>
+                <td>{{ row.voucher_number }}</td>
+                <td>{{ row.voucher_type }}</td>
+                <td>{{ row.account.code }} - {{ row.account.name }}</td>
+                <td>{{ row.narration|default:"-" }}</td>
+                <td class="num">{{ row.debit|floatformat:2 }}</td>
+                <td class="num">{{ row.credit|floatformat:2 }}</td>
+                <td class="num">{{ row.balance|floatformat:2 }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="8">No ledger entries.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <table class="totals">
+        <tr><td>Opening balance</td><td class="num strong">{{ report.opening_balance|floatformat:2 }}</td></tr>
+        <tr><td>Total debit</td><td class="num">{{ report.total_debit|floatformat:2 }}</td></tr>
+        <tr><td>Total credit</td><td class="num">{{ report.total_credit|floatformat:2 }}</td></tr>
+        <tr><td>Ledger balance</td><td class="num strong">{{ report.closing_balance|floatformat:2 }}</td></tr>
+    </table>
+</body>
+</html>

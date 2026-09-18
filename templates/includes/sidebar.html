@@ -134,6 +134,18 @@
                 </a>
             </li>
             <li>
+                <a href="{% url 'finance_vouchers' %}" class="nav-link{% if url_name == 'finance_vouchers' or url_name == 'finance_voucher_create' or url_name == 'finance_voucher_detail' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3h16v18l-3-2-3 2-3-2-3 2-4-2z"/><path d="M8 8h8"/><path d="M8 12h8"/></svg></span>
+                    Vouchers
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'finance_account_heads' %}" class="nav-link{% if url_name == 'finance_account_heads' or url_name == 'finance_account_head_create' or url_name == 'finance_account_head_edit' %} active{% endif %}">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18"/><path d="M3 12h18"/><path d="M3 19h18"/></svg></span>
+                    Chart of Accounts
+                </a>
+            </li>
+            <li>
                 <a href="{% url 'finance_office_expenses' %}" class="nav-link{% if url_name == 'finance_office_expenses' or url_name == 'finance_office_expense_create' or url_name == 'finance_office_expense_edit' or url_name == 'finance_office_expense_report' %} active{% endif %}">
                     <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/></svg></span>
                     Company Expenses

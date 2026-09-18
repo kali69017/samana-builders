@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ title }} - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>{{ title }}</h1>
+            <div class="page-actions">
+                <a href="{% url 'finance_account_heads' %}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </div>
+
+        <div class="card animate-fade-up">
+            <form method="post">
+                {% csrf_token %}
+                {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+                <div class="form-grid">
+                    <div class="form-group"><label>Code</label>{{ form.code }}{{ form.code.errors }}</div>
+                    <div class="form-group"><label>Name</label>{{ form.name }}{{ form.name.errors }}</div>
+                    <div class="form-group"><label>Parent account</label>{{ form.parent }}{{ form.parent.errors }}</div>
+                    <div class="form-group"><label>Nature</label>{{ form.nature }}{{ form.nature.errors }}</div>
+                    <div class="form-group"><label>Active</label>{{ form.is_active }}{{ form.is_active.errors }}</div>
+                </div>
+                <div style="margin-top:16px; display:flex; gap:10px;">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                    <a href="{% url 'finance_account_heads' %}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </main>
+</div>
+{% endblock %}

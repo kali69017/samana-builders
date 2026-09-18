@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Financial Ledger - Samana Builders ERP{% endblock %}
+{% block title %}Ledger - Samana Builders ERP{% endblock %}
 
 {% block content %}
 <div class="app-layout">
@@ -9,50 +9,64 @@
     {% include 'includes/sidebar.html' %}
     <main class="main-content">
         <div class="page-header">
-            <h1>Financial Ledger</h1>
-        </div>
-
-        <div class="stats-grid">
-            <div class="stat-card"><div class="stat-icon green">⬆️</div><div class="stat-meta"><div class="stat-value">Rs. {{ total_in|floatformat:0 }}</div><div class="stat-label">Total In</div></div></div>
-            <div class="stat-card"><div class="stat-icon red">⬇️</div><div class="stat-meta"><div class="stat-value">Rs. {{ total_out|floatformat:0 }}</div><div class="stat-label">Total Out</div></div></div>
+            <h1>Ledger</h1>
+            <div class="page-actions">
+                <a href="{% url 'finance_ledger_export_excel' %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}" class="btn btn-secondary">Export Excel</a>
+                <a href="{% url 'finance_ledger_export_pdf' %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}" class="btn btn-secondary">Export PDF</a>
+            </div>
         </div>
 
         <div class="card animate-fade-up">
             <form method="get">
                 <div class="filters">
-                    <select name="type" class="form-control">
-                        <option value="">All Types</option>
-                        <option value="payroll" {% if type_filter == 'payroll' %}selected{% endif %}>Payroll</option>
-                        <option value="office_expense" {% if type_filter == 'office_expense' %}selected{% endif %}>Office Expense</option>
-                        <option value="project_cost" {% if type_filter == 'project_cost' %}selected{% endif %}>Project Cost</option>
-                        <option value="income" {% if type_filter == 'income' %}selected{% endif %}>Income</option>
+                    <select name="head" class="form-control">
+                        <option value="">All accounts</option>
+                        {% for head in heads %}
+                        <option value="{{ head.pk }}" {% if head_id == head.pk|stringformat:'s' %}selected{% endif %}>{{ head.code }} - {{ head.name }}</option>
+                        {% endfor %}
                     </select>
+                    <input type="date" name="date_from" value="{{ date_from }}" class="form-control">
+                    <input type="date" name="date_to" value="{{ date_to }}" class="form-control">
                     <button type="submit" class="btn btn-primary btn-sm" style="height:42px; padding:0 20px; white-space:nowrap;">Filter</button>
                 </div>
             </form>
         </div>
 
+        <div class="stats-grid">
+            <div class="stat-card"><div class="stat-icon">🏦</div><div class="stat-meta"><div class="stat-value">Rs. {{ report.opening_balance|floatformat:2 }}</div><div class="stat-label">Opening balance</div></div></div>
+            <div class="stat-card"><div class="stat-icon green">⬆️</div><div class="stat-meta"><div class="stat-value">Rs. {{ report.total_debit|floatformat:2 }}</div><div class="stat-label">Total debit</div></div></div>
+            <div class="stat-card"><div class="stat-icon red">⬇️</div><div class="stat-meta"><div class="stat-value">Rs. {{ report.total_credit|floatformat:2 }}</div><div class="stat-label">Total credit</div></div></div>
+            <div class="stat-card"><div class="stat-icon">📒</div><div class="stat-meta"><div class="stat-value">Rs. {{ report.closing_balance|floatformat:2 }}</div><div class="stat-label">Ledger balance</div></div></div>
+        </div>
+
         <div class="card animate-fade-up">
-            <div class="card-header"><h3>All Transactions</h3><span class="badge badge-info">{{ transactions|length }} records</span></div>
+            <div class="card-header">
+                <h3>{% if report.head %}{{ report.head.code }} - {{ report.head.name }}{% else %}All accounts{% endif %}</h3>
+                <span class="badge badge-info">{{ report.rows|length }} entries · {{ report.nature }}-normal</span>
+            </div>
             <div class="table-container">
-                {% if transactions %}
+                {% if report.rows %}
                 <table class="sortable">
-                    <thead><tr><th>Date</th><th>Type</th><th>Category</th><th>Direction</th><th>Amount</th><th>Reference</th></tr></thead>
+                    <thead>
+                        <tr><th>Date</th><th>Voucher</th><th>Type</th><th>Account</th><th>Narration</th><th>Debit</th><th>Credit</th><th>Ledger balance</th></tr>
+                    </thead>
                     <tbody>
-                        {% for tx in transactions %}
+                        {% for row in report.rows %}
                         <tr>
-                            <td>{{ tx.date|date:"d M Y" }}</td>
-                            <td><span class="badge badge-info">{{ tx.get_transaction_type_display }}</span></td>
-                            <td>{{ tx.category|default:"-" }}</td>
-                            <td><span class="badge badge-{% if tx.direction == 'in' %}success{% else %}danger{% endif %}">{{ tx.get_direction_display }}</span></td>
-                            <td style="font-weight:600;">Rs. {{ tx.amount|floatformat:0 }}</td>
-                            <td style="font-size:12px;color:var(--text-2);">{{ tx.reference_type }}{% if tx.reference_id %} #{{ tx.reference_id }}{% endif %}</td>
+                            <td>{{ row.date|date:"d M Y" }}</td>
+                            <td>{{ row.voucher_number }}</td>
+                            <td>{{ row.voucher_type }}</td>
+                            <td>{{ row.account.code }} - {{ row.account.name }}</td>
+                            <td>{{ row.narration|default:"-" }}</td>
+                            <td>Rs. {{ row.debit|floatformat:2 }}</td>
+                            <td>Rs. {{ row.credit|floatformat:2 }}</td>
+                            <td style="font-weight:600;">Rs. {{ row.balance|floatformat:2 }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
                 {% else %}
-                <div class="empty-state"><div class="empty-icon">📒</div><h3>No Transactions</h3><p>Money movements (payroll, expenses, costs) will appear here.</p></div>
+                <div class="empty-state"><div class="empty-icon">📒</div><h3>No ledger entries</h3><p>Posted vouchers matching these filters will appear here.</p></div>
                 {% endif %}
             </div>
         </div>

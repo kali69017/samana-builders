@@ -1,2 +1,18 @@
 {% extends "base_form.html" %}
 {% block title %}{{ title }} - Samana Builders ERP{% endblock %}
+
+{% block form_intro %}
+{% if posted_voucher %}
+<div class="alert alert-error animate-slide-right">
+    <span>⚠️</span>
+    <span>
+        This expense is <strong>paid</strong> and already posted to voucher
+        <strong>{{ posted_voucher.voucher_number }}</strong>.
+        <strong>Editing will not rewrite the posted voucher</strong>
+        (posted vouchers are immutable). If a correction is genuinely needed, a
+        supervisor must
+        <a href="{% url 'finance_voucher_detail' posted_voucher.pk %}">unlock the voucher</a>.
+    </span>
+</div>
+{% endif %}
+{% endblock %}

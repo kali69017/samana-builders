@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Chart of Accounts - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Chart of Accounts</h1>
+            <div class="page-actions">
+                <a href="{% url 'finance_account_head_create' %}" class="btn btn-primary">+ Add Account Head</a>
+            </div>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>Accounts (levels 1–4)</h3><span class="badge badge-info">{{ heads|length }} heads</span></div>
+            <div class="table-container">
+                {% if heads %}
+                <table class="sortable">
+                    <thead>
+                        <tr><th>Code</th><th>Name</th><th>Nature</th><th>Level</th><th>Leaf</th><th>Active</th><th>Balance</th><th class="no-sort">Actions</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for head, depth in heads %}
+                        <tr>
+                            <td style="font-weight:600;">{{ head.code }}</td>
+                            <td style="padding-left:{% widthratio depth 1 22 %}px;">{% if depth %}↳ {% endif %}{{ head.name }}</td>
+                            <td>{{ head.get_nature_display }}</td>
+                            <td>{{ head.level }}</td>
+                            <td>{% if head.is_leaf %}<span class="badge badge-success">Leaf</span>{% else %}<span class="badge badge-info">Group</span>{% endif %}</td>
+                            <td>{% if head.is_active %}<span class="badge badge-success">Active</span>{% else %}<span class="badge badge-warning">Inactive</span>{% endif %}</td>
+                            <td>Rs. {{ head.balance|floatformat:2 }}</td>
+                            <td>
+                                <div class="table-actions">
+                                    <a href="{% url 'finance_account_head_edit' head.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                                    <a href="{% url 'finance_account_head_delete' head.pk %}" class="btn btn-danger btn-sm">Delete</a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state"><div class="empty-icon">🗂️</div><h3>No account heads</h3><p>Add your first account head to build the chart of accounts.</p></div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}
