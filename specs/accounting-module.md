@@ -120,18 +120,19 @@ Rules:
   reference are exempt. This is the idempotency mechanism replacing the old
   `AccountTransaction` (`reference_type`, `reference_id`) unique constraint.
 
-### 3.6 Permissions (post vs unlock)
+### 3.6 Permissions (post vs unlock) — supervisor-only posting
 
-Mirror the office-expense approve/pay pattern:
-
-- **Post** — any authorized finance user: `@finance_or_above` (HTML) /
-  `IsFinanceOrAbove` + role set `(super_admin, admin, management, accounts)`
-  (API).
-- **Unlock** — **supervisor only**: `@management_or_above` (HTML) /
-  `(super_admin, admin, management)` (API), matching the delete/approve gate.
+- **Drafting** — finance roles (`super_admin`, `admin`, `management`,
+  `accounts`) create and edit drafts via `@finance_or_above` / `IsFinanceRole`.
+- **Post** — **supervisor only** (`super_admin`, `admin`, `management`):
+  `@management_or_above` (HTML) / `IsManagementOrAbove` (API). Finance users
+  cannot post their own vouchers; they submit a draft and a supervisor posts it
+  after cross-check — matching the client brief ("posted by supervisor").
+- **Unlock** — **supervisor only**, same gate; reason required.
+- Auto-generated vouchers post via `post_source_voucher` → the model `post()`
+  (a system path, not user-gated).
 - Model methods (`post`, `unlock`) do not check roles themselves; gating is a
-  view/serializer concern, as elsewhere in the ERP. Phase 2 must wire these
-  gates when the voucher endpoints are added.
+  view/serializer concern, as elsewhere in the ERP.
 
 ### 3.7 `AccountTransaction` deprecation — no bridge (confirmed)
 
@@ -194,8 +195,8 @@ Mirror the office-expense approve/pay pattern:
 - **`OfficeExpense.post_to_ledger()`** posts a Cash/Bank **Payment** voucher and
   no longer writes `AccountTransaction` (`reference_type='OfficeExpense'`).
 - **`ProjectCost.post_to_ledger()`** posts the same only when `status == 'paid'`
-  (spec §3.9); otherwise a no-op (`reference_type='ProjectCost'`). It assumes the
-  cash head until `ProjectCost` gains a `payment_method` field.
+  (spec §3.9); otherwise a no-op (`reference_type='ProjectCost'`). The Cash/Bank
+  head is resolved from its `payment_method` field (§3.18).
 - All hooks go through `post_source_voucher(...)`, which returns the existing
   voucher untouched if one already exists — re-saving a source never duplicates.
 
@@ -220,7 +221,7 @@ Registered on the DRF router (`api/urls.py`); all under `/api/`.
   (`reference_id` set) are read-only here. Gated by a **strict** `IsFinanceRole`
   (finance roles for every method — unlike `IsFinanceOrAbove`, no read leak to
   other staff).
-- `POST vouchers/{id}/post/` — finance gate; validates balance and locks.
+- `POST vouchers/{id}/post/` — **supervisor gate**; validates balance and locks.
 - `POST vouchers/{id}/unlock/` — `IsManagementOrAbove` (supervisor only);
   requires `reason` in the body; writes a `VoucherAuditLog` row.
 - `GET vouchers/{id}/audit/` — full `VoucherAuditLog` history for the voucher.
@@ -259,8 +260,8 @@ Registered on the DRF router (`api/urls.py`); all under `/api/`.
 ### 3.16 Expense writer (confirmed)
 
 - `expenses.Expense` is a **distinct model** from `OfficeExpense` (project-scoped,
-  in the `expenses` app). It has **no `payment_method`** field, so the head
-  defaults to **Cash** (same ruling as ProjectCost, §3.18).
+  in the `expenses` app). It has a `payment_method` field (migration
+  `expenses/0005`), so the Cash/Bank head is resolved from it.
 - Posts a Cash/Bank Payment voucher against **`5100 Project Costs`** (matching
   its legacy `transaction_type='project_cost'` mapping). Reference
   `('Expense', pk)`; idempotent.
@@ -282,11 +283,13 @@ Registered on the DRF router (`api/urls.py`); all under `/api/`.
   **`1100 Accounts Receivable`** control head (get-or-create). **No per-customer
   head is created**: a child under 1100 would make 1100 non-leaf and break the
   leaf-only posting rule for the Payment/Refund writers; customer-level detail is
-  already served by `CustomerLedgerEntry`. *(Trigger implementation is a
-  follow-up; the decision is fixed.)*
-- **ProjectCost default method:** falls back to the **Cash** head (`1000`) until
-  `ProjectCost` gains a `payment_method` field; once it does, a method should be
-  required at the Paid transition.
+  already served by `CustomerLedgerEntry`. Implemented via the `Booking.save()`
+  hook (§3.12) plus the one-off
+  `manage.py backfill_customer_account_heads` command for bookings confirmed
+  before the trigger shipped.
+- **ProjectCost payment method:** `ProjectCost` gained a `payment_method` field
+  (migration `finance/0008`, default **Cash**); the writer resolves the Cash/Bank
+  head from it. Same for `expenses.Expense` (`expenses/0005`).
 - **Hard line guard:** refers to the brief's *"once posted, data cannot be edited
   unless unlocked by the supervisor."* Enforcement rule: **model-level hard
   guards** — `Voucher.save()` refuses a non-`update_fields` save of a posted and
@@ -305,8 +308,9 @@ Registered on the DRF router (`api/urls.py`); all under `/api/`.
 2. **Mode of payment → head** — map cash vs bank (and receipt vs payment) to the
    appropriate Cash/Bank `AccountHead` so customer payments, expenses, and
    project/development costs hit the correct ledger by mode.
-3. **Customer ↔ chart of accounts** — a nullable one-to-one on `Customer`
-   (§3.12); the linking trigger waits on the "mature" definition (§5).
+3. **Customer ↔ chart of accounts** — a nullable **ForeignKey** on `Customer`
+   to the shared `1100` head (§3.12); the "mature" trigger is implemented on the
+   confirmed transition, with a backfill command for legacy rows.
 4. **UI** — voucher entry/edit, post, supervisor unlock (with reason), per-head
    ledger with running balance by nature, and a date-wise ledger report.
 5. **Removal of `AccountTransaction`** — writers stop in the same PR as the
