@@ -187,6 +187,7 @@ class WebFormSubmitTests(WebBase):
             'project': self.project.pk, 'description': 'Form expense',
             'amount': '1500', 'expense_type': 'external',
             'paid_to': 'Vendor', 'expense_date': date.today().isoformat(),
+            'payment_method': 'bank_transfer',
         })
         self.assertIn(resp.status_code, (200, 302))
         self.assertTrue(Expense.objects.filter(description='Form expense').exists())
@@ -196,6 +197,7 @@ class WebFormSubmitTests(WebBase):
             'project': self.project.pk, 'description': 'Neg expense',
             'amount': '-1500', 'expense_type': 'external',
             'paid_to': 'Vendor', 'expense_date': date.today().isoformat(),
+            'payment_method': 'cash',
         })
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(Expense.objects.filter(description='Neg expense').exists())

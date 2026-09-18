@@ -243,12 +243,23 @@ class ProjectCost(models.Model):
         ('paid', 'Paid'),
     ]
 
+    METHOD_CHOICES = [
+        ('cash', 'Cash'),
+        ('bank_transfer', 'Bank Transfer'),
+        ('cheque', 'Cheque'),
+        ('online', 'Online'),
+    ]
+
     project = models.ForeignKey('properties.Project', on_delete=models.CASCADE, related_name='costs')
     cost_category = models.CharField(max_length=20, choices=COST_CATEGORY_CHOICES, default='other')
     amount = models.DecimalField(max_digits=15, decimal_places=2)
     cost_date = models.DateField()
     vendor = models.CharField(max_length=200, blank=True)
     invoice_ref = models.CharField(max_length=100, blank=True)
+    payment_method = models.CharField(
+        max_length=20, choices=METHOD_CHOICES, default='cash',
+        help_text='Determines the Cash/Bank ledger head the cost posts against.',
+    )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     description = models.TextField(blank=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='project_costs_created')
@@ -270,8 +281,7 @@ class ProjectCost(models.Model):
             cash_bank_head, post_source_voucher, project_cost_head,
             voucher_type_for,
         )
-        # ProjectCost has no payment_method field yet — assume cash (spec §5).
-        method = 'cash'
+        method = self.payment_method
         return post_source_voucher(
             reference_type='ProjectCost', reference_id=self.pk,
             voucher_type=voucher_type_for(method, 'payment'),

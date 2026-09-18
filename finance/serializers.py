@@ -71,12 +71,14 @@ class OfficeExpenseSerializer(serializers.ModelSerializer):
 class ProjectCostSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(source='project.name', read_only=True)
     cost_category_display = serializers.CharField(source='get_cost_category_display', read_only=True)
+    payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
 
     class Meta:
         model = ProjectCost
         fields = ['id', 'project', 'project_name', 'cost_category', 'cost_category_display',
-                  'amount', 'cost_date', 'vendor', 'invoice_ref', 'status', 'status_display',
+                  'amount', 'cost_date', 'vendor', 'invoice_ref', 'payment_method',
+                  'payment_method_display', 'status', 'status_display',
                   'description', 'created_at']
         read_only_fields = ['id', 'created_at', 'status']
 

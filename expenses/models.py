@@ -18,6 +18,13 @@ class Expense(models.Model):
         ('rejected', 'Rejected'),
     ]
 
+    METHOD_CHOICES = [
+        ('cash', 'Cash'),
+        ('bank_transfer', 'Bank Transfer'),
+        ('cheque', 'Cheque'),
+        ('online', 'Online'),
+    ]
+
     project = models.ForeignKey(
         'properties.Project', on_delete=models.CASCADE,
         related_name='expenses', verbose_name='Project',
@@ -26,6 +33,11 @@ class Expense(models.Model):
     amount = models.DecimalField(max_digits=15, decimal_places=2)
     expense_type = models.CharField(max_length=20, choices=EXPENSE_TYPES, default='internal')
     paid_to = models.CharField(max_length=200, blank=True, verbose_name='Paid To')
+    payment_method = models.CharField(
+        max_length=20, choices=METHOD_CHOICES, default='cash',
+        verbose_name='Payment Method',
+        help_text='Determines the Cash/Bank ledger head the expense posts against.',
+    )
     expense_date = models.DateField(default=timezone.localdate)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='expenses_created')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -68,8 +80,8 @@ class Expense(models.Model):
         """Post this expense to the ledger exactly once (idempotent).
 
         Spec §3.16: posts a Cash/Bank Payment voucher against the Project Costs
-        head, keyed on ``reference_type='Expense'`` + ``reference_id=self.pk``.
-        ``Expense`` has no ``payment_method`` field, so the Cash head is assumed.
+        head, resolving Cash vs Bank from ``payment_method``. Keyed on
+        ``reference_type='Expense'`` + ``reference_id=self.pk``.
         """
         from decimal import Decimal
         from finance.accounting import (
@@ -77,13 +89,13 @@ class Expense(models.Model):
         )
         return post_source_voucher(
             reference_type='Expense', reference_id=self.pk,
-            voucher_type=voucher_type_for('cash', 'payment'),
+            voucher_type=voucher_type_for(self.payment_method, 'payment'),
             date=self.expense_date,
             narration=f"{self.project.name} - {self.get_expense_type_display()}: "
                       f"{self.description or self.paid_to}",
             lines=[
                 (project_cost_head(), self.amount, Decimal('0.00')),
-                (cash_bank_head('cash'), Decimal('0.00'), self.amount),
+                (cash_bank_head(self.payment_method), Decimal('0.00'), self.amount),
             ],
             user=user or self.created_by,
         )

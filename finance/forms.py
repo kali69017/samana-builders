@@ -63,7 +63,7 @@ class ProjectCostForm(forms.ModelForm):
     class Meta:
         model = ProjectCost
         fields = ['project', 'cost_category', 'amount', 'cost_date', 'vendor',
-                  'invoice_ref', 'description']
+                  'invoice_ref', 'payment_method', 'description']
         widgets = {
             'project': forms.Select(attrs={'class': 'form-control'}),
             'cost_category': forms.Select(attrs={'class': 'form-control'}),
@@ -71,6 +71,7 @@ class ProjectCostForm(forms.ModelForm):
             'cost_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'vendor': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
             'invoice_ref': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+            'payment_method': forms.Select(attrs={'class': 'form-control'}),
             'status': forms.Select(attrs={'class': 'form-control'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': ' '}),
         }

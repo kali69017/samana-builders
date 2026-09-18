@@ -17,7 +17,7 @@ from hr.models import (
 from payments.models import Payment, Refund
 from properties.models import Plot, Project
 
-from .models import AccountHead, AccountTransaction, Voucher, VoucherLine
+from .models import AccountHead, AccountTransaction, ProjectCost, Voucher, VoucherLine
 
 
 class CloseoutWriterTest(TestCase):
@@ -135,6 +135,20 @@ class CloseoutWriterTest(TestCase):
             reference_type='Expense', reference_id=expense.pk).exists())
         self.assertTrue(expense.is_posted_to_ledger())
 
+    def test_expense_bank_method_uses_bank_head(self):
+        expense = Expense.objects.create(
+            project=self.project, description='Steel', amount=Decimal('12000'),
+            expense_type='internal', expense_date=date.today(), status='paid',
+            payment_method='bank_transfer', created_by=self.user,
+        )
+        expense.post_to_ledger()
+        voucher = self._voucher('Expense', expense.pk)
+        self.assertEqual(voucher.voucher_type, 'BP')
+        bank = AccountHead.objects.get(code='1010')
+        self.assertTrue(any(
+            l.account_head_id == bank.pk and l.credit == Decimal('12000')
+            for l in voucher.lines.all()))
+
     def test_expense_post_is_idempotent(self):
         expense = Expense.objects.create(
             project=self.project, description='Steel', amount=Decimal('12000'),
@@ -145,6 +159,20 @@ class CloseoutWriterTest(TestCase):
         expense.post_to_ledger()
         self.assertEqual(
             Voucher.objects.filter(reference_type='Expense', reference_id=expense.pk).count(), 1)
+
+    def test_project_cost_bank_method_uses_bank_head(self):
+        cost = ProjectCost.objects.create(
+            project=self.project, cost_category='material', amount=Decimal('40000'),
+            cost_date=date.today(), status='paid', payment_method='bank_transfer',
+            created_by=self.user,
+        )
+        cost.post_to_ledger()
+        voucher = self._voucher('ProjectCost', cost.pk)
+        self.assertEqual(voucher.voucher_type, 'BP')
+        bank = AccountHead.objects.get(code='1010')
+        self.assertTrue(any(
+            l.account_head_id == bank.pk and l.credit == Decimal('40000')
+            for l in voucher.lines.all()))
 
     # ── SalaryPayment → payment voucher (method resolved) ────────────────
     def _salary_payment(self, method):
