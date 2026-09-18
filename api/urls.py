@@ -27,9 +27,9 @@ from hr.api_views import (
     SalarySlipViewSet, SalaryPaymentViewSet, AttendanceViewSet, LeaveViewSet,
 )
 from finance.api_views import (
-    AccountTransactionViewSet, OfficeViewSet, ExpenseCategoryViewSet,
-    OfficeExpenseViewSet, ProjectCostViewSet, ProjectBudgetViewSet,
-    ProjectInvestmentViewSet,
+    AccountTransactionViewSet, AccountHeadViewSet, OfficeViewSet,
+    ExpenseCategoryViewSet, OfficeExpenseViewSet, ProjectCostViewSet,
+    ProjectBudgetViewSet, ProjectInvestmentViewSet, VoucherViewSet,
 )
 
 router = DefaultRouter()
@@ -89,6 +89,8 @@ router.register(r'office-expenses', OfficeExpenseViewSet)
 router.register(r'project-costs', ProjectCostViewSet)
 router.register(r'project-budgets', ProjectBudgetViewSet)
 router.register(r'project-investments', ProjectInvestmentViewSet)
+router.register(r'account-heads', AccountHeadViewSet)
+router.register(r'vouchers', VoucherViewSet)
 
 urlpatterns = [
     # Public homepage endpoints (must come before the router's {pk} detail routes)

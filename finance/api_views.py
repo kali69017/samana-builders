@@ -1,15 +1,23 @@
+from django.core.exceptions import ValidationError
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import (
-    AccountTransaction, Office, ExpenseCategory, OfficeExpense,
-    ProjectBudget, ProjectCost, ProjectInvestment,
+    AccountTransaction, AccountHead, Office, ExpenseCategory, OfficeExpense,
+    ProjectBudget, ProjectCost, ProjectInvestment, Voucher,
 )
 from .serializers import (
-    AccountTransactionSerializer, OfficeSerializer, ExpenseCategorySerializer,
-    OfficeExpenseSerializer, ProjectBudgetSerializer, ProjectCostSerializer,
-    ProjectInvestmentSerializer,
+    AccountTransactionSerializer, AccountHeadSerializer, OfficeSerializer,
+    ExpenseCategorySerializer, OfficeExpenseSerializer, ProjectBudgetSerializer,
+    ProjectCostSerializer, ProjectInvestmentSerializer, VoucherSerializer,
+    VoucherAuditLogSerializer,
 )
+
+
+def _validation_error_detail(exc):
+    if hasattr(exc, 'message_dict'):
+        return exc.message_dict
+    return getattr(exc, 'messages', [str(exc)])
 
 
 class IsFinanceOrAbove(permissions.BasePermission):
@@ -138,3 +146,118 @@ class ProjectInvestmentViewSet(viewsets.ModelViewSet):
     queryset = ProjectInvestment.objects.select_related('project').all()
     serializer_class = ProjectInvestmentSerializer
     permission_classes = [IsFinanceOrAbove]
+
+
+# ─── DOUBLE-ENTRY ACCOUNTING ─────────────────────────────────────────────────
+class IsFinanceRole(permissions.BasePermission):
+    """Finance roles only for *all* methods (no read leak to other staff)."""
+
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.is_superuser:
+            return True
+        role = getattr(getattr(request.user, 'profile', None), 'role', None)
+        return role in ('super_admin', 'admin', 'management', 'accounts')
+
+
+class IsManagementOrAbove(permissions.BasePermission):
+    """Supervisor gate (super_admin/admin/management) — mirrors management_or_above."""
+
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.is_superuser:
+            return True
+        role = getattr(getattr(request.user, 'profile', None), 'role', None)
+        return role in ('super_admin', 'admin', 'management')
+
+
+class AccountHeadViewSet(viewsets.ModelViewSet):
+    queryset = AccountHead.objects.select_related('parent').all()
+    serializer_class = AccountHeadSerializer
+    permission_classes = [IsFinanceRole]
+
+    def destroy(self, request, *args, **kwargs):
+        head = self.get_object()
+        if head.children.exists():
+            return Response(
+                {'error': 'Cannot delete an account head that has children.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if head.voucher_lines.filter(voucher__status='posted').exists():
+            return Response(
+                {'error': 'Cannot delete an account head that has posted voucher lines.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+
+class VoucherViewSet(viewsets.ModelViewSet):
+    queryset = (
+        Voucher.objects
+        .select_related('created_by', 'locked_by', 'unlocked_by')
+        .prefetch_related('lines__account_head', 'audit_logs')
+        .all()
+    )
+    serializer_class = VoucherSerializer
+    permission_classes = [IsFinanceRole]
+
+    def get_permissions(self):
+        if self.action == 'unlock':
+            return [IsManagementOrAbove()]
+        return super().get_permissions()
+
+    def update(self, request, *args, **kwargs):
+        voucher = self.get_object()
+        if voucher.reference_id is not None:
+            return Response(
+                {'error': 'Auto-generated vouchers are read-only except for unlock.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not voucher.is_editable:
+            return Response(
+                {'error': 'Voucher is posted and locked; unlock it before editing.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        voucher = self.get_object()
+        if voucher.reference_id is not None:
+            return Response(
+                {'error': 'Auto-generated vouchers cannot be deleted.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not voucher.is_editable:
+            return Response(
+                {'error': 'Posted and locked vouchers cannot be deleted.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=['post'])
+    def post(self, request, pk=None):
+        voucher = self.get_object()
+        try:
+            voucher.post(request.user)
+        except ValidationError as exc:
+            return Response({'error': _validation_error_detail(exc)},
+                            status=status.HTTP_400_BAD_REQUEST)
+        return Response(self.get_serializer(voucher).data)
+
+    @action(detail=True, methods=['post'])
+    def unlock(self, request, pk=None):
+        voucher = self.get_object()
+        try:
+            voucher.unlock(request.user, reason=request.data.get('reason', ''))
+        except ValidationError as exc:
+            return Response({'error': _validation_error_detail(exc)},
+                            status=status.HTTP_400_BAD_REQUEST)
+        return Response(self.get_serializer(voucher).data)
+
+    @action(detail=True, methods=['get'])
+    def audit(self, request, pk=None):
+        voucher = self.get_object()
+        rows = voucher.audit_logs.select_related('actor').all()
+        return Response(VoucherAuditLogSerializer(rows, many=True).data)
