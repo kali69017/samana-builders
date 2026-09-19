@@ -68,3 +68,15 @@ class BackfillCustomerAccountHeadsTest(TestCase):
         customer.refresh_from_db()
         self.assertEqual(customer.account_head_id, head_id)
         self.assertEqual(AccountHead.objects.filter(code='1100').count(), 1)
+
+    def test_dry_run_reports_without_writing(self):
+        from io import StringIO
+        customer = self._customer(1)
+        self._legacy_booking(customer, 'confirmed')
+        out = StringIO()
+        call_command('backfill_customer_account_heads', '--dry-run', stdout=out)
+        customer.refresh_from_db()
+        self.assertIsNone(customer.account_head)
+        self.assertFalse(AccountHead.objects.filter(code='1100').exists())
+        self.assertIn('would link', out.getvalue().lower())
+        self.assertIn('1 customer', out.getvalue())
