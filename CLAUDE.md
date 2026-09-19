@@ -6,13 +6,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Real Estate Management ERP + corporate website for Samana Builders & Developers. Django 6.0 + Django REST Framework backend serving two frontends: a server-rendered ERP (Django templates) and a corporate marketing site (also Django templates, with a compiled React build artifact in `frontend/dist/`). SQLite for dev, PostgreSQL for production.
 
-## Work status (last updated 2026-09-12)
+## Work status (last updated 2026-09-14)
 
-### Uncommitted batch: client-feedback round (NOT committed yet)
+### Shipped (committed + pushed to origin/main)
 
-The working tree holds an uncommitted round of client-feedback fixes — **43 modified + 12 new files** across bookings, payments/refunds, expenses, finance, HR, properties, notifications, core views, and templates. It is fully implemented and the affected pages were verified in the browser, but nothing is committed yet; it still needs review + commit + push. (This CLAUDE.md refresh is uncommitted as well.)
+Two commits landed since 2026-09-08, both on `main` and pushed. Working tree is clean.
 
-What the batch delivers:
+- **`aeead4d` — "Client feedback round"** — the client-feedback batch below (booking pricing guards, cancel/reopen, refund + expense workflows, ledger dedup, nominee, welcome email, milestones, UI polish), plus the CLAUDE.md refresh and the SendPK API 3.0 doc. 663 tests green at commit time.
+- **`d2e6d34` — "QA remediation"** — permission tightening, read-only expense status, office-delete guard, self-service profile, XSS/ledger fixes (details below). 663 tests green at commit time.
+
+What shipped (client-feedback round):
 
 1. **Booking pricing guardrails** — `Plot` gained `development_charge`, `lease_charge`, `other_charges`; `Plot.total_charges` and `Plot.total_cost` (price + charges) are the single source of truth. Booking create/edit forms and the API serializer reject a `total_amount` below `plot.total_cost` and an `advance_paid` below `plot.holding_deposit`. `Booking` also gained `payment_plan` / `amount_paid` / `total_charges` display helpers.
 2. **Confirm requires an advance** — `booking_confirm_view` and the API `confirm` action refuse to confirm when `advance_paid <= 0`.
@@ -20,17 +23,25 @@ What the batch delivers:
 4. **Refund workflow upgrade** — `Refund` gained `refund_method`, `refund_date`, `supporting_document`, `processed_by`, `updated_at`, an `amount > 0` constraint, and `-created_at` ordering. Computed helpers: `total_paid`, `total_refunded`, `refundable_amount` (verified payments − non-rejected refunds), `refund_percentage`. Lifecycle: `pending → approved → processed | rejected`; `process()` marks it processed and posts exactly one ledger row (idempotent, skips if already posted). Validation enforced on model + form + serializer. UI: process button on `refunds.html`; API: `approve` / `reject` / `process` actions with audit logging.
 5. **Expense approval workflow** — `Expense` gained `status` (`pending → approved → paid | rejected`), `approved_by` / `approved_at`, `payment_reference`, `receipt_attachment`. New approve / reject / mark-paid views + URLs; approve and mark-paid post the expense to the ledger exactly once; approved/paid expenses are locked from editing.
 6. **Ledger de-duplication** — unique constraint on `AccountTransaction` (`reference_type`, `reference_id`); refunds, expenses, and salary payments post via idempotent `update_or_create` keyed on that pair.
-7. **Deletion guards** — a project with plots cannot be deleted; an office with expenses or ledger transactions cannot be deleted.
+7. **Deletion guards** — a project with plots cannot be deleted; an office with expenses or ledger transactions cannot be deleted (enforced in both the web view and `OfficeViewSet.destroy`).
 8. **Nominee management** — `customer_nominee_manage_view` + `customer_nominee_form.html` lets staff add/edit/remove a customer's nominee (also shown on customer detail + the portal).
 9. **Customer welcome email** — `NotificationService.send_customer_welcome()` fires on customer create (UI + API) and lead conversion; failure-safe and skipped when no email. New `customer_welcome` notification type.
 10. **Milestones** — `ProjectMilestone` gained `start_date`, `milestone_type`, `completion_percent`, `progress_date`; form, list (progress bar), and detail updated.
 11. **UI polish** — `money` template filter; print stylesheet (hides chrome) + Print button on the sales report; refreshed properties / expenses / refunds / offices / milestones tables.
 
-New files in the batch: `api/tests_booking_pricing.py`; 7 migrations (`bookings/0005`, `expenses/0003`, `finance/0004`, `notifications/0003`, `payments/0007`, `properties/0006`, `properties/0007`); `templates/booking_cancel.html`, `templates/booking_reopen.html`, `templates/customer_nominee_form.html`; `Business_SMS_API_3.0.pdf`.
+New files from both commits: `api/tests_booking_pricing.py`; migrations `bookings/0005`, `expenses/0003` + `expenses/0004`, `finance/0004` + `finance/0005`, `notifications/0003`, `payments/0007`, `properties/0006` + `properties/0007`, `customers/0005`; templates `booking_cancel.html`, `booking_reopen.html`, `customer_nominee_form.html`; `Business_SMS_API_3.0.pdf`.
 
-**Verification (2026-09-12):** full Django suite green — 663/663, `OK` — when run with `DJANGO_DEBUG=True` and the shared venv (see the Commands notes), plus a browser walkthrough of the affected pages.
+### QA remediation (commit `d2e6d34`)
 
-**Next step:** review + commit + push the batch.
+Permissions and API-contract tightening applied as part of the QA pass:
+
+- **`project_create_view` / `plot_create_view` / plot_edit now require `management_or_above`** (were `login_required` only). Tests updated to give the view-test user an admin profile.
+- **Portal customers blocked from staff/financial API reads** — new `core.permissions.is_portal_customer()`; finance `IsFinanceOrAbove` returns `not is_portal_customer(...)`.
+- **Office/project-cost `status` is now read-only on the API** (removed from the form; serializer `read_only_fields`). Create always lands `pending` and never auto-posts to the ledger. `OfficeExpense` is moved to `paid` via the `pay` action (posts ledger); `ProjectCost` has no pay action. `ProjectCost.status` default changed from `paid` → `pending` (migration `finance/0005`).
+- **`OfficeViewSet.destroy`** refuses deletion while the office has expenses/ledger transactions (was view-only guard).
+- **Self-service profile form is `theme`-only** — `role` / `is_active` are no longer user-editable; `UserCreateSerializer` write_only. `CustomerNominee.nominee_name` `blank=True`; expense receipt attachment wired.
+
+**Verification:** full Django suite green — 663/663, `OK` — with `DJANGO_DEBUG=True` + shared venv, run before both commits.
 
 ### SMS (SendPK) status
 
@@ -43,7 +54,7 @@ The SMS channel is wired to the SendPK HTTP API (`SMSService`) but **disabled in
 
 ### Production deploy notes
 
-Recent commits on `main` (through `6fceafa`, Aug 31) cover prod safety: `DEBUG` defaults to False in production, CSRF trusted origins + secure proxy/cookie settings, and AI/DeepSeek env mappings in compose. Prod is docker-compose on the VPS; env vars (`DJANGO_SECRET_KEY`, `DB_*`, `EMAIL_*`, `SENDPK_*`, `DEEPSEEK_API_KEY`) must be supplied there. The uncommitted batch above is not deployed.
+Recent commits on `main` (through `d2e6d34`, Sep 14) cover prod safety: `DEBUG` defaults to False in production, CSRF trusted origins + secure proxy/cookie settings, and AI/DeepSeek env mappings in compose. Prod is docker-compose on the VPS; env vars (`DJANGO_SECRET_KEY`, `DB_*`, `EMAIL_*`, `SENDPK_*`, `DEEPSEEK_API_KEY`) must be supplied there. The two shipped commits above are not yet deployed to the VPS — `git pull` + `docker compose up -d --build` there will deploy them (and the new migrations needed).
 
 ## Commands
 
