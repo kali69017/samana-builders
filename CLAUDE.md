@@ -54,7 +54,7 @@ The SMS channel is wired to the SendPK HTTP API (`SMSService`) but **disabled in
 
 ### Production deploy notes
 
-Recent commits on `main` (through `d2e6d34`, Sep 14) cover prod safety: `DEBUG` defaults to False in production, CSRF trusted origins + secure proxy/cookie settings, and AI/DeepSeek env mappings in compose. Prod is docker-compose on the VPS; env vars (`DJANGO_SECRET_KEY`, `DB_*`, `EMAIL_*`, `SENDPK_*`, `DEEPSEEK_API_KEY`) must be supplied there. The two shipped commits above are not yet deployed to the VPS — `git pull` + `docker compose up -d --build` there will deploy them (and the new migrations needed).
+Recent commits on `main` (through `d2e6d34`, Sep 14) cover prod safety: `DEBUG` defaults to False in production, CSRF trusted origins + secure proxy/cookie settings, and AI/OpenRouter env mappings in compose. Prod is docker-compose on the VPS; env vars (`DJANGO_SECRET_KEY`, `DB_*`, `EMAIL_*`, `SENDPK_*`, `OPENROUTER_API_KEY`) must be supplied there. The two shipped commits above are not yet deployed to the VPS — `git pull` + `docker compose up -d --build` there will deploy them (and the new migrations needed).
 
 ## Commands
 
