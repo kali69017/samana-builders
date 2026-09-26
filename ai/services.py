@@ -1,4 +1,4 @@
-"""DeepSeek AI services built on LangChain.
+"""OpenRouter AI services built on LangChain.
 
 Every function degrades gracefully: if AI is disabled, no API key is
 configured, or the provider call fails, the caller receives a structured
@@ -19,39 +19,85 @@ class AiDisabledError(Exception):
     """Raised when AI is not configured/enabled."""
 
 
+class _OpenRouterInvoker:
+    """LangChain-style ``.invoke(messages)`` adapter over the official OpenRouter SDK.
+
+    ``ai/services.py`` keeps the ``llm.invoke([...])`` contract so the Django
+    tests can keep patching ``ai.services._llm``; the adapter is the only part
+    that talks to OpenRouter. Using the official ``openrouter`` Python SDK
+    directly avoids the ``langchain-openrouter`` wrapper, whose ``client.chat.send``
+    call is passed arbitrary body kwargs it does not accept (TypeError on
+    ``extra_body``) and which hangs on this model.
+    """
+
+    _ROLES = {'system': 'system', 'human': 'user', 'ai': 'assistant'}
+
+    def __init__(self, client, model, temperature, timeout_ms, reasoning_effort=None):
+        self.client = client
+        self.model = model
+        self.temperature = temperature
+        self.timeout_ms = timeout_ms
+        self.reasoning_effort = reasoning_effort
+
+    def invoke(self, messages):
+        payload = [
+            {'role': self._ROLES.get(getattr(m, 'type', None), 'user'), 'content': m.content}
+            for m in messages
+        ]
+        kwargs = {}
+        if self.reasoning_effort:
+            kwargs['reasoning_effort'] = self.reasoning_effort
+        response = self.client.chat.send(
+            model=self.model,
+            messages=payload,
+            stream=False,
+            temperature=self.temperature,
+            timeout_ms=self.timeout_ms,
+            **kwargs,
+        )
+        content = response.choices[0].message.content
+        return type('Reply', (), {'content': content or ''})()
+
+
 def _llm():
-    """Return a configured DeepSeek chat model, or None when unavailable."""
+    """Return a configured OpenRouter chat wrapper, or None when unavailable."""
     if not getattr(settings, 'AI_ENABLED', False):
         return None
-    api_key = getattr(settings, 'DEEPSEEK_API_KEY', '')
+    api_key = getattr(settings, 'OPENROUTER_API_KEY', '')
     if not api_key:
         return None
     try:
-        from langchain_deepseek import ChatDeepSeek
-        return ChatDeepSeek(
-            model=getattr(settings, 'DEEPSEEK_MODEL', 'deepseek-chat'),
+        from openrouter import OpenRouter
+        timeout_ms = int(getattr(settings, 'OPENROUTER_TIMEOUT_MS', 60000))
+        client = OpenRouter(
             api_key=api_key,
-            base_url=getattr(settings, 'DEEPSEEK_BASE_URL', 'https://api.deepseek.com'),
-            temperature=0.3,
-            timeout=60,
+            timeout_ms=timeout_ms,
+            server_url=getattr(settings, 'OPENROUTER_BASE_URL', None),
         )
     except Exception:
         return None
+    return _OpenRouterInvoker(
+        client=client,
+        model=getattr(settings, 'OPENROUTER_MODEL', 'deepseek/deepseek-v4-flash-0731'),
+        temperature=0.3,
+        timeout_ms=timeout_ms,
+        reasoning_effort='medium' if getattr(settings, 'OPENROUTER_REASONING', True) else None,
+    )
 
 
 def _invoke(system_prompt, user_prompt, feature, user=None):
     """Run a chat completion and record an AiInteractionLog row."""
     start = time.monotonic()
-    model_name = getattr(settings, 'DEEPSEEK_MODEL', 'deepseek-chat')
+    model_name = getattr(settings, 'OPENROUTER_MODEL', 'deepseek/deepseek-v4-flash-0731')
 
     llm = _llm()
     if llm is None:
         AiInteractionLog.objects.create(
             user=user, feature=feature, prompt=user_prompt,
             model=model_name, status='disabled',
-            error_message='AI is not configured. Set AI_ENABLED and DEEPSEEK_API_KEY.',
+            error_message='AI is not configured. Set AI_ENABLED and OPENROUTER_API_KEY.',
         )
-        raise AiDisabledError('AI is not configured. Set AI_ENABLED and DEEPSEEK_API_KEY.')
+        raise AiDisabledError('AI is not configured. Set AI_ENABLED and OPENROUTER_API_KEY.')
 
     try:
         from langchain_core.messages import HumanMessage, SystemMessage

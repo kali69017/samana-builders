@@ -1,6 +1,6 @@
 # AI — Test Plan
 
-> Samana Builders ERP — LangChain + DeepSeek feature layer. Module: `ai/` plus AI
+> Samana Builders ERP — LangChain + OpenRouter feature layer. Module: `ai/` plus AI
 > page views in `core/views.py`, AI routes in `api/urls.py` / `samana_erp/urls.py`,
 > and `ai_language` on `core.CompanySettings`.
 >
@@ -20,7 +20,7 @@ This plan covers the four public AI endpoints named in the task —
 `/ai/hr/`. It exercises happy paths, edge cases (disabled/misconfigured/failed
 AI, malformed inputs, dangling FKs, non-determinism), and — prioritized — the
 security risks: stored DOM-XSS in the insights history, prompt-injection/system
-prompt leakage, unredacted PII egress to the external DeepSeek API, and
+prompt leakage, unredacted PII egress to the external OpenRouter API, and
 IDOR/broken object-level authorization on the `IsAuthenticated`-only endpoints.
 
 Roles that exercise the module:
@@ -39,11 +39,11 @@ Roles that exercise the module:
 
 ## 2. Preconditions & fixtures
 
-All AI tests must set `AI_ENABLED` and `DEEPSEEK_API_KEY` explicitly via
+All AI tests must set `AI_ENABLED` and `OPENROUTER_API_KEY` explicitly via
 `override_settings` (never rely on the ambient `.env`, which defaults
 `AI_ENABLED=False`). Mock `ai.services._llm` (or patch
-`langchain_deepseek.ChatDeepSeek`) for every scenario that must not touch the
-network; a real DeepSeek call is only needed for the manual egress-inspection
+`langchain_openrouter.ChatOpenAI`) for every scenario that must not touch the
+network; a real OpenRouter call is only needed for the manual egress-inspection
 scenarios (§3 SEC), which use a local HTTP proxy to capture the outbound
 payload.
 
@@ -77,7 +77,7 @@ and pages `/ai/`, `/ai/insights/`, `/ai/hr/`. Run under `DJANGO_DEBUG=True`
 ### HP — happy path
 
 **AI-HP-01 — Assistant returns `{ok:true, result}` when AI is enabled and key is set**
-- Preconditions: `override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')`;
+- Preconditions: `override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')`;
   `ai.services._llm` mocked to return a stub whose `invoke()` yields a
   `content` string; authenticated `sales` user.
 - Steps: `POST /api/ai/assistant/` body `{"question": "How many overdue installments?"}`.
@@ -89,7 +89,7 @@ and pages `/ai/`, `/ai/insights/`, `/ai/hr/`. Run under `DJANGO_DEBUG=True`
 - Preconditions: same as AI-HP-01, mocked `_llm`.
 - Steps: issue one assistant call; then read `AiInteractionLog.objects.order_by('-created_at').first()`.
 - Expected: row has `user` = caller, `feature='assistant'`, `prompt` = raw
-  question (not the system prompt), `response` = stub text, `model='deepseek-chat'`
+  question (not the system prompt), `response` = stub text, `model='deepseek/deepseek-v4-flash-0731'`
   (settings default), `status='success'`, `latency_ms` ≥ 0, `created_at` set.
 - Evidence on failure: dumped row field values.
 
@@ -135,11 +135,11 @@ and pages `/ai/`, `/ai/insights/`, `/ai/hr/`. Run under `DJANGO_DEBUG=True`
 - Evidence on failure: status/body; log row.
 
 **AI-HP-08 — Health endpoint reports config truthfully**
-- Preconditions: `AI_ENABLED=True`, `DEEPSEEK_API_KEY='abc'`,
-  `DEEPSEEK_MODEL='deepseek-chat'`; any authenticated user.
+- Preconditions: `AI_ENABLED=True`, `OPENROUTER_API_KEY='abc'`,
+  `OPENROUTER_MODEL='deepseek/deepseek-v4-flash-0731'`; any authenticated user.
 - Steps: `GET /api/ai/health/`.
 - Expected: 200
-  `{"ai_enabled": true, "api_key_configured": true, "model": "deepseek-chat"}`.
+  `{"ai_enabled": true, "api_key_configured": true, "model": "deepseek/deepseek-v4-flash-0731"}`.
 - Evidence on failure: body.
 
 **AI-HP-09 — Language GET returns current; POST (admin) updates it**
@@ -162,21 +162,21 @@ and pages `/ai/`, `/ai/insights/`, `/ai/hr/`. Run under `DJANGO_DEBUG=True`
 - Preconditions: `override_settings(AI_ENABLED=False)`; any authenticated user.
 - Steps: `POST /api/ai/assistant/` `{"question":"anything"}`.
 - Expected: HTTP 503; body `{"ok": false, "error": "AI is not configured. Set
-  AI_ENABLED and DEEPSEEK_API_KEY."}`; exactly one `AiInteractionLog` row with
-  `status='disabled'`; no `langchain_deepseek` instantiation attempted.
+  AI_ENABLED and OPENROUTER_API_KEY."}`; exactly one `AiInteractionLog` row with
+  `status='disabled'`; no `langchain_openrouter` instantiation attempted.
 - Evidence on failure: status/body; log row status.
 
 **AI-EC-02 — Blank key with `AI_ENABLED=True` → misleading "disabled" message**
-- Preconditions: `override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='')`.
+- Preconditions: `override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='')`.
 - Steps: call assistant.
-- Expected: 503 with the **same** "Set AI_ENABLED and DEEPSEEK_API_KEY." message
+- Expected: 503 with the **same** "Set AI_ENABLED and OPENROUTER_API_KEY." message
   even though `AI_ENABLED` is already True (message is misleading — it implies
   both are unset). Functionally correct 503; log `status='disabled'`.
 - Evidence on failure: exact error string; log row.
 
-**AI-EC-03 — `langchain_deepseek` import failure is swallowed and reported as "disabled"**
+**AI-EC-03 — `langchain_openrouter` import failure is swallowed and reported as "disabled"**
 - Preconditions: `AI_ENABLED=True`, key set; patch the
-  `from langchain_deepseek import ChatDeepSeek` inside `_llm` to raise.
+  `from langchain_openrouter import ChatOpenAI` inside `_llm` to raise.
 - Steps: call assistant.
 - Expected: no crash; 503 `{ok:false}`; log `status='disabled'` (a missing
   dependency is misreported as "not configured", NOT `failed`).
@@ -288,14 +288,14 @@ and pages `/ai/`, `/ai/insights/`, `/ai/hr/`. Run under `DJANGO_DEBUG=True`
 - Evidence on failure: reply contains defaulter names / revenue figures from
   `_erp_context_blurb()`.
 
-**AI-SEC-03 — Unredacted business/PII egress to external DeepSeek (PRIORITY)**
-- Preconditions: `AI_ENABLED=True`, key set, `DEEPSEEK_BASE_URL` pointed at a
+**AI-SEC-03 — Unredacted business/PII egress to external OpenRouter (PRIORITY)**
+- Preconditions: `AI_ENABLED=True`, key set, `OPENROUTER_BASE_URL` pointed at a
   local HTTP capture proxy; real (non-mocked) call.
 - Steps: run assistant and reminder-draft; inspect the captured request body.
 - Expected (secure): no PII, or masked. Actual: the payload ships customer full
   names + amounts of top defaulters (`ai/services.py:95-100`) and full
   name/booking/plot/amount/late-fee in reminders (`:198-206`) to
-  `https://api.deepseek.com` unredacted, with no consent/opt-out.
+  `https://api.openrouter.ai/api/v1` unredacted, with no consent/opt-out.
 - Evidence on failure: proxy capture showing plaintext names+amounts.
 
 **AI-SEC-04 — IDOR: customer-portal user exfiltrates other customers via reminder-draft (PRIORITY)**
@@ -335,7 +335,7 @@ and pages `/ai/`, `/ai/insights/`, `/ai/hr/`. Run under `DJANGO_DEBUG=True`
 
 **AI-SEC-08 — Sensitive HR data (salary, leave reasons) egress unredacted**
 - Preconditions: `accounts`/`hr` user; `PayrollRun` + `SalarySlip`s with named
-  employees; `Leave` with a medical `reason`; `DEEPSEEK_BASE_URL` → local proxy.
+  employees; `Leave` with a medical `reason`; `OPENROUTER_BASE_URL` → local proxy.
 - Steps: `POST /api/ai/hr/payroll/` and `/api/ai/hr/leave-review/`; capture proxy.
 - Expected (secure): no names+salary, no leave reason. Actual:
   `analyze_payroll()` ships per-employee gross/deductions/net (`ai/services.py:341-346`);
@@ -446,7 +446,7 @@ and pages `/ai/`, `/ai/insights/`, `/ai/hr/`. Run under `DJANGO_DEBUG=True`
   `ai_language` must restore `'english'` in teardown.
 - Mock `ai.services._llm` for all non-network scenarios; only the egress/
   non-determinism scenarios may use a real call through a local proxy.
-- Always set `AI_ENABLED`/`DEEPSEEK_API_KEY` via `override_settings`; never rely
+- Always set `AI_ENABLED`/`OPENROUTER_API_KEY` via `override_settings`; never rely
   on the ambient `.env` (defaults `AI_ENABLED=False`).
 - `AiInteractionLog` rows accumulate: assert on `objects.last()` / filter by the
   timestamped fixture rather than by count alone.
@@ -465,7 +465,7 @@ and pages `/ai/`, `/ai/insights/`, `/ai/hr/`. Run under `DJANGO_DEBUG=True`
 - AI-HP-10 — HR assistant returns {ok:true, result} to an HR role
 - AI-EC-01 — AI_ENABLED=False → 503 {ok:false}, no network call
 - AI-EC-02 — Blank key + AI_ENABLED=True → misleading "disabled" message
-- AI-EC-03 — langchain_deepseek import failure swallowed as "disabled"
+- AI-EC-03 — langchain_openrouter import failure swallowed as "disabled"
 - AI-EC-04 — score_lead does not clamp out-of-range score (150 passes)
 - AI-EC-05 — Dangling FK (null customer/plot) → 502 whole flow
 - AI-EC-06 — Non-determinism (temperature=0.3) → assert shape not exact text
@@ -479,7 +479,7 @@ and pages `/ai/`, `/ai/insights/`, `/ai/hr/`. Run under `DJANGO_DEBUG=True`
 - AI-EC-14 — Attendance year bounds unvalidated (0/9999 accepted)
 - AI-SEC-01 — Stored DOM-XSS in /ai/insights/ history (PRIORITY)
 - AI-SEC-02 — Prompt injection leaks system prompt / business snapshot (PRIORITY)
-- AI-SEC-03 — Unredacted business/PII egress to external DeepSeek (PRIORITY)
+- AI-SEC-03 — Unredacted business/PII egress to external OpenRouter (PRIORITY)
 - AI-SEC-04 — IDOR: customer exfiltrates other customers via reminder-draft (PRIORITY)
 - AI-SEC-05 — IDOR: lead-score enumerates other parties' leads (PRIORITY)
 - AI-SEC-06 — IDOR: assistant hands full business snapshot to a customer (PRIORITY)

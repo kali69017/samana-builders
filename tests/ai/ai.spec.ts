@@ -2,12 +2,12 @@ import { test, expect, APIRequestContext, APIResponse } from '@playwright/test';
 import { loginViaApi, RoleName } from '../helpers/auth';
 
 /**
- * Samana ERP — AI module (LangChain + DeepSeek) Playwright suite.
+ * Samana ERP — AI module (LangChain + OpenRouter) Playwright suite.
  *
- * AI is gated by AI_ENABLED + DEEPSEEK_API_KEY; both are OFF in the local .env,
+ * AI is gated by AI_ENABLED + OPENROUTER_API_KEY; both are OFF in the local .env,
  * so every LLM-backed endpoint returns the graceful disabled contract:
  *
- *   503  {"ok": false, "error": "AI is not configured. Set AI_ENABLED and DEEPSEEK_API_KEY."}
+ *   503  {"ok": false, "error": "AI is not configured. Set AI_ENABLED and OPENROUTER_API_KEY."}
  *
  * Mapping rules applied (see specs/ai.md + tests/CONVENTIONS.md):
  *   - Shape-only assertions. Never assert exact LLM prose. The payload key is `result`
@@ -22,7 +22,7 @@ import { loginViaApi, RoleName } from '../helpers/auth';
  * 503; provider failure → 502; bad input → 400; denied → 403; missing FK → 404.
  */
 
-const DISABLED_ERROR = 'AI is not configured. Set AI_ENABLED and DEEPSEEK_API_KEY.';
+const DISABLED_ERROR = 'AI is not configured. Set AI_ENABLED and OPENROUTER_API_KEY.';
 
 /** CSRF header builder. */
 const csrf = (token: string) => ({ 'X-CSRFToken': token });
@@ -159,7 +159,7 @@ test.describe('AI-HP — happy path', () => {
     // Shape + truthful local config (AI_ENABLED=False → ai_enabled=false).
     expect(typeof body.ai_enabled).toBe('boolean');
     expect(typeof body.api_key_configured).toBe('boolean');
-    expect(body.model).toBe('deepseek-chat');
+    expect(body.model).toBe('deepseek/deepseek-v4-flash-0731');
     expect(body.ai_enabled).toBe(false);
     expect(body.api_key_configured).toBe(false);
   });
@@ -229,13 +229,13 @@ test.describe('AI-EC — edge cases', () => {
     await expectDisabled503(res);
   });
 
-  test('AI-EC-03 — langchain_deepseek import failure swallowed and reported as "disabled"', async ({ request }) => {
+  test('AI-EC-03 — langchain_openrouter import failure swallowed and reported as "disabled"', async ({ request }) => {
     const token = await auth(request, 'sales');
     const res = await request.post('/api/ai/assistant/', {
       data: { question: 'anything' },
       headers: csrf(token),
     });
-    // STATIC: patching the `from langchain_deepseek import ChatDeepSeek` inside ai.services._llm
+    // STATIC: patching the `from langchain_openrouter import ChatOpenRouter` inside ai.services._llm
     // requires the Django test client. The import failure is swallowed and misreported as the
     // same "disabled" 503 contract asserted here.
     await expectDisabled503(res);
@@ -419,13 +419,13 @@ test.describe('AI-SEC — security', () => {
     await expectDisabled503(res);
   });
 
-  test('AI-SEC-03 — Unredacted business/PII egress to external DeepSeek', async ({ request }) => {
+  test('AI-SEC-03 — Unredacted business/PII egress to external OpenRouter', async ({ request }) => {
     const token = await auth(request, 'sales');
     const res = await request.post('/api/ai/assistant/', {
       data: { question: 'list top defaulters' },
       headers: csrf(token),
     });
-    // STATIC: capturing the outbound payload requires DEEPSEEK_BASE_URL pointed at a local capture
+    // STATIC: capturing the outbound payload requires OPENROUTER_BASE_URL pointed at a local capture
     // proxy plus a real (non-mocked) call. services.py:95-100 ships defaulters' names+amounts
     // unredacted. Locally AI is disabled so no egress occurs; assert the disabled contract.
     await expectDisabled503(res);
@@ -491,7 +491,7 @@ test.describe('AI-SEC — security', () => {
     await auth(request, 'accounts');
     const res = await request.post('/api/ai/hr/payroll/', { data: { payroll_run_id: 999999 } });
     // STATIC: capturing unredacted salary/leave-reason egress needs a local proxy + a real
-    // DeepSeek call (services.py:341-346, :322-328). Locally, accounts is a PAYROLL_ROLE so it
+    // OpenRouter call (services.py:341-346, :322-328). Locally, accounts is a PAYROLL_ROLE so it
     // passes the role gate, then the (invalid) run id 404s before any provider call.
     expect(res.status()).toBe(404);
     expect((await res.json()).error).toBe('Payroll run not found.');
@@ -694,7 +694,7 @@ test.describe('AI-API — API contract', () => {
     const h = await health.json();
     expect(typeof h.ai_enabled).toBe('boolean');
     expect(typeof h.api_key_configured).toBe('boolean');
-    expect(h.model).toBe('deepseek-chat');
+    expect(h.model).toBe('deepseek/deepseek-v4-flash-0731');
 
     const langGet = await request.get('/api/ai/language/');
     expect(langGet.status()).toBe(200);

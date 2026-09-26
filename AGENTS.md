@@ -52,6 +52,6 @@ Default login: `admin` / `admin123`. Login `/login/`; staff land on `/dashboard/
 ## Gotchas
 
 - `requirements.txt` is **UTF-16 encoded** — ordinary UTF-8 tooling garbles it.
-- SMS (SendPK), Email (Brevo), WhatsApp, and AI (DeepSeek) are all disabled in local `.env` (`*_ENABLED=False`). Tests assert shape / disabled-provider contract only, never live sends or LLM prose.
+- SMS (SendPK), Email (Brevo), WhatsApp, and AI (OpenRouter) are all disabled in local `.env` (`*_ENABLED=False`). Tests assert shape / disabled-provider contract only, never live sends or LLM prose.
 - SMS sender "SAMANA" needs PTA-approved branded mask; `SENDPK_SENDER_ID` is currently "SMS Alert" (`settings.py`).
 - `docs/` and `specs/` hold planning/QA artifacts; `CLAUDE.md` "Work status" is the source of truth for what shipped.

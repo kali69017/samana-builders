@@ -2352,7 +2352,7 @@ def portal_view(request):
     return render(request, 'portal/dashboard.html', context)
 
 
-# ─── AI ASSISTANT (LangChain + DeepSeek) ─────────────────────────────────────
+# ─── AI ASSISTANT (LangChain + OpenRouter) ─────────────────────────────────────
 
 @login_required
 def ai_assistant_page_view(request):
@@ -2364,7 +2364,7 @@ def ai_assistant_page_view(request):
     role = get_user_role(request)
     context = {
         'ai_enabled': bool(getattr(settings, 'AI_ENABLED', False)),
-        'ai_configured': bool(getattr(settings, 'DEEPSEEK_API_KEY', '')),
+        'ai_configured': bool(getattr(settings, 'OPENROUTER_API_KEY', '')),
         'ai_language': settings_obj.ai_language,
         'can_manage_ai_language': request.user.is_superuser or role in ADMIN_ROLES,
     }
@@ -2402,7 +2402,7 @@ def ai_insights_page_view(request):
 
     context = {
         'ai_enabled': bool(getattr(settings, 'AI_ENABLED', False)),
-        'ai_configured': bool(getattr(settings, 'DEEPSEEK_API_KEY', '')),
+        'ai_configured': bool(getattr(settings, 'OPENROUTER_API_KEY', '')),
         'total_revenue': total_revenue,
         'monthly_revenue': monthly_revenue,
         'pending_payments': pending_payments,
@@ -2429,7 +2429,7 @@ def ai_hr_page_view(request):
     from hr.models import Department, Designation, Leave, PayrollRun
     context = {
         'ai_enabled': bool(getattr(settings, 'AI_ENABLED', False)),
-        'ai_configured': bool(getattr(settings, 'DEEPSEEK_API_KEY', '')),
+        'ai_configured': bool(getattr(settings, 'OPENROUTER_API_KEY', '')),
         'departments': Department.objects.filter(is_active=True),
         'designations': Designation.objects.filter(is_active=True),
         'pending_leaves': Leave.objects.filter(status='pending').select_related('employee')[:10],

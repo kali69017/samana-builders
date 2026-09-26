@@ -17,7 +17,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Load environment variables from the repo's .env file (gitignored).
-# This is what makes DJANGO_SECRET_KEY, DB_*, EMAIL_*, SENDPK_*, DEEPSEEK_*
+# This is what makes DJANGO_SECRET_KEY, DB_*, EMAIL_*, SENDPK_*, OPENROUTER_*
 # configuration from .env actually take effect in both dev and production.
 try:
     from dotenv import load_dotenv
@@ -257,10 +257,12 @@ SENDPK_API_KEY = os.environ.get('SENDPK_API_KEY', '')
 SENDPK_SENDER_ID = os.environ.get('SENDPK_SENDER_ID', 'SMS Alert')
 SENDPK_BASE_URL = os.environ.get('SENDPK_BASE_URL', 'https://sendpk.com/api/sms.php')
 
-# ─── DeepSeek AI (LangChain) ──────────────────────────────────────────────
-# AI assistant features are powered by DeepSeek's chat models through the
-# langchain-deepseek integration (OpenAI-compatible API).
+# ─── OpenRouter AI (LangChain) ─────────────────────────────────────────────
+# AI assistant features are powered by OpenRouter's unified chat API through
+# the langchain-openrouter integration. OPENROUTER_REASONING forwards
+# OpenRouter's `reasoning.enabled` extra body for reasoning-capable models.
 AI_ENABLED = os.environ.get('AI_ENABLED', 'False').lower() in ('1', 'true', 'yes')
-DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', '')
-DEEPSEEK_MODEL = os.environ.get('DEEPSEEK_MODEL', 'deepseek-chat')
-DEEPSEEK_BASE_URL = os.environ.get('DEEPSEEK_BASE_URL', 'https://api.deepseek.com')
+OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '')
+OPENROUTER_MODEL = os.environ.get('OPENROUTER_MODEL', 'deepseek/deepseek-v4-flash-0731')
+OPENROUTER_BASE_URL = os.environ.get('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1')
+OPENROUTER_REASONING = os.environ.get('OPENROUTER_REASONING', 'True').lower() in ('1', 'true', 'yes')

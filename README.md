@@ -88,9 +88,9 @@ Samana Builders/
 └── themes/              # Theme samples
 ```
 
-## AI Assistant (LangChain + DeepSeek)
+## AI Assistant (LangChain + OpenRouter)
 
-The ERP ships with an AI layer powered by [LangChain](https://www.langchain.com/) and the DeepSeek chat API.
+The ERP ships with an AI layer powered by [LangChain](https://www.langchain.com/) and the OpenRouter chat API.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -115,9 +115,10 @@ Add to `.env` (gitignored):
 
 ```
 AI_ENABLED=True
-DEEPSEEK_API_KEY=sk-...
-DEEPSEEK_MODEL=deepseek-chat
-DEEPSEEK_BASE_URL=https://api.deepseek.com
+OPENROUTER_API_KEY=sk-or-v1-...
+OPENROUTER_MODEL=deepseek/deepseek-v4-flash-0731
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_REASONING=True
 ```
 
 Every AI call is logged to the `AiInteractionLog` table (visible in Django admin).

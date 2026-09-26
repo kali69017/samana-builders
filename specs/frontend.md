@@ -33,7 +33,7 @@ Role-denied paths (assert the nav item is absent *and* the view redirects to `/d
 - Roles: `accounts` profile, `sales` profile, and a customer login (for HP-04 / HP-08 / portal assertions).
 - A payment with a file attachment (for payment_form upload-zone checks, SEC-09).
 
-**AI pages** require `AI_ENABLED=True` + `DEEPSEEK_API_KEY`, or (preferred, deterministic) **stub the fetch response** in DevTools / Playwright route so `/api/ai/insights/` returns `{ok:true, result:"<img src=x onerror=window.__xss=1>"}` and `/api/ai/hr/assistant/` returns `{ok:true, result:"safe text"}`. Stubbing removes the LLM non-determinism from the XSS repros.
+**AI pages** require `AI_ENABLED=True` + `OPENROUTER_API_KEY`, or (preferred, deterministic) **stub the fetch response** in DevTools / Playwright route so `/api/ai/insights/` returns `{ok:true, result:"<img src=x onerror=window.__xss=1>"}` and `/api/ai/hr/assistant/` returns `{ok:true, result:"safe text"}`. Stubbing removes the LLM non-determinism from the XSS repros.
 
 **URLs exercised** (relative to `http://127.0.0.1:8000`):
 `/login/`, `/dashboard/`, `/`, `/customers/`, `/customers/new/`, `/properties/`, `/bookings/`, `/bookings/new/`, `/payments/`, `/refunds/`, `/financial-reports/`, `/ai/insights/`, `/ai/hr/`, `/ai/assistant/`, `/hr/leaves/`, `/portal/`, corporate `/` home (public).

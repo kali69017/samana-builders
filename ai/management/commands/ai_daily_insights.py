@@ -1,6 +1,6 @@
 """Management command: ai_daily_insights
 
-Generates a DeepSeek-powered business insights summary for the current ERP
+Generates an OpenRouter-powered business insights summary for the current ERP
 state and writes it into an AiInteractionLog row (feature='insights').
 
 Designed to run on a cron schedule (e.g. daily at 09:00 PKT):

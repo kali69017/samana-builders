@@ -164,8 +164,8 @@ class HealthView(APIView):
         from django.conf import settings
         return Response({
             'ai_enabled': bool(getattr(settings, 'AI_ENABLED', False)),
-            'api_key_configured': bool(getattr(settings, 'DEEPSEEK_API_KEY', '')),
-            'model': getattr(settings, 'DEEPSEEK_MODEL', 'deepseek-chat'),
+            'api_key_configured': bool(getattr(settings, 'OPENROUTER_API_KEY', '')),
+            'model': getattr(settings, 'OPENROUTER_MODEL', 'deepseek/deepseek-v4-flash-0731'),
         })
 
 

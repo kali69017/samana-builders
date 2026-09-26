@@ -3,11 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <style>
-        @page { size: A4; margin: 15mm; }
+        @page {
+            size: A4;
+            margin: 15mm 15mm 22mm;
+            @frame footer {
+                -pdf-frame-content: footerContent;
+                left: 15mm;
+                width: 180mm;
+                top: 283mm;
+                height: 14mm;
+            }
+        }
         body { font-family: Helvetica, Arial, sans-serif; font-size: 12px; color: #1e293b; }
-        .header { text-align: center; margin-bottom: 20px; border-bottom: 3px solid #1e40af; padding-bottom: 15px; }
+        #footerContent { font-family: Helvetica, Arial, sans-serif; font-size: 8px; color: #64748b; text-align: center; line-height: 1.5; }
+        .header { margin-bottom: 20px; border-bottom: 3px solid #1e40af; padding-bottom: 15px; }
         .company-name { font-size: 24px; font-weight: 800; color: #1e40af; }
-        .invoice-title { font-size: 20px; font-weight: 700; margin-top: 10px; color: #1e293b; letter-spacing: 2px; }
+        .invoice-title { font-size: 20px; font-weight: 800; color: #1e40af; text-align: right; letter-spacing: 2px; }
         .meta-table { width: 100%; margin-bottom: 15px; }
         .meta-table td { padding: 4px 8px; font-size: 11px; }
         .meta-label { color: #64748b; width: 140px; }
@@ -26,9 +37,19 @@
 </head>
 <body>
     <div class="header">
-            <img src="images/samana-logo.png" style="height:48px; margin-bottom:6px;" alt="Samana Builders logo">
-            <div class="company-name">Samana Builders &amp; Developers</div>
-            <div class="invoice-title">BANK INVOICE</div>
+            <table style="width:100%; border-collapse:collapse;">
+                <tr>
+                    <td style="width:80px; vertical-align:middle;">
+                        <img src="images/samana-logo.png" style="height:44px;" alt="Samana Builders logo">
+                    </td>
+                    <td style="vertical-align:middle;">
+                        <div class="company-name">Samana Builders &amp; Developers</div>
+                    </td>
+                    <td style="text-align:right; vertical-align:middle;">
+                        <div class="invoice-title">BANK INVOICE</div>
+                    </td>
+                </tr>
+            </table>
         </div>
 
     <table class="meta-table">
@@ -63,10 +84,10 @@
     </table>
     {% endif %}
 
-    <div class="notice">
-            This is a system-generated invoice from Samana Builders &amp; Developers.<br>
-            <span class="footer-label">Address:</span> Office No. 207, 2nd Floor, Shayan Iconic Tower, Plot No. 5-A, Delhi Mercantile Cooperative Society, Karachi, Pakistan<br>
-            <span class="footer-label">Email:</span> info@samanabuilders.com &nbsp;&nbsp; <span class="footer-label">Contact No:</span> 03206229330
-        </div>
+    <div id="footerContent">
+        This is a system-generated invoice from Samana Builders &amp; Developers.<br>
+        Office No. 207, 2nd Floor, Shayan Iconic Tower, Plot No. 5-A, Delhi Mercantile Cooperative Society, Karachi, Pakistan<br>
+        0320 6229330 &nbsp;&nbsp;|&nbsp;&nbsp; info@samanabuilders.com
+    </div>
 </body>
 </html>

@@ -3,9 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <style>
-        @page { size: A4; margin: 15mm; }
+        @page {
+            size: A4;
+            margin: 15mm 15mm 22mm;
+            @frame footer {
+                -pdf-frame-content: footerContent;
+                left: 15mm;
+                width: 180mm;
+                top: 283mm;
+                height: 14mm;
+            }
+        }
         body { font-family: Helvetica, Arial, sans-serif; font-size: 12px; color: #1e293b; }
-        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 3px solid #1e40af; padding-bottom: 15px; }
+        #footerContent { font-family: Helvetica, Arial, sans-serif; font-size: 8px; color: #64748b; text-align: center; line-height: 1.5; }
+        .header { margin-bottom: 20px; border-bottom: 3px solid #1e40af; padding-bottom: 15px; }
         .company-name { font-size: 22px; font-weight: 800; color: #1e40af; }
         .company-tagline { font-size: 11px; color: #64748b; }
         .receipt-title { font-size: 20px; font-weight: 800; color: #1e40af; text-align: right; letter-spacing: 2px; }
@@ -34,17 +45,21 @@
 </head>
 <body>
     <div class="header">
-            <div style="display:flex; align-items:center; gap:12px;">
-                <img src="images/samana-logo.png" style="height:44px;" alt="Samana Builders logo">
-                <div>
-                    <div class="company-name">Samana Builders & Developers</div>
-                    <div class="company-tagline">Excellence in Real Estate</div>
-                </div>
-            </div>
-            <div>
-                <div class="receipt-title">OFFICIAL RECEIPT</div>
-                <div class="receipt-number">{{ receipt.receipt_number }}</div>
-            </div>
+            <table style="width:100%; border-collapse:collapse;">
+                <tr>
+                    <td style="width:80px; vertical-align:middle;">
+                        <img src="images/samana-logo.png" style="height:44px;" alt="Samana Builders logo">
+                    </td>
+                    <td style="vertical-align:middle;">
+                        <div class="company-name">Samana Builders &amp; Developers</div>
+                        <div class="company-tagline">Excellence in Real Estate</div>
+                    </td>
+                    <td style="text-align:right; vertical-align:middle;">
+                        <div class="receipt-title">OFFICIAL RECEIPT</div>
+                        <div class="receipt-number">{{ receipt.receipt_number }}</div>
+                    </td>
+                </tr>
+            </table>
         </div>
 
     <table class="meta-table">
@@ -88,9 +103,9 @@
         <div class="signature"><div class="signature-line"></div><div class="signature-label">Receiver's Signature</div></div>
     </div>
 
-    <div class="notice">
-            <span class="footer-label">Address:</span> Office No. 207, 2nd Floor, Shayan Iconic Tower, Plot No. 5-A, Delhi Mercantile Cooperative Society, Karachi, Pakistan<br>
-            <span class="footer-label">Email:</span> info@samanabuilders.com &nbsp;&nbsp; <span class="footer-label">Contact No:</span> 03206229330
-        </div>
+    <div id="footerContent">
+        Office No. 207, 2nd Floor, Shayan Iconic Tower, Plot No. 5-A, Delhi Mercantile Cooperative Society, Karachi, Pakistan<br>
+        0320 6229330 &nbsp;&nbsp;|&nbsp;&nbsp; info@samanabuilders.com
+    </div>
 </body>
 </html>

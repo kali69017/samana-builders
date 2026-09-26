@@ -655,7 +655,7 @@ Departments → Designations → Employees → Salary components
 
 ## 13. AI Module
 
-The AI module uses DeepSeek (an AI engine) to help you work faster.
+The AI module uses OpenRouter (an AI gateway) to help you work faster.
 Every AI action is logged for audit.
 
 ### 13.1 AI Assistant (who: all logged-in users)

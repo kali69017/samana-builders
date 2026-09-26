@@ -112,7 +112,7 @@ urlpatterns = [
     path('auth/logout/', api_logout, name='api_logout'),
     path('auth/me/', current_user, name='api_me'),
 
-    # AI features (LangChain + DeepSeek)
+    # AI features (LangChain + OpenRouter)
     path('ai/', include('ai.urls')),
 
     # Customer portal login creation + portal data

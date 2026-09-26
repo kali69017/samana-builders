@@ -1,6 +1,6 @@
-"""Tests for the AI feature layer (LangChain + DeepSeek).
+"""Tests for the AI feature layer (LangChain + OpenRouter).
 
-The DeepSeek provider call is mocked so the suite never touches the network.
+The OpenRouter provider call is mocked so the suite never touches the network.
 The AiDisabledError path is tested with AI_ENABLED=False.
 """
 from datetime import date, timedelta
@@ -47,7 +47,7 @@ class AiServiceTests(TestCase):
         self.assertEqual(
             AiInteractionLog.objects.filter(status='disabled').count(), 1)
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_assistant_returns_content(self):
         from .services import ask_assistant
         mock_llm = type('FakeLLM', (), {'invoke': staticmethod(
@@ -59,7 +59,7 @@ class AiServiceTests(TestCase):
         self.assertEqual(log.status, 'success')
         self.assertEqual(log.user, self.user)
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_lead_score_parses_json(self):
         from .services import score_lead
         mock_llm = type('FakeLLM', (), {'invoke': staticmethod(
@@ -71,7 +71,7 @@ class AiServiceTests(TestCase):
         self.assertEqual(out['score'], 80)
         self.assertEqual(out['tier'], 'hot')
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_lead_score_handles_bad_json(self):
         from .services import score_lead
         mock_llm = type('FakeLLM', (), {'invoke': staticmethod(
@@ -81,7 +81,7 @@ class AiServiceTests(TestCase):
         self.assertEqual(out['score'], None)
         self.assertEqual(out['tier'], 'unknown')
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_failed_call_logs_error(self):
         from .services import ask_assistant
         def boom(msgs):
@@ -139,7 +139,7 @@ class AiApiTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
         self.assertFalse(resp.data['ok'])
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_assistant_success(self):
         with self._mock_llm('Total revenue is Rs. 5,000,000.'):
             resp = self.client.post(reverse('ai_assistant'), {'question': 'Revenue?'}, format='json')
@@ -159,7 +159,7 @@ class AiApiTests(APITestCase):
         mock_llm = type('FakeLLM', (), {'invoke': staticmethod(fake_invoke)})()
         return patch('ai.services._llm', return_value=mock_llm), captured
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_assistant_default_language_is_english(self):
         obj = CompanySettings.load()
         obj.ai_language = 'english'
@@ -170,7 +170,7 @@ class AiApiTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertIn('Respond in clear English.', captured.get('system', ''))
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_assistant_roman_urdu_language_instruction(self):
         obj = CompanySettings.load()
         obj.ai_language = 'roman_urdu'
@@ -185,7 +185,7 @@ class AiApiTests(APITestCase):
         obj.ai_language = 'english'
         obj.save()
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_insights_honors_roman_urdu_language_setting(self):
         obj = CompanySettings.load()
         obj.ai_language = 'roman_urdu'
@@ -199,7 +199,7 @@ class AiApiTests(APITestCase):
         obj.ai_language = 'english'
         obj.save()
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_insights_focus_honors_roman_urdu_language_setting(self):
         obj = CompanySettings.load()
         obj.ai_language = 'roman_urdu'
@@ -259,7 +259,7 @@ class AiApiTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(CompanySettings.load().ai_language, 'english')
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_lead_score_success(self):
         lead = Lead.objects.create(name='Scored', phone='+92-300-5556666')
         with self._mock_llm('{"score": 70, "tier": "warm", "reason": "Engaged."}'):
@@ -271,7 +271,7 @@ class AiApiTests(APITestCase):
         resp = self.client.post(reverse('ai_lead_score'), {'lead_id': 99999}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_property_description_success(self):
         with self._mock_llm('Beautiful 5 marla plot in Lahore.'):
             resp = self.client.post(
@@ -284,7 +284,7 @@ class AiApiTests(APITestCase):
             reverse('ai_property_description'), {'plot_id': 99999}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_reminder_draft_success(self):
         with self._mock_llm('Dear customer, installment #1 is due.'):
             resp = self.client.post(
@@ -297,33 +297,33 @@ class AiApiTests(APITestCase):
             reverse('ai_reminder_draft'), {'installment_id': 99999}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_insights_finance_role_allowed(self):
         with self._mock_llm('Collections are healthy.'):
             resp = self.client.get(reverse('ai_insights'))
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertTrue(resp.data['ok'])
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_insights_focus_param_passes_through(self):
         with self._mock_llm('Inventory focus analysis.'):
             resp = self.client.get(reverse('ai_insights'), {'focus': 'inventory'})
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertTrue(resp.data['ok'])
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_insights_invalid_focus_rejected(self):
         resp = self.client.get(reverse('ai_insights'), {'focus': 'bogus'})
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_insights_hr_focus_uses_hr_context(self):
         with self._mock_llm('Workforce analysis.'):
             resp = self.client.get(reverse('ai_insights'), {'focus': 'hr'})
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertTrue(resp.data['ok'])
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_insights_sales_role_denied(self):
         sales = User.objects.create_user('sales', 's@example.com', 'salespass123')
         UserProfile.objects.create(user=sales, role='sales')
@@ -366,7 +366,7 @@ class HrAiApiTests(APITestCase):
             lambda msgs: type('R', (), {'content': content})())})()
         return patch('ai.services._llm', return_value=mock_llm)
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_hr_assistant_success(self):
         with self._mock_llm('You have 1 active employee.'):
             resp = self.client.post(reverse('ai_hr_assistant'), {'question': 'Headcount?'}, format='json')
@@ -378,7 +378,7 @@ class HrAiApiTests(APITestCase):
         resp = self.client.post(reverse('ai_hr_assistant'), {}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_hr_assistant_denied_for_sales_role(self):
         sales = User.objects.create_user('saleshr', 's@example.com', 'salespass123')
         UserProfile.objects.create(user=sales, role='sales')
@@ -386,7 +386,7 @@ class HrAiApiTests(APITestCase):
         resp = self.client.post(reverse('ai_hr_assistant'), {'question': 'Hi'}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_leave_review_success(self):
         with self._mock_llm('Your leave is approved.'):
             resp = self.client.post(reverse('ai_leave_review'), {
@@ -404,7 +404,7 @@ class HrAiApiTests(APITestCase):
             'leave_id': 99999, 'decision': 'approve'}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_payroll_insights_success(self):
         with self._mock_llm('Payroll looks healthy.'):
             resp = self.client.post(reverse('ai_payroll_insights'), {
@@ -416,7 +416,7 @@ class HrAiApiTests(APITestCase):
         resp = self.client.post(reverse('ai_payroll_insights'), {'payroll_run_id': 99999}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_attendance_insights_success(self):
         with self._mock_llm('Attendance rate is 95%.'):
             resp = self.client.post(reverse('ai_attendance_insights'), {
@@ -434,7 +434,7 @@ class HrAiApiTests(APITestCase):
             'month': 'abc', 'year': 2026}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_job_description_success(self):
         with self._mock_llm('Job Description for Sales Executive.'):
             resp = self.client.post(reverse('ai_job_description'), {
@@ -447,7 +447,7 @@ class HrAiApiTests(APITestCase):
             resp = self.client.post(reverse('ai_job_description'), {}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
 
-    @override_settings(AI_ENABLED=True, DEEPSEEK_API_KEY='test-key')
+    @override_settings(AI_ENABLED=True, OPENROUTER_API_KEY='test-key')
     def test_hr_assistant_disabled_503(self):
         with override_settings(AI_ENABLED=False):
             resp = self.client.post(reverse('ai_hr_assistant'), {'question': 'Hi'}, format='json')
