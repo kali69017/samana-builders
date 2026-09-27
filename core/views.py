@@ -2238,7 +2238,7 @@ def backup_restore_upload_view(request):
 # ─── CORPORATE SITE + CUSTOMER PORTAL (Django templates) ─────────────────────
 
 def corporate_home_view(request):
-    return render(request, 'corporate/home.html', {})
+    return render(request, 'corporate/lp_index.html', {})
 
 
 def lead_submit_view(request):
@@ -2258,7 +2258,15 @@ def lead_submit_view(request):
         return redirect('corporate_home')
 
     # Create Lead record
+    # interest: the 'interest' select plus any checked building-type checkboxes
+    # (Residential/Commercial/Villa/Investment) all describe what the visitor wants.
     interest = request.POST.get('interest', '').strip()
+    building_types = [
+        t for t in ('Residential', 'Commercial', 'Villa', 'Investment')
+        if request.POST.get(t) in ('on', 'true', t, 'Value')
+    ]
+    if building_types:
+        interest = (interest + ', ' + ', '.join(building_types)).strip(', ')
     message = request.POST.get('message', '').strip()
     notes_parts = []
     if interest:
