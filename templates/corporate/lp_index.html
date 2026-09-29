@@ -951,53 +951,71 @@ fs-selectcustom
 ></script>
 
 <script src="/static/lp/js/main.js" defer></script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  // Auto-hide success message after 5 seconds
-  var successWrap = document.querySelector('.w-form-done');
-  if (successWrap) {
-    setTimeout(function() {
-      successWrap.style.display = 'none';
-      // Also hide the form again if it was hidden
-      var form = document.getElementById('wf-form-Contact-Form');
-      if (form) form.style.display = 'block';
-    }, 5000);
-  }
-  
-  // Hamburger menu: close menu when a link is clicked (mobile)
-  var navLinks = document.querySelectorAll('.bold-nav-full__link[href^="#"]');
-  navLinks.forEach(function(link) {
-    link.addEventListener('click', function() {
-      // Close mobile nav
-      var navWrap = document.querySelector('.g_nav_wrap');
-      if (navWrap) {
-        navWrap.setAttribute('data-navigation-status', 'not-active');
-      }
-      // Allow default anchor scroll behavior
+  // Handle form submit via AJAX to work with Webflow's success/error blocks
+  var form = document.getElementById('wf-form-Contact-Form');
+  if (form) {
+    form.addEventListener('submit', function(e) {
+      console.log('Submit handler fired!');
+      e.preventDefault();
+      var formData = new FormData(form);
+      
+      fetch('/lead/submit/', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value,
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        credentials: 'same-origin'
+      })
+      .then(function(response) {
+        if (response.ok || response.redirected) {
+          // Show success message (Webflow style)
+          var successWrap = document.querySelector('.w-form-done');
+          var formEl = document.getElementById('wf-form-Contact-Form');
+          console.log('AJAX success, found successWrap:', !!successWrap, 'formEl:', !!formEl);
+          if (successWrap) {
+            successWrap.style.display = 'block';
+            console.log('Set successWrap display=block');
+          }
+          if (formEl) {
+            formEl.style.display = 'none';
+            console.log('Set formEl display=none');
+          }
+          
+          // Auto-hide after 5 seconds
+          setTimeout(function() {
+            if (successWrap) successWrap.style.display = 'none';
+            if (formEl) formEl.style.display = 'block';
+            // Reset form
+            form.reset();
+          }, 5000);
+        } else {
+          // Show error
+          var errorWrap = document.querySelector('.w-form-fail');
+          if (errorWrap) errorWrap.style.display = 'block';
+          setTimeout(function() {
+            if (errorWrap) errorWrap.style.display = 'none';
+          }, 5000);
+        }
+      })
+      .catch(function() {
+        var errorWrap = document.querySelector('.w-form-fail');
+        if (errorWrap) errorWrap.style.display = 'block';
+        setTimeout(function() {
+          if (errorWrap) errorWrap.style.display = 'none';
+        }, 5000);
+      });
     });
-  });
-});
-</script>
-
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  // Auto-hide success message after 5 seconds
-  var successWrap = document.querySelector('.w-form-done');
-  if (successWrap) {
-    setTimeout(function() {
-      successWrap.style.display = 'none';
-      // Also show the form again if it was hidden
-      var form = document.getElementById('wf-form-Contact-Form');
-      if (form) form.style.display = 'block';
-    }, 5000);
   }
   
   // Hamburger menu: close menu when a link is clicked (mobile)
   var navLinks = document.querySelectorAll('.bold-nav-full__link[href^="#"]');
   navLinks.forEach(function(link) {
     link.addEventListener('click', function() {
-      // Close mobile nav
       var navWrap = document.querySelector('.g_nav_wrap');
       if (navWrap) {
         navWrap.setAttribute('data-navigation-status', 'not-active');

@@ -2254,6 +2254,8 @@ def lead_submit_view(request):
         source = 'hero'
 
     if not name and not email and not phone:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'success': False, 'error': 'Please provide at least your name or email.'}, status=400)
         messages.error(request, 'Please provide at least your name or email.')
         return redirect('corporate_home')
 
@@ -2275,6 +2277,9 @@ def lead_submit_view(request):
         notes_parts.append(f'Message: {message}')
     lead = Lead.objects.create(name=name, email=email, phone=phone, source=source,
                                notes='\n'.join(notes_parts))
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'success': True, 'message': 'Thank you! Your enquiry has been received. Our team will contact you soon.'})
 
     messages.success(request, 'Thank you! Your enquiry has been received. Our team will contact you soon.')
     return redirect('corporate_home')
