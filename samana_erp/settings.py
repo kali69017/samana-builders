@@ -244,10 +244,11 @@ else:
 
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'Samana Builders <noreply@samanabuilders.com>')
 
-# WhatsApp Configuration
-WHATSAPP_PHONE_NUMBER = '+923001234567'  # Company WhatsApp number
-WHATSAPP_API_URL = 'https://graph.facebook.com/v17.0/YOUR_PHONE_ID/messages'
-WHATSAPP_API_TOKEN = ''  # Add your WhatsApp Business API token
+# WhatsApp Configuration — WhatsApp Business Cloud API (real delivery).
+WHATSAPP_ENABLED = os.environ.get('WHATSAPP_ENABLED', 'False').lower() in ('1', 'true', 'yes')
+WHATSAPP_API_TOKEN = os.environ.get('WHATSAPP_API_TOKEN', '')  # permanent system-user token
+WHATSAPP_PHONE_NUMBER_ID = os.environ.get('WHATSAPP_PHONE_NUMBER_ID', '')  # sender phone number ID
+WHATSAPP_API_VERSION = os.environ.get('WHATSAPP_API_VERSION', 'v22.0')
 
 # SMS Configuration (SendPK) — supplied via environment variables.
 SENDPK_ENABLED = os.environ.get('SENDPK_ENABLED', 'False').lower() in ('1', 'true', 'yes')

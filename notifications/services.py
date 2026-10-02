@@ -143,29 +143,66 @@ class SMSService:
 
 class WhatsAppService:
     @staticmethod
+    def normalize_phone(to_phone):
+        """E.164 without '+': 923001234567 (same shape SendPK uses)."""
+        digits = re.sub(r'\D', '', to_phone or '')
+        if digits.startswith('92') and len(digits) == 12:
+            return digits
+        if digits.startswith('0') and len(digits) == 11:
+            return '92' + digits[1:]
+        if len(digits) == 10:
+            return '92' + digits
+        return ''
+
+    @staticmethod
     def send(to_phone, message):
+        """Send a real WhatsApp message via the Business Cloud API when enabled;
+        otherwise return a wa.me click-to-chat link (fallback)."""
         if not to_phone:
             return False, "No phone number provided"
-        # WhatsApp Business API integration
-        # Uses the WhatsApp URL scheme for simple messaging
-        try:
-            # Clean phone number
-            phone = to_phone.replace('+', '').replace('-', '').replace(' ', '')
-            if phone.startswith('0'):
-                phone = '92' + phone[1:]
-            # Generate WhatsApp click-to-chat URL
+
+        phone = WhatsAppService.normalize_phone(to_phone)
+        if not phone:
+            return False, "Invalid phone number"
+
+        if not getattr(settings, 'WHATSAPP_ENABLED', False):
             wa_url = f"https://wa.me/{phone}?text={requests.utils.quote(message)}"
-            logger.info(f"WhatsApp message prepared for {phone}: {wa_url}")
+            logger.info(f"[WhatsApp disabled] fallback link for {phone}")
             return True, wa_url
+
+        token = getattr(settings, 'WHATSAPP_API_TOKEN', '')
+        number_id = getattr(settings, 'WHATSAPP_PHONE_NUMBER_ID', '')
+        if not token or not number_id:
+            return False, "WhatsApp not configured. Set WHATSAPP_API_TOKEN and WHATSAPP_PHONE_NUMBER_ID."
+
+        try:
+            version = getattr(settings, 'WHATSAPP_API_VERSION', 'v22.0')
+            url = f"https://graph.facebook.com/{version}/{number_id}/messages"
+            resp = requests.post(
+                url,
+                headers={
+                    'Authorization': f'Bearer {token}',
+                    'Content-Type': 'application/json',
+                },
+                json={
+                    'messaging_product': 'whatsapp',
+                    'to': phone,
+                    'type': 'text',
+                    'text': {'body': message},
+                },
+                timeout=15,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            msg_id = data.get('messages', [{}])[0].get('id', '') if data.get('messages') else ''
+            return True, f"OK ID:{msg_id}"
         except Exception as e:
-            logger.error(f"WhatsApp prepare failed: {e}")
+            logger.error(f"WhatsApp send failed: {e}")
             return False, str(e)
 
     @staticmethod
     def get_click_to_chat_url(phone, message=''):
-        phone = (phone or '').replace('+', '').replace('-', '').replace(' ', '')
-        if phone.startswith('0'):
-            phone = '92' + phone[1:]
+        phone = WhatsAppService.normalize_phone(phone)
         return f"https://wa.me/{phone}?text={requests.utils.quote(message)}" if phone else ''
 
 
