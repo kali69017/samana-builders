@@ -4,6 +4,7 @@ import requests
 from django.conf import settings
 from django.core.mail import send_mail
 from django.utils import timezone
+from . import wa_templates
 from .models import NotificationLog
 
 logger = logging.getLogger(__name__)
@@ -142,6 +143,29 @@ class SMSService:
 
 
 class WhatsAppService:
+    # Which setting names the Meta-approved template for each notification type.
+    # Empty value = not configured; that notification fails with a message
+    # naming the setting rather than silently sending the wrong thing.
+    TEMPLATE_SETTING_BY_TYPE = {
+        'payment_confirmation': 'WHATSAPP_TEMPLATE_PAYMENT_CONFIRMATION',
+        'booking_notification': 'WHATSAPP_TEMPLATE_BOOKING_NOTIFICATION',
+        'booking_approval': 'WHATSAPP_TEMPLATE_BOOKING_APPROVAL',
+        'installment_reminder': 'WHATSAPP_TEMPLATE_INSTALLMENT_REMINDER',
+        'overdue_payment': 'WHATSAPP_TEMPLATE_OVERDUE_PAYMENT',
+        'receipt_notification': 'WHATSAPP_TEMPLATE_RECEIPT_NOTIFICATION',
+    }
+
+    # Graph error codes worth translating. Anything else passes through raw.
+    ERROR_HINTS = {
+        131047: 'More than 24h since the customer last replied - send an approved template, not free-form text.',
+        130429: 'Throughput exceeded - slow down and retry with backoff.',
+        131056: 'Too many messages to this recipient - limit is 1 message per 6 seconds.',
+        132000: 'Template parameter count does not match the approved template.',
+        132001: 'Template is unknown, not yet approved, or the language code is wrong.',
+        131049: 'Blocked to protect ecosystem quality - wait 24h and review template content.',
+        131050: 'Recipient is not subscribed to this category - do not retry.',
+    }
+
     @staticmethod
     def normalize_phone(to_phone):
         """E.164 without '+': 923001234567 (same shape SendPK uses)."""
@@ -155,9 +179,149 @@ class WhatsAppService:
         return ''
 
     @staticmethod
+    def template_name_for(notification_type):
+        """Configured template name for a notification type, '' when unset."""
+        setting = WhatsAppService.TEMPLATE_SETTING_BY_TYPE.get(notification_type)
+        return getattr(settings, setting, '') if setting else ''
+
+    @staticmethod
+    def extract_message_id(detail):
+        """Parse the wamid out of a detail string like 'OK ID:wamid.HBg...'."""
+        m = re.search(r'ID:(\S+)', detail or '')
+        return m.group(1) if m else ''
+
+    @staticmethod
+    def _describe_error(status_code, data, exc=None):
+        """Turn a Graph failure into a detail string a human can act on.
+
+        The Graph API returns the actionable part (code, subcode, details) in the
+        JSON body, so this must never collapse to a bare HTTP status.
+        """
+        if exc is not None:
+            # Keep the status: a 502 gateway page and a 200-serving-HTML both surface
+            # here as a JSON parse failure, and without it they look identical.
+            where = f"HTTP {status_code}" if status_code else "request"
+            return f"WhatsApp {where} failed: {exc}"
+
+        error = (data or {}).get('error') or {}
+        code = error.get('code')
+        subcode = error.get('error_subcode')
+        message = error.get('message') or f'HTTP {status_code}'
+        details = (error.get('error_data') or {}).get('details') or ''
+
+        label = f"Graph error {code}" if code else f"HTTP {status_code}"
+        if subcode:
+            label += f"/{subcode}"
+        out = f"{label}: {message}"
+        if details:
+            out += f" | {details}"
+        hint = WhatsAppService.ERROR_HINTS.get(code)
+        if hint:
+            out += f" | {hint}"
+        return out
+
+    @staticmethod
+    def _graph(url, json_body=None, params=None, get=False):
+        """One Graph round trip. Returns (ok, data, detail); never raises.
+
+        Shared by the send path and template management so a network blip or a
+        non-JSON body is described identically wherever it happens.
+        """
+        token = getattr(settings, 'WHATSAPP_API_TOKEN', '')
+        headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+        try:
+            if get:
+                resp = requests.get(url, headers=headers, params=params, timeout=15)
+            else:
+                resp = requests.post(url, headers=headers, params=params, json=json_body, timeout=15)
+        except Exception as e:
+            logger.error(f"WhatsApp request failed: {e}")
+            return False, None, WhatsAppService._describe_error(0, None, exc=e)
+
+        try:
+            data = resp.json()
+        except ValueError as e:
+            logger.error(f"WhatsApp response was not JSON: {e}")
+            return False, None, WhatsAppService._describe_error(resp.status_code, None, exc=e)
+
+        if resp.status_code >= 400 or (isinstance(data, dict) and data.get('error')):
+            return False, None, WhatsAppService._describe_error(resp.status_code, data)
+
+        return True, data, ''
+
+    @staticmethod
+    def _post(payload):
+        """POST a message payload to the Graph API. Returns (ok, detail); never raises."""
+        version = getattr(settings, 'WHATSAPP_API_VERSION', 'v25.0')
+        number_id = getattr(settings, 'WHATSAPP_PHONE_NUMBER_ID', '')
+        url = f"https://graph.facebook.com/{version}/{number_id}/messages"
+
+        ok, data, detail = WhatsAppService._graph(url, json_body=payload)
+        if not ok:
+            return False, detail
+
+        messages = data.get('messages') if isinstance(data, dict) else None
+        msg_id = messages[0].get('id', '') if messages else ''
+        return True, f"OK ID:{msg_id}"
+
+    @staticmethod
+    def _templates_url():
+        """The WABA-level message_templates edge, or '' when the WABA is unset.
+
+        Deliberately ignores WHATSAPP_ENABLED: provisioning has to be possible
+        while the live send path is switched off.
+        """
+        version = getattr(settings, 'WHATSAPP_API_VERSION', 'v25.0')
+        waba_id = getattr(settings, 'WHATSAPP_WABA_ID', '')
+        if not waba_id:
+            return ''
+        if not getattr(settings, 'WHATSAPP_API_TOKEN', ''):
+            return ''
+        return f"https://graph.facebook.com/{version}/{waba_id}/message_templates"
+
+    # Fields the audit report needs. rejected_reason is why a template died;
+    # quality_score is the early warning that it is about to.
+    TEMPLATE_AUDIT_FIELDS = (
+        'id,name,language,category,sub_category,status,parameter_format,'
+        'quality_score,rejected_reason,health_status,last_updated_time'
+    )
+
+    @staticmethod
+    def create_template(payload):
+        """Create one message template on the WABA. Returns (ok, data, detail).
+
+        'data' on success is Meta's {id, status, category}. 'status' will be
+        PENDING until review completes - use list_templates() to follow it.
+        """
+        if not getattr(settings, 'WHATSAPP_WABA_ID', ''):
+            return False, None, (
+                "WhatsApp template provisioning not configured. Set WHATSAPP_WABA_ID in .env "
+                "(App Dashboard > WhatsApp > API Setup)."
+            )
+        url = WhatsAppService._templates_url()
+        ok, data, detail = WhatsAppService._graph(url, json_body=payload)
+        return ok, data, detail
+
+    @staticmethod
+    def list_templates():
+        """Audit every template on the WABA. Returns (ok, rows, detail)."""
+        if not getattr(settings, 'WHATSAPP_WABA_ID', ''):
+            return False, [], (
+                "WhatsApp template audit not configured. Set WHATSAPP_WABA_ID in .env "
+                "(App Dashboard > WhatsApp > API Setup)."
+            )
+        url = WhatsAppService._templates_url()
+        ok, data, detail = WhatsAppService._graph(
+            url, params={'fields': WhatsAppService.TEMPLATE_AUDIT_FIELDS}, get=True)
+        if not ok:
+            return False, [], detail
+        rows = data.get('data') if isinstance(data, dict) else None
+        return True, (rows or []), ''
+
+    @staticmethod
     def send(to_phone, message):
-        """Send a real WhatsApp message via the Business Cloud API when enabled;
-        otherwise return a wa.me click-to-chat link (fallback)."""
+        """Free-form text send. Only valid inside the 24h customer service window;
+        used by the manual-send view, where staff compose arbitrary text."""
         if not to_phone:
             return False, "No phone number provided"
 
@@ -166,39 +330,86 @@ class WhatsAppService:
             return False, "Invalid phone number"
 
         if not getattr(settings, 'WHATSAPP_ENABLED', False):
-            wa_url = f"https://wa.me/{phone}?text={requests.utils.quote(message)}"
+            wa_url = WhatsAppService.get_click_to_chat_url(phone, message)
             logger.info(f"[WhatsApp disabled] fallback link for {phone}")
             return True, wa_url
 
-        token = getattr(settings, 'WHATSAPP_API_TOKEN', '')
-        number_id = getattr(settings, 'WHATSAPP_PHONE_NUMBER_ID', '')
-        if not token or not number_id:
+        if not getattr(settings, 'WHATSAPP_API_TOKEN', '') or not getattr(settings, 'WHATSAPP_PHONE_NUMBER_ID', ''):
             return False, "WhatsApp not configured. Set WHATSAPP_API_TOKEN and WHATSAPP_PHONE_NUMBER_ID."
 
-        try:
-            version = getattr(settings, 'WHATSAPP_API_VERSION', 'v22.0')
-            url = f"https://graph.facebook.com/{version}/{number_id}/messages"
-            resp = requests.post(
-                url,
-                headers={
-                    'Authorization': f'Bearer {token}',
-                    'Content-Type': 'application/json',
-                },
-                json={
-                    'messaging_product': 'whatsapp',
-                    'to': phone,
-                    'type': 'text',
-                    'text': {'body': message},
-                },
-                timeout=15,
+        return WhatsAppService._post({
+            'messaging_product': 'whatsapp',
+            'to': phone,
+            'type': 'text',
+            'text': {'body': message},
+        })
+
+    @staticmethod
+    def send_typed(to_phone, notification_type, params):
+        """Send via the Meta-approved template configured for this notification type.
+
+        Transactional notifications fire outside the 24h customer service window,
+        where free-form text is rejected with 131047 - only a template works.
+        """
+        if not to_phone:
+            return False, "No phone number provided"
+
+        phone = WhatsAppService.normalize_phone(to_phone)
+        if not phone:
+            return False, "Invalid phone number"
+
+        if not getattr(settings, 'WHATSAPP_ENABLED', False):
+            wa_url = WhatsAppService.get_click_to_chat_url(phone)
+            logger.info(f"[WhatsApp disabled] fallback link for {phone}")
+            return True, wa_url
+
+        if not getattr(settings, 'WHATSAPP_API_TOKEN', '') or not getattr(settings, 'WHATSAPP_PHONE_NUMBER_ID', ''):
+            return False, "WhatsApp not configured. Set WHATSAPP_API_TOKEN and WHATSAPP_PHONE_NUMBER_ID."
+
+        template_name = WhatsAppService.template_name_for(notification_type)
+        if not template_name:
+            setting = WhatsAppService.TEMPLATE_SETTING_BY_TYPE.get(notification_type)
+            return False, (
+                f"No WhatsApp template configured for '{notification_type}'. "
+                f"Set {setting or 'the matching WHATSAPP_TEMPLATE_* setting'} in .env."
             )
-            resp.raise_for_status()
-            data = resp.json()
-            msg_id = data.get('messages', [{}])[0].get('id', '') if data.get('messages') else ''
-            return True, f"OK ID:{msg_id}"
-        except Exception as e:
-            logger.error(f"WhatsApp send failed: {e}")
-            return False, str(e)
+
+        # Templates are POSITIONAL (NAMED-with-variables is not creatable via the
+        # Graph API), so the order of the parameters list decides which value lands
+        # in which {{n}}. That order comes from wa_templates.json, never from the
+        # order this dict happens to be in — otherwise a reordered dict literal
+        # would silently post a customer's name into their balance field.
+        supplied = {k: v for k, v in (params or {}).items() if v not in (None, '')}
+        order = wa_templates.parameter_order(notification_type)
+        if order:
+            unexpected = set(supplied) - set(order)
+            if unexpected:
+                return False, (
+                    f"Unknown WhatsApp template parameter(s) for '{notification_type}': "
+                    f"{', '.join(sorted(unexpected))}. Expected {', '.join(order)}."
+                )
+            ordered = [supplied[k] for k in order if k in supplied]
+        else:
+            # No spec entry (custom template) — fall back to the caller's order.
+            logger.warning(
+                f"No wa_templates.json entry for '{notification_type}'; "
+                "sending parameters in the order supplied")
+            ordered = list(supplied.values())
+
+        parameters = [{'type': 'text', 'text': str(value)} for value in ordered]
+        template = {
+            'name': template_name,
+            'language': {'code': getattr(settings, 'WHATSAPP_TEMPLATE_LANGUAGE', 'en_US')},
+        }
+        if parameters:
+            template['components'] = [{'type': 'body', 'parameters': parameters}]
+
+        return WhatsAppService._post({
+            'messaging_product': 'whatsapp',
+            'to': phone,
+            'type': 'template',
+            'template': template,
+        })
 
     @staticmethod
     def get_click_to_chat_url(phone, message=''):
@@ -210,7 +421,7 @@ class NotificationService:
     @staticmethod
     def send_notification(recipient_name, recipient_contact, channel, notification_type,
                          message, subject='', customer_id='', booking_id='', user=None,
-                         sms_message=None):
+                         sms_message=None, template_params=None):
         # SMS uses a shorter message when one is supplied; email/whatsapp use the full text.
         effective_message = (sms_message or message) if channel == 'sms' else message
 
@@ -236,7 +447,16 @@ class NotificationService:
             if success:
                 log.provider_message_id = SMSService.extract_message_id(detail)
         elif channel == 'whatsapp':
-            success, detail = WhatsAppService.send(recipient_contact, message)
+            # template_params present = an automated transactional notification, which
+            # must go out as an approved template. Absent = staff free-form text from
+            # the manual-send view, which only works inside the 24h window.
+            if template_params is not None:
+                success, detail = WhatsAppService.send_typed(
+                    recipient_contact, notification_type, template_params)
+            else:
+                success, detail = WhatsAppService.send(recipient_contact, message)
+            if success:
+                log.provider_message_id = WhatsAppService.extract_message_id(detail)
 
         log.status = 'sent' if success else 'failed'
         log.error_message = '' if success else detail
@@ -275,6 +495,19 @@ class NotificationService:
             )
         message += "Thank you for your payment!\nSamana Builders & Developers"
 
+        # WhatsApp template params (approved templates only; see wa_templates.json)
+        template_params = {
+            'customer_name': customer.full_name,
+            'amount': f'{payment.amount:,.0f}',
+            'booking_id': booking.booking_id,
+            'remaining_balance': f'{remaining:,.0f}',
+        }
+        if next_installment:
+            template_params['next_installment'] = (
+                f"#{next_installment.installment_number} of Rs. {next_installment.amount:,.0f} "
+                f"due on {next_installment.due_date:%d-%b-%Y}"
+            )
+
         # Concise SMS message (cost-effective, ~1 segment)
         sms_message = (
             f"Dear {customer.full_name}, payment of Rs. {payment.amount:,.0f} "
@@ -302,6 +535,7 @@ class NotificationService:
                     subject=f'Payment Confirmation - {payment.payment_id}',
                     message=message,
                     sms_message=sms_message,
+                    template_params=template_params,
                     customer_id=customer.customer_id,
                     booking_id=booking.booking_id,
                 )
@@ -318,6 +552,13 @@ class NotificationService:
             f"Status: {booking.get_status_display()}\n\n"
             f"Samana Builders & Developers"
         )
+        template_params = {
+            'customer_name': customer.full_name,
+            'booking_id': booking.booking_id,
+            'plot_number': booking.plot.plot_number,
+            'project_name': booking.plot.project.name,
+            'total_amount': f'{booking.total_amount:,.0f}',
+        }
         channels = ['email']
         if customer.phone:
             channels.append('whatsapp')
@@ -332,6 +573,7 @@ class NotificationService:
                     notification_type='booking_notification',
                     subject=f'Booking Confirmation - {booking.booking_id}',
                     message=message,
+                    template_params=template_params,
                     customer_id=customer.customer_id,
                     booking_id=booking.booking_id,
                 )
@@ -395,9 +637,16 @@ class NotificationService:
             f"Booking: {booking.booking_id}\n"
             f"Plot: {booking.plot.plot_number}\n"
             f"Project: {booking.plot.project.name}\n\n"
-            f"Please ensure timely payment to avoid late fees.\n\n"
+            f"Please arrange payment at your earliest convenience.\n\n"
             f"Samana Builders & Developers"
         )
+        template_params = {
+            'customer_name': customer.full_name,
+            'installment_number': installment.installment_number,
+            'amount': f'{installment.amount:,.0f}',
+            'due_date': f'{installment.due_date:%d-%b-%Y}',
+            'booking_id': booking.booking_id,
+        }
         sms_message = (
             f"Dear {customer.full_name}, installment #{installment.installment_number} "
             f"of Rs. {installment.amount:,.0f} is due on {installment.due_date:%d-%b} "
@@ -418,6 +667,7 @@ class NotificationService:
                     subject=f'Installment Reminder - Installment #{installment.installment_number}',
                     message=message,
                     sms_message=sms_message,
+                    template_params=template_params,
                     customer_id=customer.customer_id,
                     booking_id=booking.booking_id,
                 )
@@ -430,11 +680,18 @@ class NotificationService:
             f"Dear {customer.full_name},\n\n"
             f"Your Installment #{installment.installment_number} of Rs. {installment.amount:,.0f} "
             f"was due on {installment.due_date} and is now OVERDUE.\n\n"
-            f"Late Fee Applied: Rs. {installment.late_fee:,.0f}\n"
             f"Total Outstanding: Rs. {installment.remaining_amount:,.0f}\n\n"
-            f"Please arrange immediate payment to avoid additional charges.\n\n"
+            f"Please arrange payment at your earliest convenience.\n\n"
             f"Samana Builders & Developers"
         )
+        template_params = {
+            'customer_name': customer.full_name,
+            'installment_number': installment.installment_number,
+            'amount': f'{installment.amount:,.0f}',
+            'due_date': f'{installment.due_date:%d-%b-%Y}',
+            'outstanding': f'{installment.remaining_amount:,.0f}',
+            'booking_id': booking.booking_id,
+        }
         sms_message = (
             f"Dear {customer.full_name}, installment #{installment.installment_number} "
             f"of Rs. {installment.amount:,.0f} is OVERDUE (due {installment.due_date:%d-%b}). "
@@ -455,6 +712,7 @@ class NotificationService:
                     subject=f'OVERDUE: Installment #{installment.installment_number}',
                     message=message,
                     sms_message=sms_message,
+                    template_params=template_params,
                     customer_id=customer.customer_id,
                     booking_id=booking.booking_id,
                 )
@@ -473,6 +731,13 @@ class NotificationService:
             f"Thank you for your payment!\n\n"
             f"Samana Builders & Developers"
         )
+        template_params = {
+            'customer_name': customer.full_name,
+            'receipt_number': receipt.receipt_number,
+            'amount': f'{payment.amount:,.0f}',
+            'receipt_date': f'{receipt.receipt_date:%d-%b-%Y}',
+            'payment_id': payment.payment_id,
+        }
         channels = ['email']
         if customer.phone:
             channels.append('whatsapp')
@@ -487,6 +752,7 @@ class NotificationService:
                     notification_type='receipt_notification',
                     subject=f'Receipt Generated - {receipt.receipt_number}',
                     message=message,
+                    template_params=template_params,
                     customer_id=customer.customer_id,
                     booking_id=booking.booking_id,
                 )

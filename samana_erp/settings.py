@@ -248,7 +248,26 @@ DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'Samana Builders <nore
 WHATSAPP_ENABLED = os.environ.get('WHATSAPP_ENABLED', 'False').lower() in ('1', 'true', 'yes')
 WHATSAPP_API_TOKEN = os.environ.get('WHATSAPP_API_TOKEN', '')  # permanent system-user token
 WHATSAPP_PHONE_NUMBER_ID = os.environ.get('WHATSAPP_PHONE_NUMBER_ID', '')  # sender phone number ID
-WHATSAPP_API_VERSION = os.environ.get('WHATSAPP_API_VERSION', 'v22.0')
+WHATSAPP_API_VERSION = os.environ.get('WHATSAPP_API_VERSION', 'v25.0')
+
+# WhatsApp Business Account ID. NOT the same as the phone number ID above - it is
+# only needed to provision templates (manage.py create_wa_templates), never to
+# send. Found in App Dashboard > WhatsApp > API Setup.
+WHATSAPP_WABA_ID = os.environ.get('WHATSAPP_WABA_ID', '')
+
+# Meta-approved message templates, one per notification type. Transactional
+# notifications fire outside the 24h customer service window, where free-form
+# text is rejected (131047) - only an approved template can be delivered.
+# Blank means "not configured", and that notification fails with a message
+# naming the missing setting rather than silently sending nothing.
+# Template bodies live in notifications/wa_templates.json.
+WHATSAPP_TEMPLATE_LANGUAGE = os.environ.get('WHATSAPP_TEMPLATE_LANGUAGE', 'en_US')
+WHATSAPP_TEMPLATE_PAYMENT_CONFIRMATION = os.environ.get('WHATSAPP_TEMPLATE_PAYMENT_CONFIRMATION', '')
+WHATSAPP_TEMPLATE_BOOKING_NOTIFICATION = os.environ.get('WHATSAPP_TEMPLATE_BOOKING_NOTIFICATION', '')
+WHATSAPP_TEMPLATE_BOOKING_APPROVAL = os.environ.get('WHATSAPP_TEMPLATE_BOOKING_APPROVAL', '')
+WHATSAPP_TEMPLATE_INSTALLMENT_REMINDER = os.environ.get('WHATSAPP_TEMPLATE_INSTALLMENT_REMINDER', '')
+WHATSAPP_TEMPLATE_OVERDUE_PAYMENT = os.environ.get('WHATSAPP_TEMPLATE_OVERDUE_PAYMENT', '')
+WHATSAPP_TEMPLATE_RECEIPT_NOTIFICATION = os.environ.get('WHATSAPP_TEMPLATE_RECEIPT_NOTIFICATION', '')
 
 # SMS Configuration (SendPK) — supplied via environment variables.
 SENDPK_ENABLED = os.environ.get('SENDPK_ENABLED', 'False').lower() in ('1', 'true', 'yes')

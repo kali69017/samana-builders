@@ -6,7 +6,151 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Real Estate Management ERP + corporate website for Samana Builders & Developers. Django 6.0 + Django REST Framework backend serving two frontends: a server-rendered ERP (Django templates) and a corporate marketing site (also Django templates, with a compiled React build artifact in `frontend/dist/`). SQLite for dev, PostgreSQL for production.
 
-## Work status (last updated 2026-09-14)
+## Work status (last updated 2026-09-29)
+
+### Uncommitted — WhatsApp transactional notifications on approved templates
+
+The WhatsApp channel could not actually deliver a transactional notification. All five
+`services.py` triggers plus `booking_confirm_view` called `WhatsAppService.send()`, which
+posts `type: 'text'`. Meta only permits free-form text inside the 24-hour customer service
+window, and every one of those triggers fires outside it, so each send failed with 131047.
+Three further defects made the failure invisible: `raise_for_status()` discarded the Graph
+error body (the actionable code and `error_data.details` never reached
+`NotificationLog.error_message`), no `provider_message_id` was extracted for WhatsApp (so
+delivery could not be tracked), and an unconfigured channel still reported `sent`.
+
+1. **Templates** — `WhatsAppService.send_typed()` sends a Meta-approved utility template with
+   named body parameters, resolved per notification type through
+   `TEMPLATE_SETTING_BY_TYPE`. `NotificationService.send_notification()` gained an optional
+   `template_params` kwarg; when present on the `whatsapp` channel it routes to the template
+   path, when absent it keeps the existing free-form behaviour, so all existing callers are
+   unaffected. Empty-string params are dropped so a customer with no next installment does not
+   get a blank phrase.
+2. **Six templates, one per type** — `payment_confirmation`, `booking_notification`,
+   `booking_approval`, `installment_reminder`, `overdue_payment`, `receipt_notification`,
+   specified in the new `notifications/wa_templates.json` (create them in WhatsApp Manager,
+   category UTILITY, named parameters). Each is enabled by its own `WHATSAPP_TEMPLATE_*`
+   setting; **blank means that notification fails with a message naming the setting** rather
+   than failing opaquely against Meta.
+3. **Errors are now readable** — Graph error bodies are parsed into
+   `code/subcode + message + details + hint`, with actionable hints for 131047, 130429,
+   131056, 132000, 132001, 131049 and 131050. Network failures and non-JSON responses return
+   `(False, detail)` instead of raising, so a broken WhatsApp send still cannot fail a
+   payment. The send logic is shared by both paths via `WhatsAppService._post()`.
+4. **Delivery tracking** — the `wamid` is parsed out and stored in `provider_message_id`,
+   giving Phase 2's webhook a row to update.
+5. **Late-fee wording removed** from both the WhatsApp templates and the email bodies
+   (`send_installment_reminder`, `send_overdue_payment_alert`) per business decision that no
+   late fees are charged; the overdue template no longer sends a `late_fee` parameter.
+6. **UI** — the manual-send modal warns that free-form WhatsApp only works within 24h of the
+   customer's last message.
+
+New file: `notifications/wa_templates.json`. Settings: 7 new `WHATSAPP_TEMPLATE_*` entries.
+No migration — `NotificationLog` already carried `provider_message_id` and `error_message`.
+
+#### Provisioned live; parameter format is POSITIONAL by Meta's constraint, not preference
+
+All six templates now exist on WABA `1384537200534046` and are wired into `.env`. Creating
+them surfaced three platform constraints that the published docs do not describe — all found
+empirically against the live WABA, all now enforced in `wa_templates.py`:
+
+1. **NAMED templates with variables cannot be created via the Graph API.** Supplying
+   `example` fails with subcode `2388043` ("component of type BODY is missing expected
+   field(s) (example)") in *every* shape tried — nested, flat, and keyed-by-name. Omitting
+   `example` creates the template only for Meta to reject it as `INVALID_FORMAT`.
+   POSITIONAL works. So bodies use `{{1}}..{{N}}`, and `parameters` in the spec is the
+   ordered contract mapping index → `param_name`.
+   **This changes the send path:** `send_typed()` now emits positional parameters (no
+   `parameter_name`) ordered by `wa_templates.parameter_order()`, never by Python dict
+   order — otherwise a reordered dict literal would silently post a customer's name into
+   their balance field. Unknown parameter names are rejected outright rather than dropped.
+2. **`sub_category` is narrower than documented, and `ORDER_STATUS` is unusable.**
+   This account accepts only `{ORDER_DETAILS, ORDER_STATUS, RICH_ORDER_STATUS}`;
+   `BOOKING_STATUS` is refused outright. But `ORDER_STATUS` itself fails with `2388210`
+   ("There should not be title or button(s) in an order status template"). All six
+   therefore use `ORDER_DETAILS`.
+3. **Variables cannot lead or trail a template** — `2388299`. Every body needs literal text
+   before its first and after its last placeholder.
+
+Also worth knowing: subcode `2388023` means *"content for this name+language is still being
+deleted"* — recreating a template within ~a minute of deleting it fails even though the name
+is absent from the list API. Three templates carry a `_v2` suffix purely because my own
+cleanup tombstoned the originals; the names are otherwise arbitrary.
+
+#### Provisioning: templates are created from code, not clicked through the UI
+
+The six templates cannot be created by Django — they need `POST /{waba}/message_templates`.
+`notifications/wa_templates.py` reads `wa_templates.json`, validates it against the Graph
+enums, and compiles it into create-payloads; two commands do the rest:
+
+```powershell
+python manage.py create_wa_templates --dry-run   # print the exact bodies, call nothing
+python manage.py create_wa_templates             # create all six (PENDING until review)
+python manage.py check_wa_templates              # status + quality + why it failed
+```
+
+`WhatsAppService.create_template()` / `list_templates()` are the WABA-level API calls, sharing
+the HTTP + error-describing layer with the send path via `WhatsAppService._graph()`. Both
+deliberately ignore `WHATSAPP_ENABLED` — provisioning while the live channel is off is the
+intended workflow. They need `WHATSAPP_WABA_ID` (**not** the phone number ID; it is not
+discoverable through the API — every edge is refused, so read it off App Dashboard >
+WhatsApp > API Setup).
+
+`check_wa_templates` exists because a template that never approves is otherwise invisible:
+it maps `rejected_reason` (`INCORRECT_CATEGORY`, `TAG_CONTENT_MISMATCH`, `PROMOTIONAL`, …) to
+specific copy advice, and cross-checks the WABA against `.env` so a created-but-unwired
+template is flagged. `allow_category_change` is **false** throughout — a template Meta thinks
+is promotional should come back REJECTED so we can see and fix it, not get silently
+reclassified to MARKETING with different pricing and an opt-in we never collected.
+Each entry carries a `sub_category` (`ORDER_STATUS` / `BOOKING_STATUS` / `ORDER_DETAILS`),
+which materially improves approval odds and classification accuracy.
+
+### Uncommitted — finance ledger remediation (working tree, not yet committed/pushed)
+
+Found by a full manual pass over the double-entry ledger (headed Playwright against
+a seeded DB), then fixed and regression-tested. 786 tests green at time of writing.
+
+1. **`ProjectCost` could never reach the ledger** (HIGH) — `status` defaulted to
+   `'pending'`, which was not a member of `STATUS_CHOICES` (draft/approved/paid), so
+   the UI rendered the raw string; the list had no actions column, edit/delete URLs
+   were unreachable, `status` was read-only in the API, and `post_to_ledger()` is
+   gated on `status == 'paid'` — so no user-facing path could ever post one. Fixed:
+   `('pending', 'Pending Approval')` added to the choices (migration
+   `finance/0009`), `project_cost_approve_view` / `project_cost_pay_view` +
+   routes, an actions column mirroring `office_expenses.html`, and `approve` / `pay`
+   actions on `ProjectCostViewSet`.
+2. **Rs. 35,000 paid-but-unposted** (MEDIUM) — `post_to_ledger()` only fires on the
+   write path, so rows that were `paid` before the writers shipped had no voucher and
+   the ledger silently under-reported. Added
+   `manage.py backfill_ledger_vouchers` (`--dry-run`, idempotent, prints a trial-balance
+   check). It recovered 25,000 (office expense) + 10,000 (project cost).
+3. **Edit-after-post desync was invisible** (MEDIUM) — FIN-EC-03 means editing a paid
+   source never rewrites its immutable voucher, so the two can disagree forever.
+   Added `Voucher.total_debit/total_credit/is_balanced`, plus
+   `posted_voucher` / `ledger_out_of_sync` on `OfficeExpense` and `ProjectCost`.
+   Surfaced as a `⚠ Ledger mismatch` badge in both lists and an escalation banner in
+   the edit forms (the mismatch banner supersedes the generic immutability note).
+4. **Meaningless balance column in the all-accounts ledger** (LOW) — one running
+   balance across mixed-nature accounts; the closing `0.00` was just the dr==cr
+   identity. The balance column, the opening-balance card and the closing-balance card
+   are now shown only when a single account (or roll-up) is selected; the all-accounts
+   view shows posting-line count and a debits-vs-credits `Balanced` check instead.
+   Applied to `ledger.html`, `ledger_pdf.html` and the Excel export.
+5. **`test_ledger_full.py` deleted** (LOW) — lived at the repo root and ran
+   `asyncio.run(test_ledger())` at import time, so `manage.py test` discovery spawned
+   a server and a headed browser and blocked for 5 minutes. It also had 4 wrong URLs
+   and a broken `'OfficeExpense' in content` assertion. Its coverage was replaced by
+   `finance/tests_project_cost_flow.py` and `finance/tests_backfill_ledger.py`.
+6. **A paid source could be silently reopened** (MEDIUM, found while fixing #1) — both
+   `office_expense_approve_view` and `OfficeExpenseViewSet.approve` accepted a direct
+   POST on a `paid` expense and reverted it to `approved` while its locked voucher
+   stayed posted. The UI hid the button, but the URL was reachable. Both now refuse
+   (web: error toast; API: `409 Conflict`), matching the guard already added to
+   `project_cost_approve_view`.
+
+New files: `finance/management/commands/backfill_ledger_vouchers.py`,
+`finance/tests_backfill_ledger.py`, `finance/tests_project_cost_flow.py`,
+`finance/migrations/0009_alter_projectcost_status.py`.
 
 ### Shipped (committed + pushed to origin/main)
 
@@ -148,9 +292,14 @@ Generated from Django templates via **xhtml2pdf** (`pisa`) in `payments/pdf_util
 
 `notifications/services.py` provides `EmailService`, `SMSService`, `WhatsAppService`, and a `NotificationService` facade that logs every send to `NotificationLog` (with `provider_message_id` for SMS).
 
+`notifications/wa_templates.py` + `notifications/wa_templates.json` are the spec and compiler
+for the six WhatsApp templates; `manage.py create_wa_templates` / `check_wa_templates` provision
+and audit them. See Work status above.
+
 - **Email** — uses SMTP (Brevo relay) when `EMAIL_HOST` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` are set, otherwise Django's console backend. Gated by `EMAIL_ENABLED`.
 - **SMS** — real SendPK HTTP API integration (not a stub): posts to `sms.php` with `format=json`, normalizes Pakistani numbers to `92XXXXXXXXXX`, stores the returned message id, and has `check_delivery()` / `check_balance()` helpers. Env: `SENDPK_ENABLED`, `SENDPK_API_KEY`, `SENDPK_SENDER_ID`, `SENDPK_BASE_URL`. Currently disabled in the local `.env` (see Work status above).
-- **WhatsApp** — returns a `wa.me` click-to-chat URL only (no Business API).
+- **WhatsApp** — real WhatsApp Business Cloud API integration (not a stub): posts to `graph.facebook.com/v25.0/{phone_id}/messages`, gated by `WHATSAPP_ENABLED`. Env: `WHATSAPP_API_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_API_VERSION`. Falls back to a `wa.me` click-to-chat URL when disabled. Verified live 2026-10: HTTP 200 `accepted`, template delivered from `+92 320 6229330`.
+  Transactional notifications go out as **Meta-approved templates** via `WhatsAppService.send_typed()` — free-form text is rejected outside the 24h customer service window (error 131047), so all five `services.py` triggers plus `booking_confirm_view` pass `template_params` to `NotificationService.send_notification()`. The six template bodies are specified in `notifications/wa_templates.json`; each is enabled by its own `WHATSAPP_TEMPLATE_*` setting, and a blank value fails that notification with a log message naming the setting. Staff free-form sends (the notifications view) stay on `WhatsAppService.send()` and are warned about the 24h rule in the UI. Graph error bodies are parsed and translated (`WhatsAppService.ERROR_HINTS`) instead of collapsing into a bare HTTP status, and the returned `wamid` is stored in `provider_message_id` for delivery tracking.
 - Triggers: payment confirmation, booking notification, installment reminder, overdue alert, receipt notification, and customer welcome (fires on customer create via UI + API and on lead conversion; failure-safe so a broken email can never break the customer transaction).
 
 ### Backup / restore

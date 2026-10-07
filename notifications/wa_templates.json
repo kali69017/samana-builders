@@ -1,0 +1,150 @@
+{
+  "_readme": [
+    "The six WhatsApp templates this app sends. Transactional notifications fire",
+    "outside the 24h customer service window, where Meta rejects free-form text with",
+    "error 131047 — only an approved template works.",
+    "",
+    "TO CREATE: python manage.py create_wa_templates   (reads this file, POSTs each to",
+    "the Graph message_templates endpoint). Requires WHATSAPP_WABA_ID in .env.",
+    "Then: python manage.py check_wa_templates        (track review; explains rejections)",
+    "",
+    "PARAMETERS ARE POSITIONAL, and that is forced by Meta, not preference. Creating a",
+    "NAMED template that has variables through the Graph API does not work: supplying",
+    "'example' fails with subcode 2388043 ('component of type BODY is missing expected",
+    "field(s) (example)'), and omitting it creates the template only for it to come",
+    "back REJECTED / INVALID_FORMAT. POSITIONAL with example.body_text is accepted.",
+    "Verified live against WABA 1384537200534046, 2026-10.",
+    "",
+    "So the body uses {{1}}..{{N}}. 'parameters' below is the ordered contract: index i",
+    "is {{i+1}} in the body. The 'param_name' values are NOT sent to Meta — they are how",
+    "notifications/services.py:send_typed() names things when it builds a params dict, and",
+    "the send order is derived from THIS list, never from Python dict order.",
+    "",
+    "TO ENABLE: put the approved template name in .env, e.g.",
+    "  WHATSAPP_TEMPLATE_INSTALLMENT_REMINDER=samana_installment_due",
+    "A blank value makes that notification fail with a log message naming the setting.",
+    "",
+    "sub_category must be one of the three this account accepts — ORDER_DETAILS,",
+    "ORDER_STATUS, RICH_ORDER_STATUS. But ORDER_STATUS is itself unusable here: it refuses",
+    "with subcode 2388210 ('There should not be title or button(s) in an order status",
+    "template'), so all six use ORDER_DETAILS."
+  ],
+  "_defaults": {
+    "allow_category_change": false,
+    "parameter_format": "POSITIONAL",
+    "_notes": [
+      "allow_category_change=false: if Meta decides a template is actually promotional we",
+      "WANT a REJECTED(INCORRECT_CATEGORY) we can see and fix, not a silent reclassification",
+      "to MARKETING — which would change pricing and imply an opt-in we never collected.",
+      "All six are unambiguously transactional, so let a mismatch surface."
+    ]
+  },
+  "templates": [
+    {
+      "notification_type": "payment_confirmation",
+      "env_setting": "WHATSAPP_TEMPLATE_PAYMENT_CONFIRMATION",
+      "suggested_name": "samana_payment_received_v2",
+      "category": "UTILITY",
+      "sub_category": "ORDER_DETAILS",
+      "language": "en_US",
+      "body": "Dear {{1}}, your payment of Rs {{2}} has been received. Booking: {{3}}. Remaining balance: Rs {{4}}. Next installment: {{5}}. Thank you. — Samana Builders & Developers",
+      "parameters": [
+        {"param_name": "customer_name", "example": "Ahmed Khan"},
+        {"param_name": "amount", "example": "120,000"},
+        {"param_name": "booking_id", "example": "BKG-00001"},
+        {"param_name": "remaining_balance", "example": "4,000,000"},
+        {"param_name": "next_installment", "example": "#1 of Rs. 1,000,000 due on 01-Nov-2026"}
+      ],
+      "notes": "next_installment is omitted entirely when nothing is outstanding, so {{5}} may be absent."
+    },
+    {
+      "notification_type": "booking_notification",
+      "env_setting": "WHATSAPP_TEMPLATE_BOOKING_NOTIFICATION",
+      "suggested_name": "samana_booking_created_v2",
+      "category": "UTILITY",
+      "sub_category": "ORDER_DETAILS",
+      "language": "en_US",
+      "body": "Dear {{1}}, your booking {{2}} has been created. Plot {{3}} at {{4}}. Total amount: Rs {{5}}. — Samana Builders & Developers",
+      "parameters": [
+        {"param_name": "customer_name", "example": "Ahmed Khan"},
+        {"param_name": "booking_id", "example": "BKG-00001"},
+        {"param_name": "plot_number", "example": "A-101"},
+        {"param_name": "project_name", "example": "Bahria Town"},
+        {"param_name": "total_amount", "example": "5,000,000"}
+      ]
+    },
+    {
+      "notification_type": "booking_approval",
+      "env_setting": "WHATSAPP_TEMPLATE_BOOKING_APPROVAL",
+      "suggested_name": "samana_booking_confirmed_v2",
+      "category": "UTILITY",
+      "sub_category": "ORDER_DETAILS",
+      "language": "en_US",
+      "body": "Dear {{1}}, your booking {{2}} has been confirmed. Plot {{3}} at {{4}}. Total amount: Rs {{5}}. Please proceed with the down payment as per your payment plan. — Samana Builders & Developers",
+      "parameters": [
+        {"param_name": "customer_name", "example": "Ahmed Khan"},
+        {"param_name": "booking_id", "example": "BKG-00001"},
+        {"param_name": "plot_number", "example": "A-101"},
+        {"param_name": "project_name", "example": "Bahria Town"},
+        {"param_name": "total_amount", "example": "5,000,000"}
+      ],
+      "notes": "Sent from core/views.py booking_confirm_view, not services.py."
+    },
+    {
+      "notification_type": "installment_reminder",
+      "env_setting": "WHATSAPP_TEMPLATE_INSTALLMENT_REMINDER",
+      "suggested_name": "samana_installment_due",
+      "category": "UTILITY",
+      "sub_category": "ORDER_DETAILS",
+      "language": "en_US",
+      "body": "Dear {{1}}, this is a reminder that installment #{{2}} of Rs {{3}} is due on {{4}} for booking {{5}}. Please arrange payment at your earliest convenience. — Samana Builders & Developers",
+      "parameters": [
+        {"param_name": "customer_name", "example": "Ahmed Khan"},
+        {"param_name": "installment_number", "example": "2"},
+        {"param_name": "amount", "example": "1,000,000"},
+        {"param_name": "due_date", "example": "15-Oct-2026"},
+        {"param_name": "booking_id", "example": "BKG-00001"}
+      ],
+      "notes": "No late-fee wording by business decision."
+    },
+    {
+      "notification_type": "overdue_payment",
+      "env_setting": "WHATSAPP_TEMPLATE_OVERDUE_PAYMENT",
+      "suggested_name": "samana_payment_overdue",
+      "category": "UTILITY",
+      "sub_category": "ORDER_DETAILS",
+      "language": "en_US",
+      "body": "Dear {{1}}, installment #{{2}} of Rs {{3}} was due on {{4}} and is now overdue for booking {{5}}. Total outstanding: Rs {{6}}. Please arrange payment at your earliest convenience. — Samana Builders & Developers",
+      "parameters": [
+        {"param_name": "customer_name", "example": "Ahmed Khan"},
+        {"param_name": "installment_number", "example": "2"},
+        {"param_name": "amount", "example": "1,000,000"},
+        {"param_name": "due_date", "example": "15-Oct-2026"},
+        {"param_name": "booking_id", "example": "BKG-00001"},
+        {"param_name": "outstanding", "example": "1,000,000"}
+      ],
+      "notes": "No late_fee parameter — the business does not charge late fees."
+    },
+    {
+      "notification_type": "receipt_notification",
+      "env_setting": "WHATSAPP_TEMPLATE_RECEIPT_NOTIFICATION",
+      "suggested_name": "samana_receipt_ready",
+      "category": "UTILITY",
+      "sub_category": "ORDER_DETAILS",
+      "language": "en_US",
+      "body": "Dear {{1}}, your receipt {{2}} has been generated for Rs {{3}} dated {{4}}. Payment ID: {{5}}. — Samana Builders & Developers",
+      "parameters": [
+        {"param_name": "customer_name", "example": "Ahmed Khan"},
+        {"param_name": "receipt_number", "example": "RCP-FY25-26/00001"},
+        {"param_name": "amount", "example": "120,000"},
+        {"param_name": "receipt_date", "example": "01-Oct-2026"},
+        {"param_name": "payment_id", "example": "PAY-00001"}
+      ]
+    }
+  ],
+  "not_a_template": {
+    "notification_type": "general",
+    "sent_via": "free-form text (WhatsAppService.send)",
+    "notes": "The staff manual-send view composes arbitrary text, so it cannot use a template. Meta only allows free-form text within 24h of the customer's last message; outside that window it fails with 131047. The UI warns about this."
+  }
+}

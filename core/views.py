@@ -1390,6 +1390,13 @@ def booking_confirm_view(request, pk):
                 f"Please proceed with the down payment as per your payment plan.\n\n"
                 f"Samana Builders & Developers"
             )
+            wa_params = {
+                'customer_name': customer.full_name,
+                'booking_id': booking.booking_id,
+                'plot_number': booking.plot.plot_number,
+                'project_name': booking.plot.project.name,
+                'total_amount': f'{booking.total_amount:,.0f}',
+            }
             channels = ['email']
             if customer.phone:
                 channels.append('whatsapp')
@@ -1403,6 +1410,7 @@ def booking_confirm_view(request, pk):
                         notification_type='booking_approval',
                         subject=f'Booking Approved - {booking.booking_id}',
                         message=msg,
+                        template_params=wa_params,
                         customer_id=customer.customer_id,
                         booking_id=booking.booking_id,
                     )

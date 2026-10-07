@@ -16,7 +16,7 @@ $env:DJANGO_DEBUG='True'
 D:\samana\.venv312\Scripts\python.exe manage.py runserver
 
 # Django tests — ALWAYS prefix DJANGO_DEBUG=True, else the whole suite mass-fails
-# with 301 redirects. Full suite: 663 tests, ~9 min.
+# with 301 redirects. Full suite: 895 tests, ~13 min.
 $env:DJANGO_DEBUG='True'
 D:\samana\.venv312\Scripts\python.exe manage.py test
 D:\samana\.venv312\Scripts\python.exe manage.py test payments.tests.PaymentModelTest.test_payment_id_generation
