@@ -61,7 +61,7 @@
                             <td>{{ expense.category.name|default:"-" }}</td>
                             <td>{{ expense.paid_to|default:"-" }}</td>
                             <td style="font-weight:600;">Rs. {{ expense.amount|floatformat:0 }}</td>
-                            <td><span class="badge badge-{% if expense.status == 'paid' %}success{% elif expense.status == 'approved' %}info{% else %}warning{% endif %}">{{ expense.get_status_display }}</span></td>
+                            <td><span class="badge badge-{% if expense.status == 'paid' %}success{% elif expense.status == 'approved' %}info{% else %}warning{% endif %}">{{ expense.get_status_display }}</span>{% if expense.ledger_out_of_sync %} <span class="badge badge-danger" title="Expense amount no longer matches the posted voucher">⚠ Ledger mismatch</span>{% endif %}</td>
                             <td>
                                 <div class="table-actions">
                                     <a href="{% url 'finance_office_expense_edit' expense.pk %}" class="btn btn-secondary btn-sm">Edit</a>

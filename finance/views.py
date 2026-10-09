@@ -222,11 +222,9 @@ def office_expense_edit_view(request, pk):
         form = OfficeExpenseForm(instance=expense)
     # FIN-EC-03: a posted voucher is immutable; surface the posted voucher so the
     # template can warn that edits won't rewrite it and offer the unlock path.
-    posted_voucher = Voucher.objects.filter(
-        reference_type='OfficeExpense', reference_id=expense.pk).first()
     return render(request, 'finance/office_expense_form.html', {
         'form': form, 'title': 'Edit Office Expense', 'expense': expense,
-        'posted_voucher': posted_voucher,
+        'posted_voucher': expense.posted_voucher,
     })
 
 
@@ -236,11 +234,19 @@ def office_expense_approve_view(request, pk):
     expense = get_object_or_404(OfficeExpense, pk=pk)
     if request.method == 'POST':
         action = request.POST.get('action', 'approve')
-        expense.status = 'approved' if action == 'approve' else 'pending'
-        expense.approved_by = request.user if action == 'approve' else None
-        expense.save()
-        _log(request, 'update', 'OfficeExpense', pk, f'{expense.get_status_display()} office expense of {expense.amount}')
-        messages.success(request, f'Office expense {expense.get_status_display()}.')
+        if expense.status == 'paid':
+            # The voucher is posted and locked, so the source must not fall back
+            # to an unposted state — that would silently desync it from the ledger.
+            messages.error(
+                request,
+                'A paid office expense is already posted to the ledger and cannot '
+                'be sent back for approval.')
+        else:
+            expense.status = 'approved' if action == 'approve' else 'pending'
+            expense.approved_by = request.user if action == 'approve' else None
+            expense.save()
+            _log(request, 'update', 'OfficeExpense', pk, f'{expense.get_status_display()} office expense of {expense.amount}')
+            messages.success(request, f'Office expense {expense.get_status_display()}.')
     return redirect('finance_office_expenses')
 
 
@@ -312,7 +318,44 @@ def project_cost_edit_view(request, pk):
             return redirect('finance_project_costs')
     else:
         form = ProjectCostForm(instance=cost)
-    return render(request, 'finance/project_cost_form.html', {'form': form, 'title': 'Edit Project Cost', 'cost': cost})
+    return render(request, 'finance/project_cost_form.html', {
+        'form': form, 'title': 'Edit Project Cost', 'cost': cost,
+        'posted_voucher': cost.posted_voucher,
+    })
+
+
+@login_required
+@management_or_above
+def project_cost_approve_view(request, pk):
+    cost = get_object_or_404(ProjectCost, pk=pk)
+    if request.method == 'POST':
+        action = request.POST.get('action', 'approve')
+        if cost.status == 'paid':
+            messages.error(request, 'A paid project cost is already posted to the ledger.')
+        else:
+            cost.status = 'approved' if action == 'approve' else 'pending'
+            cost.save()
+            _log(request, 'update', 'ProjectCost', pk, f'{cost.get_status_display()} project cost of {cost.amount}')
+            messages.success(request, f'Project cost {cost.get_status_display()}.')
+    return redirect('finance_project_costs')
+
+
+@login_required
+@management_or_above
+def project_cost_pay_view(request, pk):
+    """Mark the cost paid and post its Cash/Bank Payment voucher exactly once.
+
+    Mirrors ``office_expense_pay_view``. ``ProjectCost.post_to_ledger`` is keyed on
+    ``(reference_type, reference_id)``, so re-paying never double-posts (FIN-EC-03).
+    """
+    cost = get_object_or_404(ProjectCost, pk=pk)
+    if request.method == 'POST':
+        cost.status = 'paid'
+        cost.save()
+        cost.post_to_ledger()
+        _log(request, 'update', 'ProjectCost', pk, f'Paid project cost of {cost.amount}')
+        messages.success(request, 'Project cost marked as paid and posted to ledger.')
+    return redirect('finance_project_costs')
 
 
 @login_required
@@ -424,21 +467,39 @@ def ledger_export_excel_view(request):
     wb = Workbook()
     ws = wb.active
     ws.title = 'Ledger'
-    ws.append(['Date', 'Voucher', 'Type', 'Account', 'Narration',
-               'Debit', 'Credit', 'Ledger balance'])
+    # A running balance is only meaningful for a single account / roll-up, so the
+    # column is omitted in the all-accounts view (same rule as ledger.html).
+    has_head = report['head'] is not None
+    header = ['Date', 'Voucher', 'Type', 'Account', 'Narration', 'Debit', 'Credit']
+    if has_head:
+        header.append('Ledger balance')
+    ws.append(header)
     for row in report['rows']:
-        ws.append([
+        values = [
             row['date'].strftime('%Y-%m-%d'), row['voucher_number'], row['voucher_type'],
             f"{row['account'].code} {row['account'].name}", row['narration'],
-            float(row['debit']), float(row['credit']), float(row['balance']),
-        ])
+            float(row['debit']), float(row['credit']),
+        ]
+        if has_head:
+            values.append(float(row['balance']))
+        ws.append(values)
     ws.append([])
-    ws.append(['', '', '', '', 'Opening balance', '', '',
-               float(report['opening_balance'])])
-    ws.append(['', '', '', '', 'Total debit', float(report['total_debit']), '', ''])
-    ws.append(['', '', '', '', 'Total credit', '', float(report['total_credit']), ''])
-    ws.append(['', '', '', '', 'Ledger balance', '', '',
-               float(report['closing_balance'])])
+    width = len(header)
+
+    def footer(label, value, column):
+        """Write a `label / value` summary row padded to the header width."""
+        row = [''] * width
+        row[4] = label
+        row[column] = value
+        ws.append(row)
+
+    if has_head:
+        footer('Opening balance', float(report['opening_balance']), width - 1)
+        footer('Ledger balance', float(report['closing_balance']), width - 1)
+    else:
+        footer('Posting lines', len(report['rows']), 5)
+    footer('Total debit', float(report['total_debit']), 5)
+    footer('Total credit', float(report['total_credit']), 6)
     response = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = 'attachment; filename="ledger.xlsx"'

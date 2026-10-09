@@ -33,11 +33,31 @@
         </div>
 
         <div class="stats-grid">
+            {% if report.head %}
             <div class="stat-card"><div class="stat-icon">🏦</div><div class="stat-meta"><div class="stat-value">Rs. {{ report.opening_balance|floatformat:2 }}</div><div class="stat-label">Opening balance</div></div></div>
+            {% else %}
+            <div class="stat-card"><div class="stat-icon">📒</div><div class="stat-meta"><div class="stat-value">{{ report.rows|length }}</div><div class="stat-label">Posting lines</div></div></div>
+            {% endif %}
             <div class="stat-card"><div class="stat-icon green">⬆️</div><div class="stat-meta"><div class="stat-value">Rs. {{ report.total_debit|floatformat:2 }}</div><div class="stat-label">Total debit</div></div></div>
             <div class="stat-card"><div class="stat-icon red">⬇️</div><div class="stat-meta"><div class="stat-value">Rs. {{ report.total_credit|floatformat:2 }}</div><div class="stat-label">Total credit</div></div></div>
-            <div class="stat-card"><div class="stat-icon">📒</div><div class="stat-meta"><div class="stat-value">Rs. {{ report.closing_balance|floatformat:2 }}</div><div class="stat-label">Ledger balance</div></div></div>
+            {% if report.head %}
+            <div class="stat-card"><div class="stat-icon">📒</div><div class="stat-meta"><div class="stat-value">Rs. {{ report.closing_balance|floatformat:2 }}</div><div class="stat-label">{{ report.nature|capfirst }}-normal balance</div></div></div>
+            {% else %}
+            <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-meta"><div class="stat-value">{% if report.total_debit == report.total_credit %}Balanced{% else %}Out of balance{% endif %}</div><div class="stat-label">Trial balance (debits vs credits)</div></div></div>
+            {% endif %}
         </div>
+
+        {% if not report.head %}
+        <div class="alert alert-info" style="margin-bottom:16px;">
+            <span>ℹ️</span>
+            <span>
+                Showing every account at once. Per-account running balances are
+                only meaningful for a single account (or one roll-up) — select an
+                account above to see its opening balance, running balance and
+                closing balance.
+            </span>
+        </div>
+        {% endif %}
 
         <div class="card animate-fade-up">
             <div class="card-header">
@@ -48,7 +68,10 @@
                 {% if report.rows %}
                 <table class="sortable">
                     <thead>
-                        <tr><th>Date</th><th>Voucher</th><th>Type</th><th>Account</th><th>Narration</th><th>Debit</th><th>Credit</th><th>Ledger balance</th></tr>
+                        <tr>
+                            <th>Date</th><th>Voucher</th><th>Type</th><th>Account</th><th>Narration</th><th>Debit</th><th>Credit</th>
+                            {% if report.head %}<th>Ledger balance</th>{% endif %}
+                        </tr>
                     </thead>
                     <tbody>
                         {% for row in report.rows %}
@@ -60,7 +83,7 @@
                             <td>{{ row.narration|default:"-" }}</td>
                             <td>Rs. {{ row.debit|floatformat:2 }}</td>
                             <td>Rs. {{ row.credit|floatformat:2 }}</td>
-                            <td style="font-weight:600;">Rs. {{ row.balance|floatformat:2 }}</td>
+                            {% if report.head %}<td style="font-weight:600;">Rs. {{ row.balance|floatformat:2 }}</td>{% endif %}
                         </tr>
                         {% endfor %}
                     </tbody>

@@ -163,6 +163,31 @@ class OfficeExpense(models.Model):
     def __str__(self):
         return f"{self.office.name} - {self.category.name if self.category else 'Expense'} - {self.amount}"
 
+    @property
+    def posted_voucher(self):
+        """The ledger voucher this expense posted to, or None if not yet posted.
+
+        FIN-EC-03: a posted voucher is immutable, so editing the expense does NOT
+        rewrite it. ``ledger_out_of_sync`` flags the resulting divergence.
+        """
+        if not self.pk:
+            return None
+        return Voucher.objects.filter(
+            reference_type='OfficeExpense', reference_id=self.pk).first()
+
+    @property
+    def ledger_out_of_sync(self):
+        """True when a posted voucher exists but its amount no longer matches.
+
+        Edits to a paid expense deliberately do not rewrite the immutable voucher,
+        so the two records can permanently disagree. This is the reconciliation
+        signal the list and edit form surface to the user.
+        """
+        voucher = self.posted_voucher
+        if voucher is None:
+            return False
+        return voucher.total_debit != self.amount
+
     def post_to_ledger(self):
         """Idempotently post a Cash/Bank Payment voucher for this expense.
 
@@ -239,6 +264,7 @@ class ProjectCost(models.Model):
 
     STATUS_CHOICES = [
         ('draft', 'Draft'),
+        ('pending', 'Pending Approval'),
         ('approved', 'Approved'),
         ('paid', 'Paid'),
     ]
@@ -268,6 +294,26 @@ class ProjectCost(models.Model):
 
     def __str__(self):
         return f"{self.project.name} - {self.get_cost_category_display()} - {self.amount}"
+
+    @property
+    def posted_voucher(self):
+        """The ledger voucher this cost posted to, or None if not yet posted."""
+        if not self.pk:
+            return None
+        return Voucher.objects.filter(
+            reference_type='ProjectCost', reference_id=self.pk).first()
+
+    @property
+    def ledger_out_of_sync(self):
+        """True when a posted voucher exists but its amount no longer matches.
+
+        Same FIN-EC-03 contract as ``OfficeExpense``: the immutable voucher is
+        never rewritten, so flag the divergence rather than hiding it.
+        """
+        voucher = self.posted_voucher
+        if voucher is None:
+            return False
+        return voucher.total_debit != self.amount
 
     def post_to_ledger(self):
         """Post a Payment voucher, but only once the cost is Paid (spec §3.9).
@@ -512,6 +558,18 @@ class Voucher(models.Model):
     @property
     def is_posted_locked(self):
         return self.status == 'posted' and self.is_locked
+
+    @property
+    def total_debit(self):
+        return sum((line.debit for line in self.lines.all()), Decimal('0.00'))
+
+    @property
+    def total_credit(self):
+        return sum((line.credit for line in self.lines.all()), Decimal('0.00'))
+
+    @property
+    def is_balanced(self):
+        return self.total_debit == self.total_credit
 
     def clean(self):
         if self.pk and not self.is_editable:

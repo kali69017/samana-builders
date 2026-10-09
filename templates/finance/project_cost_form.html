@@ -1,2 +1,34 @@
 {% extends "base_form.html" %}
 {% block title %}{{ title }} - Samana Builders ERP{% endblock %}
+
+{% block form_intro %}
+{% if posted_voucher %}
+    {% if cost.ledger_out_of_sync %}
+    <div class="alert alert-error animate-slide-right">
+        <span>🚨</span>
+        <span>
+            <strong>This cost no longer matches the ledger.</strong>
+            The cost says <strong>Rs. {{ cost.amount|floatformat:2 }}</strong>
+            but voucher <strong>{{ posted_voucher.voucher_number }}</strong> posted
+            <strong>Rs. {{ posted_voucher.total_debit|floatformat:2 }}</strong>.
+            The ledger is the book of record and is <em>not</em> auto-corrected.
+            To reconcile, a supervisor must
+            <a href="{% url 'finance_voucher_detail' posted_voucher.pk %}">unlock the voucher</a>,
+            correct the line, and re-post it.
+        </span>
+    </div>
+    {% else %}
+    <div class="alert alert-error animate-slide-right">
+        <span>⚠️</span>
+        <span>
+            This cost is <strong>paid</strong> and already posted to voucher
+            <strong>{{ posted_voucher.voucher_number }}</strong>.
+            <strong>Editing will not rewrite the posted voucher</strong>
+            (posted vouchers are immutable). If a correction is genuinely needed, a
+            supervisor must
+            <a href="{% url 'finance_voucher_detail' posted_voucher.pk %}">unlock the voucher</a>.
+        </span>
+    </div>
+    {% endif %}
+{% endif %}
+{% endblock %}

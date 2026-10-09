@@ -3,6 +3,70 @@
 > Module: `finance` (unified ledger + office expenses + project costs/budget/investment).
 > Read with `docs/qa/_shared-context.md` (roles, permission groups, money/Decimal, invariants).
 
+> **STATUS — PARTIALLY SUPERSEDED (2026-09-29). Read this first.**
+> This is a point-in-time analysis. Two things have changed underneath it, so treat the
+> per-finding text as a historical record rather than a live spec:
+>
+> 1. **The ledger was rewritten.** The `AccountTransaction` single-entry ledger described
+>    throughout this document was replaced by double-entry `Voucher` / `VoucherLine`
+>    (`finance/models.py`, `finance/accounting.py`), with immutable posted vouchers, a
+>    2-level chart of accounts, and Excel/PDF ledger exports. Every finding below that
+>    reasons about `AccountTransaction` rows is therefore out of date, even where the
+>    underlying concern may still hold.
+> 2. **Six findings have been fixed** and are regression-tested. See the numbered list
+>    in `CLAUDE.md` → "Work status" → "Uncommitted — finance ledger remediation" for the
+>    authoritative record of what changed and how it was verified. The specific findings
+>    in this document that are now resolved:
+>    - §4 "ProjectCost defaults to `paid`" / "approval bypass via status field" — the
+>      default is now a valid choice (`pending`; it previously was *not* in
+>      `STATUS_CHOICES`, so the field rendered as a raw string and could never be paid),
+>      and the approve/pay actions are reachable in both the UI and the API.
+>      Separately, the "approval bypass via status field" concern is **not exploitable** —
+>      re-verified 2026-09-29: `status` is absent from `Meta.fields` in both
+>      `OfficeExpenseForm` and `ProjectCostForm`, and is in `read_only_fields` in both
+>      serializers (`finance/forms.py:37-38,65-66`; `serializers.py:63,83`). A POST of
+>      `status=paid` is ignored and the record is created `pending` with no voucher.
+>      *Hygiene note:* both forms still carry a dead `'status': forms.Select(...)` entry
+>      in their `widgets` dict, which Django ignores because `status` is not a form
+>      field. Harmless but misleading — worth deleting.
+>    - §5 "Status demotion orphans the ledger" — **mostly fixed; one vector remains.**
+>      `office_expense_approve_view` and `OfficeExpenseViewSet.approve` now refuse to move
+>      a `paid` expense backwards (error toast / HTTP 400), and `project_cost_approve_view`
+>      has the same guard. Edit/create cannot change `status` at all (see the form/serializer
+>      note above). **However** `OfficeExpenseAdmin` and `ProjectCostAdmin`
+>      (`finance/admin.py:31-34,44-47`) set no `readonly_fields`, so `status` is still
+>      editable in the Django admin — a staff user with the model permission can demote a
+>      paid record there and orphan its voucher. Worth closing.
+>    - §5 "Re-date / re-amount a paid record" — the voucher is immutable by design
+>      (FIN-EC-03); the divergence is now *surfaced* via `ledger_out_of_sync` and a
+>      `⚠ Ledger mismatch` badge rather than silently rewriting the row.
+>    - §5 "Out-of-order / running balance" — a real running balance, opening balance and
+>      closing balance now exist per account (added 2026-09-29).
+>    - Ledger integrity gap: paid expenses/costs that predate the writers now have a
+>      backfill — `manage.py backfill_ledger_vouchers` (idempotent, `--dry-run`).
+>
+> **Still open** (re-verified 2026-09-29, not addressed by that pass):
+> - **No `draft → paid` transition guard.** `OfficeExpenseViewSet.pay` / `office_expense_pay_view`
+>   accept a `draft` source. Deliberately kept as a red `// CONFIRMED BUG` test
+>   (`tests/finance/finance.spec.ts` FIN-SEC-03) so the contract stays visible.
+> - **Deleting a paid project cost orphans its voucher.** `project_cost_delete_view`
+>   calls `cost.delete()` and never removes the matching `Voucher`; `reference_id` is a
+>   plain integer, so there is no cascade. Reproduced by FIN-SEC-04.
+> - **Negative project budget via the API → HTTP 500.** `POST /api/project-budgets/`
+>   with `total_budget: -5000` raises `IntegrityError` (CHECK
+>   `project_budget_total_non_negative`) because the constraint is model-only. The
+>   *HTML* path now clamps to `0.00` and returns 200, so this is API-only.
+>   Note `POST /api/project-investments/` with a negative amount is accepted outright
+>   (HTTP 201) — that model appears to have no `gte=0` constraint at all, which is
+>   worth a separate look.
+>
+> **Claims in this document that are simply wrong** (re-verified 2026-09-29):
+> - "`OfficeViewSet.destroy` (DRF, no override)" (§5 "Delete office bypass", and the
+>   file list at the end) — **incorrect**. It has had a dependency guard (400 when the
+>   office still has expenses or ledger transactions) since the `d2e6d34` QA-remediation
+>   commit. The *admin* registration still has no guard, which is the surviving part of
+>   that finding.
+
 ## 1. Business purpose & user journeys
 
 The finance module is the company's **unified money-out ledger**. Every expense, project

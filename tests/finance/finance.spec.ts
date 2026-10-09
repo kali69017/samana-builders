@@ -959,14 +959,18 @@ test.describe('FIN-SEC — negative & security (API)', () => {
     const payRes = await request.post(`/api/office-expenses/${draftId}/pay/`, {
       headers: csrf(token),
     });
-    // CONFIRMED BUG: docs/qa/findings-confirmed.md F3 — no transition guard.
+    // CONFIRMED BUG: no transition guard on `pay` (documented in
+    // docs/qa/finance_analysis.md §4, NOT findings-confirmed.md — that file's
+    // "F3" is the unrelated API IDOR finding).
     expect(payRes.status(), `draft→paid should be refused, got ${payRes.status()}`).toBe(400);
 
     // Approve may only follow pending — approving a paid expense must be refused.
+    // FIXED 2026-09-29: `OfficeExpenseViewSet.approve` and
+    // `office_expense_approve_view` now refuse a `paid` source (400 / error toast),
+    // because its voucher is already posted and locked. This assertion must stay.
     const appRes = await request.post(`/api/office-expenses/${paidId}/approve/`, {
       headers: csrf(token),
     });
-    // CONFIRMED BUG: docs/qa/findings-confirmed.md F3 — approve demotes a paid expense.
     expect(appRes.status(), `paid→approved should be refused, got ${appRes.status()}`).toBe(400);
   });
 

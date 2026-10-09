@@ -44,6 +44,8 @@ urlpatterns = [
     path('project-costs/', views.project_costs_view, name='finance_project_costs'),
     path('project-costs/create/', views.project_cost_create_view, name='finance_project_cost_create'),
     path('project-costs/<int:pk>/edit/', views.project_cost_edit_view, name='finance_project_cost_edit'),
+    path('project-costs/<int:pk>/approve/', views.project_cost_approve_view, name='finance_project_cost_approve'),
+    path('project-costs/<int:pk>/pay/', views.project_cost_pay_view, name='finance_project_cost_pay'),
     path('project-costs/<int:pk>/delete/', views.project_cost_delete_view, name='finance_project_cost_delete'),
 
     # Project finance (budget + investment)

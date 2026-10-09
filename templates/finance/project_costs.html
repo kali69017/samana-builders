@@ -22,7 +22,8 @@
                     <span style="font-size:20px;">ℹ️</span>
                     <div style="font-size:13px; color:var(--text-secondary); line-height:1.6;">
                         <strong style="color:var(--text-primary);">What is a Project Cost?</strong>
-                        These are <strong>construction / development costs</strong> spent to build a project — materials, labor, contractors, transportation and other direct build costs. Each is linked to a project and can be set to <em>draft → approved → paid</em>.<br>
+                        These are <strong>construction / development costs</strong> spent to build a project — materials, labor, contractors, transportation and other direct build costs. Each is linked to a project and can be set to <em>pending → approved → paid</em>.<br>
+                        Marking a cost <strong>paid</strong> posts a Cash/Bank Payment voucher to the ledger (once only).<br>
                         <strong style="color:var(--text-primary);">Only "paid" costs</strong> count toward the project budget and the Project Investment &amp; Finance view.<br>
                         <span style="color:var(--text-3);">Different from <strong>Expenses</strong> (general company/project overhead like marketing or admin) and <strong>Office Expenses</strong> (office rent, utilities, stationery).</span>
                     </div>
@@ -63,7 +64,7 @@
                 {% if costs %}
                 <table class="sortable">
                     <thead>
-                        <tr><th>Date</th><th>Project</th><th>Category</th><th>Vendor</th><th>Amount</th><th>Status</th></tr>
+                        <tr><th>Date</th><th>Project</th><th>Category</th><th>Vendor</th><th>Amount</th><th>Status</th><th>Actions</th></tr>
                     </thead>
                     <tbody>
                         {% for cost in costs %}
@@ -73,7 +74,21 @@
                             <td><span class="badge badge-info">{{ cost.get_cost_category_display }}</span></td>
                             <td>{{ cost.vendor|default:"-" }}</td>
                             <td style="font-weight:600;">Rs. {{ cost.amount|floatformat:0 }}</td>
-                            <td><span class="badge badge-{% if cost.status == 'paid' %}success{% else %}secondary{% endif %}">{{ cost.get_status_display }}</span></td>
+                            <td><span class="badge badge-{% if cost.status == 'paid' %}success{% elif cost.status == 'approved' %}info{% else %}warning{% endif %}">{{ cost.get_status_display }}</span>{% if cost.ledger_out_of_sync %} <span class="badge badge-danger" title="Cost amount no longer matches the posted voucher">⚠ Ledger mismatch</span>{% endif %}</td>
+                            <td>
+                                <div class="table-actions">
+                                    <a href="{% url 'finance_project_cost_edit' cost.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                                    {% if can_delete and cost.status == 'pending' %}
+                                    <form method="post" action="{% url 'finance_project_cost_approve' cost.pk %}" style="display:inline;">{% csrf_token %}<input type="hidden" name="action" value="approve"><button type="submit" class="btn btn-success btn-sm">Approve</button></form>
+                                    {% endif %}
+                                    {% if can_delete and cost.status != 'paid' %}
+                                    <form method="post" action="{% url 'finance_project_cost_pay' cost.pk %}" onsubmit="return confirm('Mark paid and post to ledger?');" style="display:inline;">{% csrf_token %}<button type="submit" class="btn btn-success btn-sm">Pay</button></form>
+                                    {% endif %}
+                                    {% if can_delete and cost.status != 'paid' %}
+                                    <form method="post" action="{% url 'finance_project_cost_delete' cost.pk %}" onsubmit="return confirm('Delete this project cost?');" style="display:inline;">{% csrf_token %}<button type="submit" class="btn btn-danger btn-sm">Delete</button></form>
+                                    {% endif %}
+                                </div>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>

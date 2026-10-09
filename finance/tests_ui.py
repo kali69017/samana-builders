@@ -45,7 +45,22 @@ class LedgerReportUiTests(AccountingUiBase):
         self.login(self.finance)
         resp = self.client.get(reverse('finance_ledger'))
         self.assertEqual(resp.status_code, 200)
+        # All-accounts view: a single running balance is meaningless across mixed
+        # account natures, so the page must NOT show one (FIN-LED-01). It shows a
+        # trial-balance check instead.
+        self.assertNotContains(resp, 'Ledger balance')
+        self.assertContains(resp, 'Trial balance (debits vs credits)')
+        self.assertContains(resp, 'Balanced')
+
+    def test_ledger_shows_running_balance_for_a_single_account(self):
+        self.posted_voucher()
+        self.login(self.finance)
+        resp = self.client.get(reverse('finance_ledger'), {'head': self.cash.pk})
+        self.assertEqual(resp.status_code, 200)
+        # Scoped to one account, the running/opening/closing balance is real.
         self.assertContains(resp, 'Ledger balance')
+        self.assertContains(resp, 'Opening balance')
+        self.assertContains(resp, 'Debit-normal balance')
 
     def test_ledger_filters_by_head_and_dates(self):
         self.posted_voucher()
@@ -70,6 +85,31 @@ class LedgerReportUiTests(AccountingUiBase):
         from openpyxl import load_workbook
         wb = load_workbook(BytesIO(resp.content))
         self.assertGreaterEqual(wb.active.max_row, 2)
+
+    def test_excel_export_has_balance_column_for_one_account(self):
+        """Scoped to one account the running balance is real, so it is exported."""
+        from openpyxl import load_workbook
+        self.posted_voucher()
+        self.login(self.finance)
+        resp = self.client.get(reverse('finance_ledger_export_excel'), {'head': self.cash.pk})
+        ws = load_workbook(BytesIO(resp.content)).active
+        self.assertIn('Ledger balance', [c.value for c in ws[1]])
+
+    def test_excel_export_omits_balance_column_for_all_accounts(self):
+        """FIN-LED-01: a single running balance across mixed-nature accounts is
+        meaningless, so the column is dropped and the sheet stays uniform."""
+        from openpyxl import load_workbook
+        self.posted_voucher()
+        self.login(self.finance)
+        resp = self.client.get(reverse('finance_ledger_export_excel'))
+        ws = load_workbook(BytesIO(resp.content)).active
+        header = [c.value for c in ws[1]]
+        self.assertNotIn('Ledger balance', header)
+        self.assertEqual(header, [
+            'Date', 'Voucher', 'Type', 'Account', 'Narration', 'Debit', 'Credit'])
+        # No stray empty column: every populated row is exactly header-width.
+        widths = {len(r) for r in ws.iter_rows(values_only=True) if any(r)}
+        self.assertEqual(widths, {len(header)})
 
     def test_pdf_export(self):
         self.posted_voucher()

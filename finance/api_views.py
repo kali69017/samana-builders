@@ -101,6 +101,15 @@ class OfficeExpenseViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         expense = self.get_object()
+        if expense.status == 'paid':
+            # Illegal transition: the voucher is posted and locked, so the source
+            # must not fall back to an unposted state or it silently desyncs from
+            # the ledger. 400 matches the house convention for transition guards
+            # (see tests/finance/finance.spec.ts FIN-SEC-03).
+            return Response(
+                {'detail': 'A paid office expense is already posted to the ledger.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         expense.status = 'approved'
         expense.approved_by = request.user
         expense.save()
@@ -134,6 +143,26 @@ class ProjectCostViewSet(viewsets.ModelViewSet):
         cost = serializer.save(created_by=self.request.user)
         if cost.status == 'paid':
             cost.post_to_ledger()
+
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        cost = self.get_object()
+        if cost.status == 'paid':
+            return Response(
+                {'detail': 'A paid project cost is already posted to the ledger.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        cost.status = 'approved'
+        cost.save()
+        return Response(ProjectCostSerializer(cost).data)
+
+    @action(detail=True, methods=['post'])
+    def pay(self, request, pk=None):
+        cost = self.get_object()
+        cost.status = 'paid'
+        cost.save()
+        cost.post_to_ledger()
+        return Response(ProjectCostSerializer(cost).data)
 
 
 class ProjectBudgetViewSet(viewsets.ModelViewSet):
