@@ -6,13 +6,6 @@
 {% block content %}
 <div class="app-layout">
     <div class="sidebar-overlay" onclick="closeSidebar()"></div>
-    <div class="top-bar">
-        <button class="hamburger" onclick="toggleSidebar()">☰</button>
-        <span class="top-bar-title">Notifications</span>
-        <div class="top-bar-actions">
-            <button class="btn btn-primary btn-sm" onclick="document.getElementById('sendModal').style.display='flex'">Send Notification</button>
-        </div>
-    </div>
 
     {% include 'includes/sidebar.html' %}
 
@@ -21,6 +14,7 @@
             <h1>Notification Center</h1>
             <div class="page-actions">
                 <span class="badge badge-info">{{ total_count }} total</span>
+                <button class="btn btn-primary btn-sm" onclick="document.getElementById('sendModal').style.display='flex'">Send Notification</button>
             </div>
         </div>
 
@@ -45,6 +39,13 @@
                 <div class="stat-info">
                     <div class="stat-value">{{ pending_count }}</div>
                     <div class="stat-label">Pending</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background: #e0e7ff; color: #4f46e5;">⏭</div>
+                <div class="stat-info">
+                    <div class="stat-value">{{ skipped_count }}</div>
+                    <div class="stat-label">Skipped</div>
                 </div>
             </div>
             <div class="stat-card">

@@ -19,11 +19,19 @@ How to run the browser test suite from a clean shell. Everything is project-loca
 ```powershell
 # From repo root, in PowerShell
 $env:DJANGO_DEBUG='True'
+# Force every notification provider OFF for the E2E run. The local .env carries
+# LIVE SendPK/SMTP/WhatsApp credentials (*_ENABLED=True), while the E2E suites
+# are written against the disabled-provider contract — without this line, every
+# test that creates a customer or logs a payment would bill a real
+# SMS/email/WhatsApp send. (python-dotenv does not override variables already
+# set in the environment, so these values win over .env.)
+$env:SENDPK_ENABLED='False'; $env:EMAIL_ENABLED='False'; $env:WHATSAPP_ENABLED='False'; $env:AI_ENABLED='False'
 D:\samana\.venv312\Scripts\python.exe manage.py runserver 127.0.0.1:8000
 ```
 
 `DJANGO_DEBUG=True` is required: otherwise `SECURE_SSL_REDIRECT` 301-redirects plain-HTTP
 requests. The server must be reachable at `http://127.0.0.1:8000/login/`.
+(`manage.py test` gets the same guarantee from the `TESTING` guard in `settings.py`.)
 
 ## 3. Seed the role users + portal customer (idempotent)
 

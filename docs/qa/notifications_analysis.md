@@ -54,7 +54,7 @@ User journeys:
 
 ### `NotificationLog.status` transitions
 - Created with `status='pending'` (models.py:33).
-- After the provider attempt: `'sent'` if the provider returned success, else `'failed'` (services.py:204-206). `sent_at` set only on success.
+- After the provider attempt: `'sent'` if the provider returned success while the channel is enabled, `'skipped'` if the provider is switched off (success or not), else `'failed'` (services.py:604-613). `sent_at` set only on `'sent'`.
 - **No re-send / retry state machine** — a `failed` row is never retried automatically. No transition from `failed`/`sent` back to `pending`.
 
 ### Send rules / invariants
@@ -65,6 +65,9 @@ User journeys:
   - Email: `EMAIL_ENABLED` (services.py:17) — returns `(True, "Email disabled")` without `send_mail`.
   - SMS: `SENDPK_ENABLED` (services.py:63) — returns `(True, "SMS disabled")` without `requests.post` (verified: notifications/tests.py:26-32).
   - WhatsApp: **no gating** — always "succeeds" (see §5).
+  - A gated (switched-off) channel is recorded `'skipped'` by `send_notification`, and the
+    settings guard (`samana_erp/settings.py` `TESTING`) forces every provider off under
+    `manage.py test` so the suite can never bill a live send.
 - **Failure-safety contract**: a broken email/SMS must never break the customer/payment transaction. `send_customer_welcome` is self-wrapped in try/except (services.py:313-348); the other triggers are wrapped at their call sites (core/views.py:1125-1130, 1359-1390, 1666-1672; bookings/api_views.py:113-120). Management commands wrap per-item in try/except (send_installment_reminders.py:38-42; check_installment_notifications.py:90-95, 130-136).
 
 ### Side effects
@@ -73,8 +76,8 @@ User journeys:
 
 ## 5. Edge cases (go deep)
 
-1. **Filtering the log 500s.** `notifications_view` does `NotificationLog.objects.all()[:100]` then applies `.filter(...)` on the sliced queryset (views.py:11-21). Django raises `TypeError("Cannot filter a query once a slice has been taken.")` (django/db/models/query.py:1552-1554) whenever `channel`/`type`/`status` is supplied. **Expected:** filters narrow results. **Actual:** any use of the Filter button on the Notification Center is a 500. Fix: apply filters first, then slice.
-2. **Disabled provider is recorded as `sent`, not skipped.** When `EMAIL_ENABLED=False` or `SENDPK_ENABLED=False`, the service returns success (services.py:19, 65) so `log.status='sent'` (services.py:204). The Notification Center "Delivered" stat (views.py:29, template) therefore counts messages that were never delivered. **Expected:** a distinct `skipped`/`disabled` outcome, or `failed` with a clear reason. There is no `skipped` status in `STATUS_CHOICES` (models.py:21-25).
+1. **~~Filtering the log 500s~~ FIXED (`feb2689`).** `notifications_view` sliced before filtering, and Django raises `TypeError("Cannot filter a query once a slice has been taken.")` on any Filter-button use. The list now filters first, then slices (views.py:11-21). Newest rows render for every channel/type/status combination; verified live.
+2. **~~Disabled provider recorded as `sent`~~ FIXED (`feb2689`).** A switched-off channel is recorded `'skipped'` (new status, migration `notifications/0004`) with `sent_at=None` and a message in `error_message`, so the "Delivered" stat counts only messages actually transmitted. The Notification Center gained a Skipped stat card and filter option, and manual sends from a disabled channel surface a "Not sent: … disabled on this deployment" warning (views.py:64). Verified live: SMS manual send → `skipped` row + warning + `Skipped: 1` stat.
 3. **WhatsApp is a no-op that always "succeeds".** `WhatsAppService.send` only builds a `wa.me` URL and `logger.info`s it (services.py:146-162); it never delivers anything and returns `(True, url)`. The URL is not persisted (the log stores the raw message, not the URL). So every WhatsApp row is `sent` while no customer ever receives it. **Expected:** either persist the URL / use the Business API, or record it as a non-delivery.
 4. **`recipient_name` can overflow.** `NotificationLog.recipient_name` is CharField(200) (models.py:27) but `customer.full_name` = `first_name + " " + last_name` where both are CharField(100) (customers/models.py:36-37, 70-71) → up to 201 chars. A max-length name makes `NotificationLog.objects.create` raise `DataError`, which aborts the whole send (the other channels in the same loop are skipped). In the welcome path it's swallowed (services.py:342-348); in payment/booking paths it's swallowed at the call site, losing all notifications for that event.
 5. **Missing/invalid phone — skip vs error.** If `customer.phone` is empty (`''`, since `phone` is non-null CharField with no default → empty string), the `if customer.phone:` guard skips SMS/WhatsApp entirely (services.py:254, 285, 370, 407, 440). If a phone *is* present but invalid, `SMSService.send` returns `(False, "Invalid phone number")` (services.py:60-61) and the row is marked `failed` — never raised. **Expected/actual:** both are safe; no exception escapes.

@@ -4,10 +4,12 @@ import { loginViaApi, type RoleName } from '../helpers/auth';
 /**
  * Notifications module — Playwright suite (web-only; notifications has no DRF surface).
  *
- * Providers are gated OFF in the local `.env` (EMAIL_ENABLED=False, SENDPK_ENABLED=False),
- * so these tests assert SHAPE/behavior (rows, statuses, redirects, flash messages), never
- * a real send. Confirmed defects are written RED (they assert the CORRECT behavior and fail
- * against the buggy app) — see docs/qa/findings-confirmed.md.
+ * Providers are gated OFF for E2E (RUNBOOK §2 launches the dev server with *_ENABLED=False),
+ * even though the local `.env` carries live SendPK/SMTP/WhatsApp credentials — so these
+ * tests assert SHAPE/behavior (rows, statuses, redirects, flash messages), never a real send.
+ * Confirmed defects are written RED (they assert the CORRECT behavior and fail against the
+ * buggy app) — see docs/qa/findings-confirmed.md. The disabled-channel "recorded as sent"
+ * defect (NOTIF-EC-02) was FIXED in feb2689 and now asserts GREEN.
  *
  * Backend-only scenarios (need `mail.outbox`, a `requests.post` mock, or ORM fixtures that
  * the web form cannot produce) are registered with `test.skip(true, ...)` and a reason.
@@ -97,8 +99,11 @@ test.describe('Notifications — HP', () => {
 
     test('NOTIF-HP-09 — SMS number normalization to 92XXXXXXXXXX', async ({ page }) => {
       // Observable via the manual SMS path: valid Pakistani formats normalize to a valid
-      // mobile (SMSService.is_valid_mobile → True) so the disabled channel reports "sent";
-      // a non-Pakistani string normalizes to '' and is rejected as invalid.
+      // mobile (SMSService.is_valid_mobile → True) so the send proceeds to the provider —
+      // which is switched OFF for E2E (RUNBOOK §2), so the manual send records 'skipped'
+      // and returns the disabled warning (was: "sent successfully via sms", the inflated
+      // 'sent' contract fixed in feb2689). A non-Pakistani string normalizes to '' and is
+      // rejected as invalid.
       const validFormats = ['+92-300-1234567', '0300-1234567', '3001234567', '+92 300 1234567'];
       for (const phone of validFormats) {
         const html = await manualSendHtml(page, {
@@ -108,7 +113,7 @@ test.describe('Notifications — HP', () => {
           subject: 'n',
           message: 'm',
         });
-        expect(html).toContain('sent successfully via sms');
+        expect(html).toContain('sms notifications are disabled on this deployment');
       }
       const invalid = await manualSendHtml(page, {
         recipient_name: 'QA Norm',
@@ -120,18 +125,22 @@ test.describe('Notifications — HP', () => {
       expect(invalid).toContain('Invalid phone number');
     });
 
-    test('NOTIF-HP-10 — Manual send (management) delivers a general email', async ({ page }) => {
+    test('NOTIF-HP-10 — Manual send (management) with email disabled is recorded skipped', async ({ page }) => {
       const email = `qa-manual-${tag()}@example.com`;
+      // FIXED (feb2689): email is switched OFF for E2E, so a manual email send records
+      // 'skipped' and surfaces the disabled warning — it no longer claims a delivery
+      // ("Notification sent successfully via email." was the inflated-'sent' contract).
+      // (Posted via API like NOTIF-HP-09: the top-bar "Send Notification" button is
+      // display:none at the test viewport, so the DOM-click path is not actionable.)
+      const html = await manualSendHtml(page, {
+        recipient_name: 'QA Manual',
+        recipient_contact: email,
+        channel: 'email',
+        subject: 'QA subject',
+        message: 'QA message',
+      });
+      expect(html).toContain('email notifications are disabled on this deployment');
       await page.goto('/notifications/');
-      await page.getByRole('button', { name: 'Send Notification' }).first().click();
-      await page.getByPlaceholder('Customer name').fill('QA Manual');
-      await page.getByPlaceholder('email@example.com or +923001234567').fill(email);
-      await page.getByPlaceholder('Notification subject').fill('QA subject');
-      await page.getByPlaceholder('Type your notification message...').fill('QA message');
-      // channel defaults to "email"
-      await page.locator('#sendModal').getByRole('button', { name: 'Send Notification' }).click();
-      await expect(page).toHaveURL(/\/notifications\/?$/);
-      await expect(page.getByText('Notification sent successfully via email.')).toBeVisible();
       // A 'general' email row is created for this recipient.
       await expect(page.getByRole('row').filter({ hasText: email })).toHaveCount(1);
     });
@@ -183,14 +192,16 @@ test.describe('Notifications — EC', () => {
   test.describe('Notification Center filters + manual send (management)', () => {
     test.use({ storageState: 'tests/.auth/management.json' });
 
-    test('NOTIF-EC-01 — Filter use on Notification Center 500s (sliced queryset)', async ({ page }) => {
+    test('NOTIF-EC-01 — Notification Center filter use works (FIXED feb2689)', async ({ page }) => {
       await page.goto('/notifications/');
-      // CONFIRMED BUG: docs/qa/findings-confirmed.md — notifications_view slices [:100] then
-      // calls .filter(...), raising "TypeError: Cannot filter a query once a slice has been
-      // taken." on every Filter use. The correct behavior is a 200 with a filtered list.
-      await page.locator('select[name="channel"]').selectOption('email');
+      // FIXED (feb2689): notifications_view filtered AFTER slicing, raising
+      // TypeError("Cannot filter a query once a slice has been taken.") on every Filter
+      // use. It now filters first, then slices — a filtered view renders a 200 list.
+      // (Scoped to <main>: the send-modal also has a channel select.)
+      await page.getByRole('main').locator('select[name="channel"]').selectOption('email');
       await page.getByRole('button', { name: 'Filter' }).click();
-      await expect(page.getByRole('heading', { name: 'Notification Center' })).toBeVisible(); // RED (500)
+      await expect(page).toHaveURL(/channel=email/);
+      await expect(page.getByRole('heading', { name: 'Notification Center' })).toBeVisible(); // was RED (500)
     });
 
     test('NOTIF-EC-03 — Disabled SMS recorded as sent', async ({ page }) => {
@@ -241,15 +252,16 @@ test.describe('Notifications — EC', () => {
   test.describe('Customer create triggers (admin)', () => {
     test.use({ storageState: 'tests/.auth/admin.json' });
 
-    test('NOTIF-EC-02 — Disabled email recorded as sent (inflates "Delivered")', async ({ page }) => {
+    test('NOTIF-EC-02 — Disabled email recorded as skipped, not sent (FIXED feb2689)', async ({ page }) => {
       const email = `qa-ec02-${tag()}@example.com`;
       await createCustomer(page, { email });
       await page.goto('/notifications/');
       const row = page.getByRole('row').filter({ hasText: email });
       await expect(row).toHaveCount(1);
-      // CONFIRMED BUG: docs/qa/findings-confirmed.md — EmailService.send returns (True, "Email disabled"),
-      // so the welcome row is 'sent' (never delivered) and counted in the "Delivered" stat.
-      await expect(row.getByText('Sent', { exact: true })).toHaveCount(0); // RED (is 'Sent')
+      // FIXED (feb2689): a switched-off provider is recorded 'skipped' with sent_at=None —
+      // never 'sent' — so "Delivered" no longer counts messages that were never transmitted.
+      // Requires the E2E server to run providers-off (RUNBOOK §2).
+      await expect(row.getByText('Skipped', { exact: true })).toHaveCount(1); // was RED ('Sent')
     });
 
     test('NOTIF-EC-05 — recipient_name overflow (201-char full_name) aborts all channels', async ({ page }) => {
