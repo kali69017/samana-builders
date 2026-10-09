@@ -276,6 +276,13 @@ SENDPK_API_KEY = os.environ.get('SENDPK_API_KEY', '')
 # Switch to "SAMANA" once the branded mask is PTA-approved on the account.
 SENDPK_SENDER_ID = os.environ.get('SENDPK_SENDER_ID', 'SMS Alert')
 SENDPK_BASE_URL = os.environ.get('SENDPK_BASE_URL', 'https://sendpk.com/api/sms.php')
+# Approved fixed-sms templates (SendPK dashboard). This account is fixed-sms:
+# it requires template_id + a JSON message string, and rejects free text.
+# IDs are account-specific; override in .env if they change.
+SENDPK_TEMPLATE_CUSTOMER_WELCOME = os.environ.get('SENDPK_TEMPLATE_CUSTOMER_WELCOME', '10904')
+SENDPK_TEMPLATE_PAYMENT_CONFIRMATION = os.environ.get('SENDPK_TEMPLATE_PAYMENT_CONFIRMATION', '10901')
+SENDPK_TEMPLATE_INSTALLMENT_REMINDER = os.environ.get('SENDPK_TEMPLATE_INSTALLMENT_REMINDER', '10902')
+SENDPK_TEMPLATE_OVERDUE_PAYMENT = os.environ.get('SENDPK_TEMPLATE_OVERDUE_PAYMENT', '10903')
 
 # ─── OpenRouter AI (LangChain) ─────────────────────────────────────────────
 # AI assistant features are powered by OpenRouter's unified chat API through

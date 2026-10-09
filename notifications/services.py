@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 import requests
@@ -28,6 +29,78 @@ class EmailService:
 
 
 class SMSService:
+    # notification_type -> (template setting suffix, SMS template variable map).
+    # Values are the SendPK-approved template variable names (e.g. #name#).
+    # This account is fixed-sms: it requires template_id + a JSON message string.
+    TEMPLATES = {
+        'customer_welcome': ('CUSTOMER_WELCOME', {'name': 'customer_name', 'customer_id': 'customer_id'}),
+        'payment_confirmation': (
+            'PAYMENT_CONFIRMATION',
+            {'name': 'customer_name', 'amount': 'amount', 'booking_id': 'booking_id',
+             'remaining': 'remaining_balance', 'next_installment': 'next_installment'}),
+        'installment_reminder': (
+            'INSTALLMENT_REMINDER',
+            {'name': 'customer_name', 'installment_number': 'installment_number',
+             'amount': 'amount', 'due_date': 'due_date', 'booking_id': 'booking_id'}),
+        'overdue_payment': (
+            'OVERDUE_PAYMENT',
+            {'name': 'customer_name', 'installment_number': 'installment_number',
+             'amount': 'amount', 'due_date': 'due_date', 'outstanding': 'outstanding'}),
+    }
+
+    @staticmethod
+    def template_for(notification_type):
+        entry = SMSService.TEMPLATES.get(notification_type)
+        if not entry:
+            return None, set()
+        setting = getattr(
+            settings, f'SENDPK_TEMPLATE_{entry[0]}', '')
+        # var_map: SMS template name -> the key in the caller's params dict
+        return setting or None, set(entry[1].values())
+
+    @staticmethod
+    def send_typed(to_phone, notification_type, params):
+        """Send via the approved fixed-sms template configured for this type.
+
+        SendPK fixed-sms accounts reject free text; they require template_id
+        plus a JSON object mapping the template's variables to their values.
+        """
+        mobile = SMSService.normalize_phone(to_phone)
+        if not mobile:
+            return False, "Invalid phone number"
+        if not getattr(settings, 'SENDPK_ENABLED', False):
+            return True, "SMS disabled"
+
+        template_id, expected = SMSService.template_for(notification_type)
+        if not template_id:
+            return False, f"No SMS template configured for '{notification_type}'. Set SENDPK_TEMPLATE_* in .env."
+
+        var_map = SMSService.TEMPLATES[notification_type][1]
+        provided = {k: v for k, v in (params or {}).items() if v not in (None, '')}
+        # Build the JSON message from the caller's params using the template var names.
+        message_vars = {}
+        for sms_var, src_key in var_map.items():
+            if src_key in provided:
+                message_vars[sms_var] = str(provided[src_key])
+
+        try:
+            payload = {
+                'api_key': getattr(settings, 'SENDPK_API_KEY', ''),
+                'sender': getattr(settings, 'SENDPK_SENDER_ID', 'SMS Alert'),
+                'mobile': mobile,
+                'template_id': template_id,
+                'message': json.dumps(message_vars),
+            }
+            resp = requests.get(getattr(settings, 'SENDPK_BASE_URL', 'https://sendpk.com/api/sms.php'), params=payload, timeout=15)
+            resp.raise_for_status()
+            text = resp.text.strip()
+            if text.startswith('OK'):
+                return True, text
+            return False, text
+        except Exception as e:
+            logger.error(f"SMS send failed: {e}")
+            return False, str(e)
+
     @staticmethod
     def normalize_phone(phone):
         """Convert local/international formats to SendPK's 92XXXXXXXXXX."""
@@ -94,9 +167,10 @@ class SMSService:
 
     @staticmethod
     def extract_message_id(detail):
-        """Parse the SendPK message ID out of a detail string like 'OK ID:6502124'."""
-        m = re.search(r'ID:(\d+)', detail or '')
-        return m.group(1) if m else ''
+            """Parse the SendPK message ID out of a detail string like 'OK ID:6502124'
+            or 'OK ID:ebd6dc1e-...' (fixed-sms returns a UUID)."""
+            m = re.search(r'ID:\s*(\w[\w-]*)', detail or '')
+            return m.group(1) if m else ''
 
     @staticmethod
     def check_delivery(message_id):
@@ -443,7 +517,14 @@ class NotificationService:
         if channel == 'email':
             success, detail = EmailService.send(recipient_contact, subject, message)
         elif channel == 'sms':
-            success, detail = SMSService.send(recipient_contact, effective_message)
+            # Automated transactional sends go via an approved fixed-sms template
+            # (this account rejects free text). template_params present = templated;
+            # absent = free text (e.g. a one-off staff message).
+            if template_params is not None:
+                success, detail = SMSService.send_typed(
+                    recipient_contact, notification_type, template_params)
+            else:
+                success, detail = SMSService.send(recipient_contact, effective_message)
             if success:
                 log.provider_message_id = SMSService.extract_message_id(detail)
         elif channel == 'whatsapp':
@@ -580,24 +661,17 @@ class NotificationService:
 
     @staticmethod
     def send_customer_welcome(customer, user=None):
-        """Send a welcome email to a freshly-created Customer.
+        """Send a welcome to a freshly-created Customer (email + SMS via template).
 
-        Failure-safe by design: the whole send is wrapped so that a broken
-        email (invalid address, SMTP failure, even a NotificationLog write
-        error) can NEVER propagate up and corrupt the customer transaction that
-        just succeeded. Only emails to a present, non-empty address are sent.
-        Returns the NotificationLog row, or None if there was nothing to send
-        or the send failed (failure is logged, never raised).
+        Failure-safe by design: the whole send is wrapped so that a broken send
+        (invalid address, SMTP failure, even a NotificationLog write error) can
+        NEVER propagate up and corrupt the customer transaction that just
+        succeeded. Run channels: SMS (approved fixed-sms template) when a phone
+        is present, plus email when an address is present. Returns the last
+        NotificationLog row, or None if there was nothing to send or the send
+        failed (failure is logged, never raised).
         """
         try:
-            email = (getattr(customer, 'email', '') or '').strip()
-            if not email:
-                logger.info(
-                    f"[Welcome email skipped] no email address for customer "
-                    f"{getattr(customer, 'customer_id', None) or getattr(customer, 'pk', None)}"
-                )
-                return None
-
             customer_id = getattr(customer, 'customer_id', '') or ''
             message = (
                 f"Dear {customer.full_name},\n\n"
@@ -608,20 +682,38 @@ class NotificationService:
                 f"reach out to our team.\n\n"
                 f"Best regards,\nSamana Builders & Developers"
             )
-            return NotificationService.send_notification(
-                recipient_name=customer.full_name,
-                recipient_contact=email,
-                channel='email',
-                notification_type='customer_welcome',
-                subject='Welcome to Samana Builders & Developers',
-                message=message,
-                customer_id=customer_id,
-                user=user,
-            )
+            template_params = {
+                'customer_name': customer.full_name,
+                'customer_id': customer_id,
+            }
+            email = (getattr(customer, 'email', '') or '').strip()
+            phone = SMSService.normalize_phone(getattr(customer, 'phone', '') or '')
+
+            channels = []
+            if phone:
+                channels.append('sms')
+            if email:
+                channels.append('email')
+
+            last = None
+            for ch in channels:
+                contact = phone if ch == 'sms' else email
+                last = NotificationService.send_notification(
+                    recipient_name=customer.full_name,
+                    recipient_contact=contact,
+                    channel=ch,
+                    notification_type='customer_welcome',
+                    subject='Welcome to Samana Builders & Developers',
+                    message=message,
+                    template_params=template_params,
+                    customer_id=customer_id,
+                    user=user,
+                )
+            return last
         except Exception as e:
-            # Log and swallow: a welcome email must never break customer creation.
+            # Log and swallow: a welcome send must never break customer creation.
             logger.error(
-                f"[Welcome email failed - non-fatal] customer "
+                f"[Welcome failed - non-fatal] customer "
                 f"{getattr(customer, 'customer_id', None) or getattr(customer, 'pk', None)}: {e}"
             )
             return None
