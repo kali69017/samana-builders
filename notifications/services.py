@@ -10,6 +10,13 @@ from .models import NotificationLog
 
 logger = logging.getLogger(__name__)
 
+# channel -> the settings flag that says whether that provider is switched on.
+CHANNEL_ENABLED_SETTING = {
+    'email': 'EMAIL_ENABLED',
+    'sms': 'SENDPK_ENABLED',
+    'whatsapp': 'WHATSAPP_ENABLED',
+}
+
 
 class EmailService:
     @staticmethod
@@ -48,15 +55,28 @@ class SMSService:
              'amount': 'amount', 'due_date': 'due_date', 'outstanding': 'outstanding'}),
     }
 
+    # Template slots the caller only fills conditionally: {caller-side param:
+    # value to send when it is absent}. Every slot in an approved template must
+    # receive *something* -- SendPK renders the raw #placeholder# otherwise --
+    # so an optional slot falls back to this instead of being dropped. Anything
+    # outside this map is required and send_typed() refuses to send without it.
+    OPTIONAL_VARS = {
+        'payment_confirmation': {'next_installment': 'none due'},
+    }
+
     @staticmethod
     def template_for(notification_type):
+        """Return (setting name, template id, required caller-side params).
+
+        The setting name is returned alongside the value so a missing template
+        can name the exact `.env` key the operator has to fill in.
+        """
         entry = SMSService.TEMPLATES.get(notification_type)
         if not entry:
-            return None, set()
-        setting = getattr(
-            settings, f'SENDPK_TEMPLATE_{entry[0]}', '')
+            return None, None, set()
+        setting_name = f'SENDPK_TEMPLATE_{entry[0]}'
         # var_map: SMS template name -> the key in the caller's params dict
-        return setting or None, set(entry[1].values())
+        return setting_name, getattr(settings, setting_name, '') or None, set(entry[1].values())
 
     @staticmethod
     def send_typed(to_phone, notification_type, params):
@@ -71,17 +91,40 @@ class SMSService:
         if not getattr(settings, 'SENDPK_ENABLED', False):
             return True, "SMS disabled"
 
-        template_id, expected = SMSService.template_for(notification_type)
+        setting_name, template_id, expected = SMSService.template_for(notification_type)
         if not template_id:
-            return False, f"No SMS template configured for '{notification_type}'. Set SENDPK_TEMPLATE_* in .env."
+            if setting_name is None:
+                return False, (
+                    f"No SMS template configured for '{notification_type}'. "
+                    "Set SENDPK_TEMPLATE_* in .env."
+                )
+            return False, (
+                f"{setting_name} is not set for '{notification_type}', so there is no "
+                "approved template id to send. Set it in .env."
+            )
 
         var_map = SMSService.TEMPLATES[notification_type][1]
         provided = {k: v for k, v in (params or {}).items() if v not in (None, '')}
+        optional = SMSService.OPTIONAL_VARS.get(notification_type, {})
+
+        # `expected` is the set of caller-side params this template needs. Fail
+        # loudly rather than dropping the slot: a half-filled approved template
+        # would either be rejected by SendPK or reach the customer with a raw
+        # #placeholder# in it.
+        missing = sorted(expected - set(provided) - set(optional))
+        if missing:
+            return False, (
+                f"SMS template '{template_id}' missing required variable(s): "
+                f"{', '.join(missing)}. Refusing to send an incomplete template."
+            )
+
         # Build the JSON message from the caller's params using the template var names.
         message_vars = {}
         for sms_var, src_key in var_map.items():
-            if src_key in provided:
-                message_vars[sms_var] = str(provided[src_key])
+            value = provided.get(src_key, optional.get(src_key))
+            if value in (None, ''):
+                continue
+            message_vars[sms_var] = str(value)
 
         try:
             payload = {
@@ -90,16 +133,41 @@ class SMSService:
                 'mobile': mobile,
                 'template_id': template_id,
                 'message': json.dumps(message_vars),
+                'format': 'json',
             }
-            resp = requests.get(getattr(settings, 'SENDPK_BASE_URL', 'https://sendpk.com/api/sms.php'), params=payload, timeout=15)
+            # POST, not GET: keeps api_key and the customer's details out of the
+            # request URL, and matches SMSService.send() so one provider means
+            # one transport.
+            resp = requests.post(
+                getattr(settings, 'SENDPK_BASE_URL', 'https://sendpk.com/api/sms.php'),
+                data=payload,
+                timeout=15,
+            )
             resp.raise_for_status()
-            text = resp.text.strip()
-            if text.startswith('OK'):
-                return True, text
-            return False, text
+            return SMSService._interpret(resp)
         except Exception as e:
             logger.error(f"SMS send failed: {e}")
             return False, str(e)
+
+    @staticmethod
+    def _interpret(resp):
+        """Map a SendPK reply to (ok, detail) for both json and plain-text modes."""
+        text = (resp.text or '').strip()
+        try:
+            data = resp.json()
+        except ValueError:
+            data = None
+        if isinstance(data, dict):
+            results = data.get('results') or []
+            first = results[0] if results and isinstance(results[0], dict) else {}
+            if (str(data.get('success', '')).lower() == 'true'
+                    and str(first.get('status', '')).upper() == 'OK'):
+                return True, f"OK ID:{first.get('messageid', '')}"
+            return False, text or json.dumps(data)
+        # format=json was not honoured (or absent): SendPK answers "OK ID:<uuid>".
+        if text.upper().startswith('OK'):
+            return True, text
+        return False, text
 
     @staticmethod
     def normalize_phone(phone):
@@ -134,7 +202,7 @@ class SMSService:
         if not SMSService.is_valid_mobile(to_phone):
             return False, "Invalid phone number"
 
-        if not getattr(settings, 'SENDPK_ENABLED', True):
+        if not getattr(settings, 'SENDPK_ENABLED', False):
             logger.info(f"[SMS disabled] to {to_phone}: {message}")
             return True, "SMS disabled"
 
@@ -167,10 +235,10 @@ class SMSService:
 
     @staticmethod
     def extract_message_id(detail):
-            """Parse the SendPK message ID out of a detail string like 'OK ID:6502124'
-            or 'OK ID:ebd6dc1e-...' (fixed-sms returns a UUID)."""
-            m = re.search(r'ID:\s*(\w[\w-]*)', detail or '')
-            return m.group(1) if m else ''
+        """Parse the SendPK message ID out of a detail string like 'OK ID:6502124'
+        or 'OK ID:ebd6dc1e-...' (fixed-sms returns a UUID)."""
+        m = re.search(r'ID:\s*(\w[\w-]*)', detail or '')
+        return m.group(1) if m else ''
 
     @staticmethod
     def check_delivery(message_id):
@@ -196,7 +264,7 @@ class SMSService:
     @staticmethod
     def check_balance():
         """Return the remaining SendPK credit, or None on failure."""
-        if not getattr(settings, 'SENDPK_ENABLED', True):
+        if not getattr(settings, 'SENDPK_ENABLED', False):
             return None
         try:
             resp = requests.get(
@@ -539,9 +607,22 @@ class NotificationService:
             if success:
                 log.provider_message_id = WhatsAppService.extract_message_id(detail)
 
-        log.status = 'sent' if success else 'failed'
-        log.error_message = '' if success else detail
-        log.sent_at = timezone.now() if success else None
+        # Every provider returns (True, "... disabled") when it is switched off so
+        # that no caller ever breaks. But nothing was transmitted, so recording it
+        # as `sent` inflates the Notification Center's Delivered figure with
+        # messages that never left the building (docs/qa finding #2).
+        provider_setting = CHANNEL_ENABLED_SETTING.get(channel)
+        provider_off = (provider_setting is not None
+                        and not getattr(settings, provider_setting, False))
+
+        if success and provider_off:
+            log.status = 'skipped'
+            log.error_message = detail or f'{channel} is disabled'
+            log.sent_at = None
+        else:
+            log.status = 'sent' if success else 'failed'
+            log.error_message = '' if success else detail
+            log.sent_at = timezone.now() if success else None
         log.save()
 
         return log

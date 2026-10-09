@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Real Estate Management ERP + corporate website for Samana Builders & Developers. Django 6.0 + Django REST Framework backend serving two frontends: a server-rendered ERP (Django templates) and a corporate marketing site (also Django templates, with a compiled React build artifact in `frontend/dist/`). SQLite for dev, PostgreSQL for production.
 
-## Work status (last updated 2026-09-29)
+## Work status (last updated 2026-10-09)
 
-### Uncommitted — WhatsApp transactional notifications on approved templates
+### Shipped — WhatsApp transactional notifications on approved templates (`6e0a505`, pushed)
 
 The WhatsApp channel could not actually deliver a transactional notification. All five
 `services.py` triggers plus `booking_confirm_view` called `WhatsAppService.send()`, which
@@ -152,6 +152,30 @@ New files: `finance/management/commands/backfill_ledger_vouchers.py`,
 `finance/tests_backfill_ledger.py`, `finance/tests_project_cost_flow.py`,
 `finance/migrations/0009_alter_projectcost_status.py`.
 
+### Shipped — SendPK review remediation (this session)
+
+Review findings on the fixed-sms integration shipped in `6faf054`, all fixed and
+verified (913 tests green, transport re-verified live against SendPK):
+
+- `SMSService.send_typed()` now enforces the template's expected variables:
+  a missing required slot refuses to send and names the variable; the one slot
+  the caller builds conditionally (`next_installment`) falls back to `none due`
+  instead of shipping a raw `#placeholder#`; an unconfigured template names the
+  exact `SENDPK_TEMPLATE_*` key to fill in.
+- Transport unified on POST (api_key kept out of the request URL) and the
+  JSON/plain-text reply parsing is shared with `send()`; confirmed live with
+  `OK ID:655087f4-...`.
+- A switched-off provider is recorded `skipped`, not `sent` (docs/qa finding #2):
+  new `skipped` status (`notifications/0004` migration), Notification Center
+  stat + filter option, and a disabled manual send now warns instead of claiming
+  "sent successfully".
+- Notification Center filters no longer 500 — Django raises
+  `TypeError: Cannot filter a query once a slice has been taken`; the log list
+  filters before slicing.
+- `settings.py`: every provider is forced off under `manage.py test` (the
+  `TESTING` guard), so a key-carrying `.env` can never make the suite a real
+  sender. Tests that need a channel live declare it with `override_settings`.
+
 ### Shipped (committed + pushed to origin/main)
 
 Two commits landed since 2026-09-08, both on `main` and pushed. Working tree is clean.
@@ -189,7 +213,7 @@ Permissions and API-contract tightening applied as part of the QA pass:
 
 ### SMS (SendPK) status
 
-The SMS channel is wired to the SendPK HTTP API (`SMSService`) but **disabled in the local `.env`** (`SENDPK_ENABLED=False`, no `SENDPK_API_KEY`). Reference docs: `sendpk_documentation.md` (gitignored) and `Business_SMS_API_3.0.pdf`. Live account findings (2026-09):
+The SMS channel is wired to the SendPK HTTP API (`SMSService`) and **enabled in the local `.env`** (`SENDPK_ENABLED=True`, real `SENDPK_API_KEY`, sender `TEXT SMS`). This account is **fixed-sms**: it rejects free text, so automated sends go through four approved templates via `SMSService.send_typed()` — `SENDPK_TEMPLATE_CUSTOMER_WELCOME=10904`, `_PAYMENT_CONFIRMATION=10901`, `_INSTALLMENT_REMINDER=10902`, `_OVERDUE_PAYMENT=10903` (ids are account-specific; override in `.env`). The free-text `SMSService.send()` remains only for one-off staff messages and will be rejected by the provider. Reference docs: `sendpk_documentation.md` (gitignored) and `Business_SMS_API_3.0.pdf`. Live account findings (2026-09):
 
 - Sends work and are billed (~3.9 PKR/SMS). "Accepted for delivery" only means queued; the delivery report is where real per-number status shows.
 - On the shared sender route the message arrived on Telenor showing a generic "TEXT SMS" sender — shared sender names are not carried reliably, and the brand only appears in the auto-appended footer.
@@ -297,7 +321,7 @@ for the six WhatsApp templates; `manage.py create_wa_templates` / `check_wa_temp
 and audit them. See Work status above.
 
 - **Email** — uses SMTP (Brevo relay) when `EMAIL_HOST` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` are set, otherwise Django's console backend. Gated by `EMAIL_ENABLED`.
-- **SMS** — real SendPK HTTP API integration (not a stub): posts to `sms.php` with `format=json`, normalizes Pakistani numbers to `92XXXXXXXXXX`, stores the returned message id, and has `check_delivery()` / `check_balance()` helpers. Env: `SENDPK_ENABLED`, `SENDPK_API_KEY`, `SENDPK_SENDER_ID`, `SENDPK_BASE_URL`. Currently disabled in the local `.env` (see Work status above).
+- **SMS** - real SendPK HTTP API integration (not a stub): `send()` posts the legacy free-text form, while `send_typed()` posts an approved fixed-sms template (`template_id` + a JSON message mapping `#slots#` to caller params) with strict variable validation. Both normalize Pakistani numbers to `92XXXXXXXXXX`, store the returned message id, and expose `check_delivery()` / `check_balance()`. Env: `SENDPK_ENABLED`, `SENDPK_API_KEY`, `SENDPK_SENDER_ID`, `SENDPK_BASE_URL`, `SENDPK_TEMPLATE_*` (10901-10904). Enabled in the local `.env`; forced off under `manage.py test` by the `TESTING` guard in `settings.py`.
 - **WhatsApp** — real WhatsApp Business Cloud API integration (not a stub): posts to `graph.facebook.com/v25.0/{phone_id}/messages`, gated by `WHATSAPP_ENABLED`. Env: `WHATSAPP_API_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_API_VERSION`. Falls back to a `wa.me` click-to-chat URL when disabled. Verified live 2026-10: HTTP 200 `accepted`, template delivered from `+92 320 6229330`.
   Transactional notifications go out as **Meta-approved templates** via `WhatsAppService.send_typed()` — free-form text is rejected outside the 24h customer service window (error 131047), so all five `services.py` triggers plus `booking_confirm_view` pass `template_params` to `NotificationService.send_notification()`. The six template bodies are specified in `notifications/wa_templates.json`; each is enabled by its own `WHATSAPP_TEMPLATE_*` setting, and a blank value fails that notification with a log message naming the setting. Staff free-form sends (the notifications view) stay on `WhatsAppService.send()` and are warned about the 24h rule in the UI. Graph error bodies are parsed and translated (`WhatsAppService.ERROR_HINTS`) instead of collapsing into a bare HTTP status, and the returned `wamid` is stored in `provider_message_id` for delivery tracking.
 - Triggers: payment confirmation, booking notification, installment reminder, overdue alert, receipt notification, and customer welcome (fires on customer create via UI + API and on lead conversion; failure-safe so a broken email can never break the customer transaction).

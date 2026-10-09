@@ -1,10 +1,12 @@
 ﻿"""Tests for the SendPK SMS integration and notification messages."""
+import json
 from datetime import date
 from decimal import Decimal
 from unittest.mock import Mock, patch
 
 from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
+from django.urls import reverse
 
 from bookings.models import Booking, InstallmentPlan
 from customers.models import Customer
@@ -96,6 +98,235 @@ class SMSServiceSendTest(TestCase):
         ok, detail = SMSService.send('abc', 'Hello')
         self.assertFalse(ok)
         self.assertIn('Invalid', detail)
+
+
+# Settings shared by every SendPK templated-send test: channel live and all four
+# template ids stated explicitly. Same rule as WA_ON below -- a developer's .env
+# holds real ids, so no test may lean on ambient state to decide what it sends.
+SMS_ON = {
+    'SENDPK_ENABLED': True,
+    'SENDPK_API_KEY': 'test-key',
+    'SENDPK_SENDER_ID': 'TEXT SMS',
+    'SENDPK_TEMPLATE_CUSTOMER_WELCOME': '10904',
+    'SENDPK_TEMPLATE_PAYMENT_CONFIRMATION': '10901',
+    'SENDPK_TEMPLATE_INSTALLMENT_REMINDER': '10902',
+    'SENDPK_TEMPLATE_OVERDUE_PAYMENT': '10903',
+}
+
+WELCOME_PARAMS = {'customer_name': 'Ahmed Khan', 'customer_id': 'CUS-00001'}
+REMINDER_PARAMS = {
+    'customer_name': 'Ahmed Khan', 'installment_number': '2',
+    'amount': '1,000,000', 'due_date': '15-Oct-2026', 'booking_id': 'BKG-00001',
+}
+
+
+class ProviderGuardTest(TestCase):
+    """The settings guard that keeps `manage.py test` off the network.
+
+    A developer's .env holds live SMS/WhatsApp/SMTP credentials. If the runner
+    ever read them back, every customer-creating test would bill a real send --
+    so assert the guard, not just rely on it.
+    """
+
+    def test_every_provider_is_off_under_the_test_runner(self):
+        from django.conf import settings
+        self.assertTrue(settings.TESTING)
+        for name in ('EMAIL_ENABLED', 'SENDPK_ENABLED', 'WHATSAPP_ENABLED', 'AI_ENABLED'):
+            self.assertFalse(getattr(settings, name), f'{name} must be off under `manage.py test`')
+
+
+@override_settings(**SMS_ON)
+class SMSServiceSendTypedTest(TestCase):
+    """The fixed-sms path: variable validation, transport, response parsing."""
+
+    @staticmethod
+    def _resp(json_value=None, text='', json_raises=False):
+        resp = Mock()
+        resp.text = text
+        if json_raises:
+            resp.json.side_effect = ValueError('not json')
+        else:
+            resp.json.return_value = json_value
+        return resp
+
+    @staticmethod
+    def _ok_json(messageid='4241a169-0000-0000'):
+        return {'success': 'true', 'results': [{'status': 'OK', 'messageid': messageid}]}
+
+    def test_posts_template_id_and_maps_param_names_to_template_variables(self):
+        with patch('notifications.services.requests.post',
+                   return_value=self._resp(self._ok_json())) as mock_post:
+            ok, detail = SMSService.send_typed('03001234567', 'installment_reminder',
+                                               dict(REMINDER_PARAMS))
+        self.assertTrue(ok, detail)
+        data = mock_post.call_args.kwargs['data']
+        self.assertEqual('10902', data['template_id'])
+        self.assertEqual('923001234567', data['mobile'])
+        self.assertEqual('TEXT SMS', data['sender'])
+        sent = json.loads(data['message'])
+        # SendPK's slot names, not the caller's parameter names.
+        self.assertEqual('Ahmed Khan', sent['name'])
+        self.assertEqual('2', sent['installment_number'])
+        self.assertNotIn('customer_name', sent)
+
+    def test_transport_is_post_so_the_api_key_stays_out_of_the_url(self):
+        with patch('notifications.services.requests.post',
+                   return_value=self._resp(self._ok_json())) as mock_post:
+            SMSService.send_typed('03001234567', 'customer_welcome',
+                                  dict(WELCOME_PARAMS))
+        call = mock_post.call_args
+        self.assertNotIn('test-key', call.args[0])
+        self.assertNotIn('params', call.kwargs)
+
+    def test_missing_required_variable_refuses_to_send(self):
+        with patch('notifications.services.requests.post') as mock_post:
+            ok, detail = SMSService.send_typed(
+                '03001234567', 'installment_reminder',
+                {'customer_name': 'Ahmed Khan', 'amount': '1,000,000'})
+        self.assertFalse(ok)
+        mock_post.assert_not_called()
+        self.assertIn('due_date', detail)
+        self.assertIn('booking_id', detail)
+
+    def test_every_template_slot_is_filled_even_when_the_caller_omits_one(self):
+        with patch('notifications.services.requests.post',
+                   return_value=self._resp(self._ok_json())) as mock_post:
+            ok, detail = SMSService.send_typed(
+                '03001234567', 'payment_confirmation',
+                {'customer_name': 'Ahmed Khan', 'amount': '120,000',
+                 'booking_id': 'BKG-00001', 'remaining_balance': '4,000,000',
+                 'next_installment': ''})
+        self.assertTrue(ok, detail)
+        sent = json.loads(mock_post.call_args.kwargs['data']['message'])
+        self.assertEqual(
+            {'name', 'amount', 'booking_id', 'remaining', 'next_installment'},
+            set(sent))
+        self.assertEqual('none due', sent['next_installment'])
+
+    def test_disabled_provider_never_touches_the_network(self):
+        with override_settings(SENDPK_ENABLED=False), \
+                patch('notifications.services.requests.post') as mock_post:
+            ok, detail = SMSService.send_typed('03001234567', 'customer_welcome',
+                                               dict(WELCOME_PARAMS))
+        self.assertTrue(ok)
+        self.assertEqual('SMS disabled', detail)
+        mock_post.assert_not_called()
+
+    def test_unconfigured_template_names_the_missing_setting(self):
+        with override_settings(SENDPK_TEMPLATE_CUSTOMER_WELCOME=''):
+            ok, detail = SMSService.send_typed('03001234567', 'customer_welcome',
+                                               dict(WELCOME_PARAMS))
+        self.assertFalse(ok)
+        self.assertIn('SENDPK_TEMPLATE_CUSTOMER_WELCOME', detail)
+
+    def test_type_without_an_sms_template_is_refused(self):
+        ok, detail = SMSService.send_typed('03001234567', 'receipt_notification', {})
+        self.assertFalse(ok)
+        self.assertIn('No SMS template configured', detail)
+
+    def test_invalid_phone_is_refused_before_any_lookup(self):
+        ok, detail = SMSService.send_typed('abc', 'customer_welcome',
+                                           dict(WELCOME_PARAMS))
+        self.assertFalse(ok)
+        self.assertIn('Invalid', detail)
+
+    def test_plain_text_ok_response_is_accepted_and_parsed(self):
+        resp = self._resp(text='OK ID:4241a169-1111', json_raises=True)
+        with patch('notifications.services.requests.post', return_value=resp):
+            ok, detail = SMSService.send_typed('03001234567', 'customer_welcome',
+                                               dict(WELCOME_PARAMS))
+        self.assertTrue(ok, detail)
+        self.assertEqual('4241a169-1111', SMSService.extract_message_id(detail))
+
+    def test_json_error_response_is_a_failure_not_a_success(self):
+        resp = self._resp({'success': 'false',
+                           'results': [{'status': '8', 'error': 'Low Credit'}]})
+        with patch('notifications.services.requests.post', return_value=resp):
+            ok, detail = SMSService.send_typed('03001234567', 'customer_welcome',
+                                               dict(WELCOME_PARAMS))
+        self.assertFalse(ok)
+        self.assertIn('Low Credit', detail)
+
+    def test_network_exception_becomes_a_failure_not_a_crash(self):
+        with patch('notifications.services.requests.post',
+                   side_effect=Exception('connection refused')):
+            ok, detail = SMSService.send_typed('03001234567', 'customer_welcome',
+                                               dict(WELCOME_PARAMS))
+        self.assertFalse(ok)
+        self.assertIn('connection refused', detail)
+
+    def test_extract_message_id_reads_a_fixed_sms_uuid(self):
+        self.assertEqual('ebd6dc1e-aaaa-bbbb',
+                         SMSService.extract_message_id('OK ID:ebd6dc1e-aaaa-bbbb'))
+        self.assertEqual('6502124', SMSService.extract_message_id('OK ID:6502124'))
+        self.assertEqual('', SMSService.extract_message_id(''))
+
+
+class NotificationCenterFilterTest(TestCase):
+    """Regression: the log list sliced before filtering, so every filter 500'd."""
+
+    def setUp(self):
+        self.user = User.objects.create_superuser(
+            'notifadmin', 'notif@example.com', 'pw12345!')
+        self.client.force_login(self.user)
+
+    def test_every_filter_combination_renders(self):
+        NotificationLog.objects.create(
+            recipient_name='Test', recipient_contact='+923001234567',
+            channel='sms', notification_type='general', message='hi',
+            status='skipped')
+        for query in ('', '?status=skipped', '?status=sent', '?channel=sms',
+                      '?type=general', '?channel=sms&status=skipped&type=general'):
+            with self.subTest(query=query):
+                resp = self.client.get(reverse('notifications') + query)
+                self.assertEqual(resp.status_code, 200)
+
+
+@override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+class NotificationStatusRecordingTest(TestCase):
+    """`sent` must mean transmitted: a switched-off provider is `skipped`."""
+
+    @staticmethod
+    def _send(template_params=None):
+        return NotificationService.send_notification(
+            recipient_name='Ahmed Khan', recipient_contact='+92-300-1234567',
+            channel='sms', notification_type='customer_welcome',
+            message='hello', template_params=template_params,
+        )
+
+    @override_settings(SENDPK_ENABLED=False)
+    def test_disabled_provider_is_recorded_as_skipped_not_sent(self):
+        log = self._send(dict(WELCOME_PARAMS))
+        self.assertEqual('skipped', log.status)
+        self.assertIsNone(log.sent_at)
+        self.assertNotEqual('', log.error_message)
+
+    @override_settings(**SMS_ON)
+    def test_successful_send_is_recorded_as_sent(self):
+        resp = Mock()
+        resp.text = ''
+        resp.json.return_value = {'success': 'true',
+                                  'results': [{'status': 'OK', 'messageid': '4241'}]}
+        with patch('notifications.services.requests.post', return_value=resp):
+            log = self._send(dict(WELCOME_PARAMS))
+        self.assertEqual('sent', log.status)
+        self.assertIsNotNone(log.sent_at)
+        self.assertEqual('4241', log.provider_message_id)
+
+    @override_settings(**SMS_ON)
+    def test_failed_send_is_recorded_as_failed_with_the_reason(self):
+        with patch('notifications.services.SMSService.send_typed',
+                   return_value=(False, 'Low Credit')):
+            log = self._send(dict(WELCOME_PARAMS))
+        self.assertEqual('failed', log.status)
+        self.assertEqual('Low Credit', log.error_message)
+        self.assertIsNone(log.sent_at)
+
+    @override_settings(**SMS_ON)
+    def test_missing_template_variable_marks_the_log_as_failed(self):
+        log = self._send({'customer_name': 'Ahmed Khan'})
+        self.assertEqual('failed', log.status)
+        self.assertIn('missing required variable', log.error_message)
 
 
 # Settings shared by every WhatsApp Cloud API test: channel live, one template
@@ -355,7 +586,13 @@ class WhatsAppGraphErrorHintTest(TestCase):
         self.assertIn('Something upstream broke', detail)
 
 
-@override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+# SENDPK_ENABLED is stated explicitly: these tests reach the SMS channel through
+# send_notification(), and .env legitimately holds SENDPK_ENABLED=True with a real
+# key. Relying on ambient state would turn `manage.py test` into a live SMS sender.
+@override_settings(
+    EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+    SENDPK_ENABLED=False,
+)
 class NotificationMessageTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user('testuser', 'test@example.com', 'testpass123')
@@ -387,7 +624,9 @@ class NotificationMessageTest(TestCase):
             payment_date=date.today(), payment_method='cash', payment_type='installment',
             status='verified', created_by=self.user,
         )
-        with patch('notifications.services.SMSService.send', return_value=(True, 'OK ID:123')):
+        # send_notification routes through send_typed(), not send(), whenever
+        # template_params is present -- patch the one that actually runs.
+        with patch('notifications.services.SMSService.send_typed', return_value=(True, 'OK ID:123')):
             NotificationService.send_payment_confirmation(payment)
 
         sms_log = NotificationLog.objects.filter(
@@ -402,7 +641,7 @@ class NotificationMessageTest(TestCase):
 
     def test_installment_reminder_sends_sms(self):
         installment = self.plan.installments.filter(installment_number=1).first()
-        with patch('notifications.services.SMSService.send', return_value=(True, 'OK ID:456')):
+        with patch('notifications.services.SMSService.send_typed', return_value=(True, 'OK ID:456')):
             NotificationService.send_installment_reminder(installment)
 
         sms_log = NotificationLog.objects.filter(
@@ -417,7 +656,7 @@ class NotificationMessageTest(TestCase):
             payment_date=date.today(), payment_method='cash', payment_type='installment',
             status='verified', created_by=self.user,
         )
-        with patch('notifications.services.SMSService.send', return_value=(True, 'OK ID:123')):
+        with patch('notifications.services.SMSService.send_typed', return_value=(True, 'OK ID:123')):
             NotificationService.send_payment_confirmation(payment)
 
         sms_log = NotificationLog.objects.get(channel='sms', notification_type='payment_confirmation')

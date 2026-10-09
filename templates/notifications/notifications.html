@@ -80,6 +80,7 @@
                         <option value="">All Statuses</option>
                         <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
                         <option value="sent" {% if status_filter == 'sent' %}selected{% endif %}>Sent</option>
+                        <option value="skipped" {% if status_filter == 'skipped' %}selected{% endif %}>Skipped</option>
                         <option value="failed" {% if status_filter == 'failed' %}selected{% endif %}>Failed</option>
                     </select>
                     <button type="submit" class="btn btn-primary btn-sm" style="height:42px; padding:0 20px; white-space:nowrap;">Filter</button>

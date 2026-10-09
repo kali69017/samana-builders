@@ -8,17 +8,21 @@ from .models import NotificationLog
 @login_required
 @management_or_above
 def notifications_view(request):
-    logs = NotificationLog.objects.all()[:100]
     channel_filter = request.GET.get('channel', '')
     type_filter = request.GET.get('type', '')
     status_filter = request.GET.get('status', '')
 
+    # Filter *before* slicing. Doing it the other way round raises
+    # TypeError("Cannot filter a query once a slice has been taken."), which
+    # turned every filter submit on this page into a 500.
+    logs = NotificationLog.objects.all()
     if channel_filter:
         logs = logs.filter(channel=channel_filter)
     if type_filter:
         logs = logs.filter(notification_type=type_filter)
     if status_filter:
         logs = logs.filter(status=status_filter)
+    logs = logs[:100]
 
     context = {
         'logs': logs,
@@ -27,6 +31,7 @@ def notifications_view(request):
         'status_filter': status_filter,
         'total_count': NotificationLog.objects.count(),
         'sent_count': NotificationLog.objects.filter(status='sent').count(),
+        'skipped_count': NotificationLog.objects.filter(status='skipped').count(),
         'failed_count': NotificationLog.objects.filter(status='failed').count(),
         'pending_count': NotificationLog.objects.filter(status='pending').count(),
     }
@@ -60,6 +65,11 @@ def send_manual_notification(request):
 
         if log.status == 'sent':
             messages.success(request, f'Notification sent successfully via {channel}.')
+        elif log.status == 'skipped':
+            messages.warning(
+                request,
+                f'Not sent: {channel} notifications are disabled on this deployment.'
+            )
         else:
             messages.error(request, f'Failed to send notification: {log.error_message}')
 

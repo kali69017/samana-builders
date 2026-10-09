@@ -312,7 +312,10 @@ class NotificationLogTests(WebBase):
             channel='sms', notification_type='test2', message='Hi',
         )
         log = NotificationLog.objects.get(notification_type='test2')
-        self.assertIn(log.status, ('sent', 'failed', 'pending'))
+        # 'skipped' is the switched-off-provider outcome: send_notification()
+        # refuses to record a message it never transmitted as 'sent'
+        # (docs/qa finding #2). Provider switches are off under `manage.py test`.
+        self.assertIn(log.status, ('sent', 'skipped', 'failed', 'pending'))
 
     def test_notification_preference_respected(self):
         pref = NotificationPreference.objects.create(

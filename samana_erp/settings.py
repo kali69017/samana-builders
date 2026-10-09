@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -226,9 +227,27 @@ REST_FRAMEWORK = {
     ],
 }
 
+# Notification providers.
+#
+# A developer's `.env` legitimately holds live SMS/WhatsApp/SMTP credentials, so
+# reading *_ENABLED straight from it makes `manage.py test` a real sender: every
+# test that creates a customer or logs a payment would bill an actual SMS and
+# mail an actual inbox. The convention (stated in notifications/tests.py) is that
+# tests never depend on ambient .env state -- this is where that is enforced.
+# Tests that need a channel live declare it with override_settings(SENDPK_ENABLED=True)
+# etc. Server processes (runserver/shell) read the .env as normal.
+TESTING = sys.argv[1:2] == ['test']
+
+
+def _provider_enabled(env_var):
+    if TESTING:
+        return False
+    return os.environ.get(env_var, 'False').lower() in ('1', 'true', 'yes')
+
+
 # Email Configuration
 # Toggle for email notifications. Set EMAIL_ENABLED=true to enable.
-EMAIL_ENABLED = os.environ.get('EMAIL_ENABLED', 'False').lower() in ('1', 'true', 'yes')
+EMAIL_ENABLED = _provider_enabled('EMAIL_ENABLED')
 
 # SMTP settings (Brevo / Sendinblue / etc.) — supplied via environment variables.
 EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
@@ -245,7 +264,7 @@ else:
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'Samana Builders <noreply@samanabuilders.com>')
 
 # WhatsApp Configuration — WhatsApp Business Cloud API (real delivery).
-WHATSAPP_ENABLED = os.environ.get('WHATSAPP_ENABLED', 'False').lower() in ('1', 'true', 'yes')
+WHATSAPP_ENABLED = _provider_enabled('WHATSAPP_ENABLED')
 WHATSAPP_API_TOKEN = os.environ.get('WHATSAPP_API_TOKEN', '')  # permanent system-user token
 WHATSAPP_PHONE_NUMBER_ID = os.environ.get('WHATSAPP_PHONE_NUMBER_ID', '')  # sender phone number ID
 WHATSAPP_API_VERSION = os.environ.get('WHATSAPP_API_VERSION', 'v25.0')
@@ -270,7 +289,7 @@ WHATSAPP_TEMPLATE_OVERDUE_PAYMENT = os.environ.get('WHATSAPP_TEMPLATE_OVERDUE_PA
 WHATSAPP_TEMPLATE_RECEIPT_NOTIFICATION = os.environ.get('WHATSAPP_TEMPLATE_RECEIPT_NOTIFICATION', '')
 
 # SMS Configuration (SendPK) — supplied via environment variables.
-SENDPK_ENABLED = os.environ.get('SENDPK_ENABLED', 'False').lower() in ('1', 'true', 'yes')
+SENDPK_ENABLED = _provider_enabled('SENDPK_ENABLED')
 SENDPK_API_KEY = os.environ.get('SENDPK_API_KEY', '')
 # "SMS Alert" is SendPK's pre-approved shared/semi-branded sender (instant approval).
 # Switch to "SAMANA" once the branded mask is PTA-approved on the account.
@@ -288,7 +307,7 @@ SENDPK_TEMPLATE_OVERDUE_PAYMENT = os.environ.get('SENDPK_TEMPLATE_OVERDUE_PAYMEN
 # AI assistant features are powered by OpenRouter's unified chat API through
 # the langchain-openrouter integration. OPENROUTER_REASONING forwards
 # OpenRouter's `reasoning.enabled` extra body for reasoning-capable models.
-AI_ENABLED = os.environ.get('AI_ENABLED', 'False').lower() in ('1', 'true', 'yes')
+AI_ENABLED = _provider_enabled('AI_ENABLED')
 OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '')
 OPENROUTER_MODEL = os.environ.get('OPENROUTER_MODEL', 'deepseek/deepseek-v4-flash-0731')
 OPENROUTER_BASE_URL = os.environ.get('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1')

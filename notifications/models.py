@@ -21,6 +21,9 @@ class NotificationLog(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('sent', 'Sent'),
+        # Provider switched off: the send was deliberately not attempted, so it
+        # must never be counted alongside real deliveries.
+        ('skipped', 'Skipped'),
         ('failed', 'Failed'),
     ]
 

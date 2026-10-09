@@ -52,6 +52,6 @@ Default login: `admin` / `admin123`. Login `/login/`; staff land on `/dashboard/
 ## Gotchas
 
 - `requirements.txt` is **UTF-16 encoded** — ordinary UTF-8 tooling garbles it.
-- SMS (SendPK), Email (Brevo), WhatsApp, and AI (OpenRouter) are all disabled in local `.env` (`*_ENABLED=False`). Tests assert shape / disabled-provider contract only, never live sends or LLM prose.
-- SMS sender "SAMANA" needs PTA-approved branded mask; `SENDPK_SENDER_ID` is currently "SMS Alert" (`settings.py`).
+- SMS (SendPK), Email (Brevo), WhatsApp, and AI (OpenRouter) are **all enabled** in local `.env` (`*_ENABLED=True`), with live credentials in three of them. `settings.py` forces every provider off while `manage.py test` runs (the `TESTING` guard) so the suite can never bill a real send; tests that need a channel live declare it with `override_settings`. Assertions cover shape / disabled-provider contract only, never live sends or LLM prose.
+- SMS sender "SAMANA" needs PTA-approved branded mask; `SENDPK_SENDER_ID` is currently `"TEXT SMS"` (shared route) in `.env`, defaulting to `"SMS Alert"` in `settings.py`. The account is fixed-sms: only the four approved `SENDPK_TEMPLATE_*` ids (10901-10904) are deliverable.
 - `docs/` and `specs/` hold planning/QA artifacts; `CLAUDE.md` "Work status" is the source of truth for what shipped.
