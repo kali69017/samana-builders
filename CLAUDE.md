@@ -105,7 +105,7 @@ reclassified to MARKETING with different pricing and an opt-in we never collecte
 Each entry carries a `sub_category` (`ORDER_STATUS` / `BOOKING_STATUS` / `ORDER_DETAILS`),
 which materially improves approval odds and classification accuracy.
 
-### Uncommitted — finance ledger remediation (working tree, not yet committed/pushed)
+### Shipped — finance ledger remediation (`7fcf9a2`, committed + pushed this session)
 
 Found by a full manual pass over the double-entry ledger (headed Playwright against
 a seeded DB), then fixed and regression-tested. 786 tests green at time of writing.
