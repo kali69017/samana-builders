@@ -92,7 +92,22 @@ Environment: dev server at `127.0.0.1:8000`, `DJANGO_DEBUG=True`, launched with 
 
 The remediation **flipped four previously-RED tests green**: NOTIF-EC-01 (filter 500 → fixed), NOTIF-EC-02 (disabled email recorded `sent` → now `skipped`), NOTIF-EC-03 (disabled SMS recorded `sent` → now `skipped`), NOTIF-EC-04 (WhatsApp no-op recorded `sent` → now `skipped`).
 
-### 5.4 Observations (no change made)
+### 5.4 Live E2E suite state (Playwright, finance module)
+
+Ran against the remediation code (`7fcf9a2`): **15 passed / 14 failed** (5 skipped, setup project OK). **No failure is a regression from this session** — my commits touched only notifications/docs/report. All 14 are accounted for by the finance remediation's own contract changes (spec §3.7) that `finance.spec.ts` still asserts against:
+
+| Test | Failure cause | Verdict |
+|---|---|---|
+| FIN-SEC-01, FIN-SEC-03 | Confirmed-bug RED tests per spec header (F3 IDOR read-open; draft→pay transition guard "must stay") | Keep RED (AGENTS.md policy) |
+| FIN-API-02, FIN-API-04, FIN-API-05, FIN-EC-09, FIN-EC-12, FIN-SEC-04 | Assert the **deprecated single-entry `AccountTransaction` ledger**; `post_to_ledger()` now writes Voucher double-entry lines only (`finance/models.py:191` "nothing is written to `AccountTransaction` any more") — `ledgerRowsFor` returns [] | Stale helper → rewrite to voucher-line assertions |
+| FIN-EC-07, FIN-EC-08 | Assert old 500 on negative budget/investment; code now **validates** (200 with form errors) | Flip to assert validation |
+| FIN-API-06 | Asserts old cascade DELETE (204); `OfficeViewSet.destroy` now **guards** (400) when expenses/transactions exist | Flip to assert the guard (KNOWN-BUG tag obsolete) |
+| FIN-API-07 | Asserts 201 without `reference_type`; serializer now requires it (400) | Flip to new contract |
+| FIN-EC-05, FIN-EC-06 | Fresh page snapshots show the **login page** — stale `tests/.auth/accounts.json` storageState (HEALING.md Pattern 6); on top of that their ledger assertions are the deprecated-`AccountTransaction` contract | Fix auth (login via API per convention) + rewrite ledger assertion |
+
+The live **browser** verification (§5.1 finance bullet) confirms the Voucher ledger itself is healthy — trial balance Balanced, approve→pay→voucher flow works — so these are spec-drift failures, not product bugs. Updating `finance.spec.ts` to the Phase-2 double-entry contract is recommended follow-up (finance module domain, not part of the SendPK remediation scope).
+
+### 5.5 Observations (no change made)
 
 - `EmailService.send` still defaults `EMAIL_ENABLED` via `getattr(..., True)` — neutralized by the `TESTING` guard + providers-off dev server, but the default is the wrong way round (latent inconsistency, flagged for cleanup).
 - The dead `.top-bar` pattern exists in 40+ templates but is mostly harmless: other pages keep their real actions in `.page-actions`; only notifications trapped its action there.
@@ -105,3 +120,4 @@ The remediation **flipped four previously-RED tests green**: NOTIF-EC-01 (filter
 - WhatsApp token rotation (user-side) and Phase-2 webhooks (app publication).
 - SEC findings in §5.3 (rate limiting, PII-at-rest, object scoping) — real security gaps, documented RED.
 - Type-dropdown omission + `recipient_name` overflow + welcome-channel premise (§5.3).
+- **Finance E2E spec drift (§5.4):** `finance.spec.ts` should-pass tests still assert the deprecated `AccountTransaction` single-entry ledger — rewrite `ledgerRowsFor`/ledger assertions to the Voucher double-entry contract (spec §3.7), flip FIN-EC-07/08/API-06 to the fixed behaviors (validation/guard), fix FIN-EC-05/06 auth via fresh `loginViaApi` (HEALING.md Pattern 6), and update FIN-API-07's serializer contract. No product code change needed; the live Voucher ledger is verified healthy.
