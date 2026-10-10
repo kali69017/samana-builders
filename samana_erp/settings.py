@@ -257,9 +257,15 @@ EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() in ('1', 'true', 'yes')
 
 if EMAIL_HOST and EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
-    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    _DEFAULT_EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 else:
-    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+    # No SMTP creds -> console backend prints messages to the runserver console, so
+    # local/dev developers can inspect welcome/reset emails without sending them.
+    _DEFAULT_EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# Allow an explicit backend override (e.g. EMAIL_BACKEND=console in dev to capture
+# emails without any external send, or locmem/filebackend for automated checks).
+EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', _DEFAULT_EMAIL_BACKEND)
 
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'Samana Builders <noreply@samanabuilders.com>')
 
