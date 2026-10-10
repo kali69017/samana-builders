@@ -103,8 +103,10 @@ test.describe('Notifications — HP', () => {
       // which is switched OFF for E2E (RUNBOOK §2), so the manual send records 'skipped'
       // and returns the disabled warning (was: "sent successfully via sms", the inflated
       // 'sent' contract fixed in feb2689). A non-Pakistani string normalizes to '' and is
-      // rejected as invalid.
-      const validFormats = ['+92-300-1234567', '0300-1234567', '3001234567', '+92 300 1234567'];
+      // rejected as invalid. (Subscriber digits are unique per run so the per-recipient
+      // anti-spam throttle — 3 sends per address per day — never trips the fixture.)
+      const s = ('0000000' + Math.floor(Math.random() * 1e7)).slice(-7);
+      const validFormats = [`+92-300-${s}`, `0300-${s}`, `300${s}`, `+92 300 ${s}`];
       for (const phone of validFormats) {
         const html = await manualSendHtml(page, {
           recipient_name: 'QA Norm',
@@ -117,7 +119,7 @@ test.describe('Notifications — HP', () => {
       }
       const invalid = await manualSendHtml(page, {
         recipient_name: 'QA Norm',
-        recipient_contact: 'abc123',
+        recipient_contact: `abc-${tag()}`,
         channel: 'sms',
         subject: 'n',
         message: 'm',
@@ -126,14 +128,17 @@ test.describe('Notifications — HP', () => {
     });
 
     test('NOTIF-HP-10 — Manual send (management) with email disabled is recorded skipped', async ({ page }) => {
+      const name = `QA Manual ${tag()}`;
       const email = `qa-manual-${tag()}@example.com`;
       // FIXED (feb2689): email is switched OFF for E2E, so a manual email send records
       // 'skipped' and surfaces the disabled warning — it no longer claims a delivery
       // ("Notification sent successfully via email." was the inflated-'sent' contract).
       // (Posted via API like NOTIF-HP-09: the top-bar "Send Notification" button is
       // display:none at the test viewport, so the DOM-click path is not actionable.)
+      // Contacts are MASKED for management (hardening), so the row is located by the
+      // unique recipient name rather than the raw email.
       const html = await manualSendHtml(page, {
-        recipient_name: 'QA Manual',
+        recipient_name: name,
         recipient_contact: email,
         channel: 'email',
         subject: 'QA subject',
@@ -141,8 +146,9 @@ test.describe('Notifications — HP', () => {
       });
       expect(html).toContain('email notifications are disabled on this deployment');
       await page.goto('/notifications/');
-      // A 'general' email row is created for this recipient.
-      await expect(page.getByRole('row').filter({ hasText: email })).toHaveCount(1);
+      const row = page.getByRole('row').filter({ hasText: name });
+      await expect(row).toHaveCount(1);
+      await expect(row.getByText('Skipped', { exact: true })).toHaveCount(1);
     });
   });
 
@@ -204,28 +210,33 @@ test.describe('Notifications — EC', () => {
       await expect(page.getByRole('heading', { name: 'Notification Center' })).toBeVisible(); // was RED (500)
     });
 
-    test('NOTIF-EC-03 — Disabled SMS recorded as sent', async ({ page }) => {
+    test('NOTIF-EC-03 — Disabled SMS recorded as skipped, not sent', async ({ page }) => {
+      const name = `QA SMS ${tag()}`;
       const phone = randomPhone();
       await page.goto('/notifications/');
-      await postManual(page, { recipient_name: 'QA SMS', recipient_contact: phone, channel: 'sms', subject: 'x', message: 'y' });
+      await postManual(page, { recipient_name: name, recipient_contact: phone, channel: 'sms', subject: 'x', message: 'y' });
       await page.goto('/notifications/');
-      const row = page.getByRole('row').filter({ hasText: phone });
+      // Located by the unique name: the contact is masked for management (hardening).
+      const row = page.getByRole('row').filter({ hasText: name });
       await expect(row).toHaveCount(1);
-      // CONFIRMED BUG: docs/qa/findings-confirmed.md — SMSService.send returns (True, "SMS disabled")
-      // before any network call, so the row is recorded 'sent' instead of skipped/failed.
-      await expect(row.getByText('Sent', { exact: true })).toHaveCount(0); // RED (is 'Sent')
+      // SMSService.send returns (True, "SMS disabled") before any network call, so the
+      // row must be 'skipped', never 'sent' (FIXED feb2689).
+      await expect(row.getByText('Sent', { exact: true })).toHaveCount(0);
+      await expect(row.getByText('Skipped', { exact: true })).toHaveCount(1);
     });
 
-    test('NOTIF-EC-04 — WhatsApp is a no-op that always "succeeds"; URL never persisted', async ({ page }) => {
+    test('NOTIF-EC-04 — WhatsApp no-op is recorded skipped, never "sent"', async ({ page }) => {
+      const name = `QA WA ${tag()}`;
       const phone = randomPhone();
       await page.goto('/notifications/');
-      await postManual(page, { recipient_name: 'QA WA', recipient_contact: phone, channel: 'whatsapp', subject: 'x', message: 'y' });
+      await postManual(page, { recipient_name: name, recipient_contact: phone, channel: 'whatsapp', subject: 'x', message: 'y' });
       await page.goto('/notifications/');
-      const row = page.getByRole('row').filter({ hasText: phone });
+      const row = page.getByRole('row').filter({ hasText: name });
       await expect(row).toHaveCount(1);
-      // CONFIRMED BUG: docs/qa/findings-confirmed.md — WhatsAppService.send builds a wa.me URL and
-      // returns (True, url) without any delivery; the row is 'sent' and the URL is never persisted.
-      await expect(row.getByText('Sent', { exact: true })).toHaveCount(0); // RED (is 'Sent')
+      // WhatsAppService.send builds a wa.me URL and returns (True, url) without any
+      // delivery — recorded 'skipped' (providers off), never 'sent' (FIXED feb2689).
+      await expect(row.getByText('Sent', { exact: true })).toHaveCount(0);
+      await expect(row.getByText('Skipped', { exact: true })).toHaveCount(1);
     });
 
     test('NOTIF-EC-08 — customer_welcome type is not filterable in the UI', async ({ page }) => {
@@ -236,11 +247,12 @@ test.describe('Notifications — EC', () => {
     });
 
     test('NOTIF-EC-09 — Invalid (non-empty) phone → SMS failed, no exception', async ({ page }) => {
+      const name = `QA Invalid ${tag()}`;
       const phone = `bad-${tag()}`; // non-empty, not a valid Pakistani mobile
       await page.goto('/notifications/');
-      await postManual(page, { recipient_name: 'QA Invalid', recipient_contact: phone, channel: 'sms', subject: 'x', message: 'y' });
+      await postManual(page, { recipient_name: name, recipient_contact: phone, channel: 'sms', subject: 'x', message: 'y' });
       await page.goto('/notifications/');
-      const row = page.getByRole('row').filter({ hasText: phone });
+      const row = page.getByRole('row').filter({ hasText: name });
       await expect(row).toHaveCount(1);
       // Correct behavior: SMS fails gracefully for an invalid number (returned, never raised).
       await expect(row.getByText('Failed', { exact: true })).toHaveCount(1); // PASS

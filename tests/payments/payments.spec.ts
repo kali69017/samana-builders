@@ -257,7 +257,7 @@ test.describe('PAY-HP', () => {
       amount: 200000, payment_date: '2026-08-01',
       payment_method: 'bank_transfer', payment_type: 'down_payment',
     });
-    await request.post(`/api/payments/${payment.id}/verify/`, { headers: { 'X-CSRFToken': token }, maxRedirects: 0 });
+    await request.post(`/api/payments/${payment.id}/verify/`, { data: { action: 'verify' }, headers: { 'X-CSRFToken': token }, maxRedirects: 0 });
     expect((await getBooking(request, fx.bookingId)).advance_paid).toBe('200000.00');
 
     const res = await request.post(`/payments/${payment.id}/reverse/`, { headers: { 'X-CSRFToken': token }, maxRedirects: 0 });

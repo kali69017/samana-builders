@@ -255,11 +255,19 @@ def office_expense_approve_view(request, pk):
 def office_expense_pay_view(request, pk):
     expense = get_object_or_404(OfficeExpense, pk=pk)
     if request.method == 'POST':
-        expense.status = 'paid'
-        expense.save()
-        expense.post_to_ledger()
-        _log(request, 'update', 'OfficeExpense', pk, f'Paid office expense of {expense.amount}')
-        messages.success(request, 'Office expense marked as paid and posted to ledger.')
+        if expense.status == 'paid':
+            messages.info(request, 'This office expense is already paid.')
+        elif expense.status != 'approved':
+            messages.error(
+                request,
+                f'Only approved expenses can be paid (current status: {expense.get_status_display()}).',
+            )
+        else:
+            expense.status = 'paid'
+            expense.save()
+            expense.post_to_ledger()
+            _log(request, 'update', 'OfficeExpense', pk, f'Paid office expense of {expense.amount}')
+            messages.success(request, 'Office expense marked as paid and posted to ledger.')
     return redirect('finance_office_expenses')
 
 
@@ -350,11 +358,19 @@ def project_cost_pay_view(request, pk):
     """
     cost = get_object_or_404(ProjectCost, pk=pk)
     if request.method == 'POST':
-        cost.status = 'paid'
-        cost.save()
-        cost.post_to_ledger()
-        _log(request, 'update', 'ProjectCost', pk, f'Paid project cost of {cost.amount}')
-        messages.success(request, 'Project cost marked as paid and posted to ledger.')
+        if cost.status == 'paid':
+            messages.info(request, 'This project cost is already paid.')
+        elif cost.status != 'approved':
+            messages.error(
+                request,
+                f'Only approved project costs can be paid (current status: {cost.get_status_display()}).',
+            )
+        else:
+            cost.status = 'paid'
+            cost.save()
+            cost.post_to_ledger()
+            _log(request, 'update', 'ProjectCost', pk, f'Paid project cost of {cost.amount}')
+            messages.success(request, 'Project cost marked as paid and posted to ledger.')
     return redirect('finance_project_costs')
 
 

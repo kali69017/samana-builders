@@ -25,13 +25,13 @@ from .serializers import (
 
 
 class IsStaffOrAbove(permissions.BasePermission):
-    """Allow read for all authenticated, write for admin+."""
+    """Allow read for admin/management/sales/accounts, write for admin+."""
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
         if request.method in permissions.SAFE_METHODS:
-            from core.permissions import is_portal_customer
-            return not is_portal_customer(request.user)
+            from core.permissions import user_role_allows
+            return user_role_allows(request, ('super_admin', 'admin', 'management', 'sales', 'accounts'))
         if request.user.is_superuser:
             return True
         if hasattr(request.user, 'profile'):

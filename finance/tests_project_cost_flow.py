@@ -56,7 +56,8 @@ class ProjectCostLedgerPathTest(TestCase):
 
     # ── the web pay transition ───────────────────────────────────────────
     def test_pay_view_posts_voucher_once(self):
-        cost = self._cost()
+        # Pay may only follow approve (FIN-SEC-03) — start approved.
+        cost = self._cost(status='approved')
         self.client.force_login(self.supervisor)
         resp = self.client.post(reverse('finance_project_cost_pay', args=[cost.pk]))
         self.assertEqual(resp.status_code, 302)
@@ -69,7 +70,7 @@ class ProjectCostLedgerPathTest(TestCase):
         self.assertTrue(voucher.is_balanced)
 
     def test_pay_view_is_idempotent(self):
-        cost = self._cost()
+        cost = self._cost(status='approved')
         url = reverse('finance_project_cost_pay', args=[cost.pk])
         self.client.force_login(self.supervisor)
         self.client.post(url)
@@ -118,7 +119,7 @@ class ProjectCostLedgerPathTest(TestCase):
 
     # ── the REST path ────────────────────────────────────────────────────
     def test_api_pay_posts_voucher(self):
-        cost = self._cost()
+        cost = self._cost(status='approved')
         self.client.force_login(self.finance)
         resp = self.client.post(f'/api/project-costs/{cost.pk}/pay/')
         self.assertEqual(resp.status_code, 200)
@@ -126,7 +127,7 @@ class ProjectCostLedgerPathTest(TestCase):
             reference_type='ProjectCost', reference_id=cost.pk).count(), 1)
 
     def test_api_pay_is_idempotent(self):
-        cost = self._cost()
+        cost = self._cost(status='approved')
         self.client.force_login(self.finance)
         self.client.post(f'/api/project-costs/{cost.pk}/pay/')
         self.client.post(f'/api/project-costs/{cost.pk}/pay/')

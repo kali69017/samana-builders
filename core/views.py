@@ -178,6 +178,13 @@ def dashboard_view(request):
     if getattr(request.user, 'employee', None):
         return redirect('hr_my_leave')
 
+    # Portal customers must never see the business dashboard (revenue/roster KPIs);
+    # they get their own portal. This closes the /customers/ -> /dashboard/ hop
+    # (CUS-SEC-05) as well as any direct navigation.
+    from core.permissions import is_portal_customer
+    if is_portal_customer(request.user):
+        return redirect('portal')
+
     today = timezone.now().date()
     month_start = today.replace(day=1)
     

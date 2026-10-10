@@ -21,13 +21,13 @@ from .serializers import (
 
 
 class IsHRManagement(permissions.BasePermission):
-    """Read for authenticated staff, write for HR management roles."""
+    """Read + write for HR management roles (super_admin/admin/management/hr)."""
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
         if request.method in permissions.SAFE_METHODS:
-            from core.permissions import is_portal_customer
-            return not is_portal_customer(request.user)
+            from core.permissions import user_role_allows
+            return user_role_allows(request, ('super_admin', 'admin', 'management', 'hr'))
         if request.user.is_superuser:
             return True
         role = getattr(getattr(request.user, 'profile', None), 'role', None)

@@ -10,19 +10,58 @@ from .serializers import (UserSerializer, UserCreateSerializer,
                            AgentSerializer, CompanySettingsSerializer)
 
 
+"""DRF permission helpers for the ERP API (least privilege per role).
+
+Reads are restricted to the roles each module's function actually needs (a
+superuser always passes); before this, *any* authenticated user could read the
+whole business roster through the API (confidential finding F3).
+"""
+from core.permissions import ADMIN_ROLES, MANAGEMENT_ROLES, PAYMENTS_ACCESS_ROLES
+
+
+def _role_allows(request, roles):
+    from core.permissions import user_role_allows
+    return user_role_allows(request, roles)
+
+
 class IsAdminOrReadOnly(permissions.BasePermission):
-    """Allow read for all authenticated, write only for admin/super_admin."""
+    """Read + write for admin/super_admin only (users, master data)."""
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
         if request.method in permissions.SAFE_METHODS:
-            from core.permissions import is_portal_customer
-            return not is_portal_customer(request.user)
-        return (
-            request.user.is_superuser or
-            (hasattr(request.user, 'profile') and
-             request.user.profile.role in ['super_admin', 'admin'])
-        )
+            return _role_allows(request, ADMIN_ROLES)
+        return _role_allows(request, ADMIN_ROLES)
+
+
+class IsAdminOrManagementRead(permissions.BasePermission):
+    """Read: admin/super_admin/management. Write: admin/super_admin."""
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.method in permissions.SAFE_METHODS:
+            return _role_allows(request, MANAGEMENT_ROLES)
+        return _role_allows(request, ADMIN_ROLES)
+
+
+class IsCRMViewer(permissions.BasePermission):
+    """Read: admin/super_admin/management/sales (CRM). Write: admin/super_admin."""
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.method in permissions.SAFE_METHODS:
+            return _role_allows(request, (*MANAGEMENT_ROLES, 'sales'))
+        return _role_allows(request, ADMIN_ROLES)
+
+
+class IsPaymentsRead(permissions.BasePermission):
+    """Read: finance roles (super_admin/admin/management/accounts). Write: admin+."""
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.method in permissions.SAFE_METHODS:
+            return _role_allows(request, PAYMENTS_ACCESS_ROLES)
+        return _role_allows(request, ADMIN_ROLES)
 
 
 class IsSuperAdmin(permissions.BasePermission):
@@ -154,7 +193,7 @@ class LeadViewSet(viewsets.ModelViewSet):
     """CRM lead management with status transitions and conversion."""
     queryset = Lead.objects.select_related('assigned_to', 'interest_project', 'converted_customer').all()
     serializer_class = LeadSerializer
-    permission_classes = [IsAdminOrReadOnly]
+    permission_classes = [IsCRMViewer]
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -247,7 +286,7 @@ class LeadViewSet(viewsets.ModelViewSet):
 class LeadNoteViewSet(viewsets.ModelViewSet):
     queryset = LeadNote.objects.select_related('lead', 'created_by').all()
     serializer_class = LeadNoteSerializer
-    permission_classes = [IsAdminOrReadOnly]
+    permission_classes = [IsCRMViewer]
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -258,7 +297,7 @@ class AgentViewSet(viewsets.ModelViewSet):
         booking_count=Count('bookings'),
     ).all()
     serializer_class = AgentSerializer
-    permission_classes = [IsAdminOrReadOnly]
+    permission_classes = [IsAdminOrManagementRead]
 
     def perform_create(self, serializer):
         agent = serializer.save()
@@ -278,7 +317,7 @@ class AgentViewSet(viewsets.ModelViewSet):
 class CompanySettingsViewSet(viewsets.GenericViewSet):
     """Singleton company settings (retrieve + partial update)."""
     serializer_class = CompanySettingsSerializer
-    permission_classes = [IsAdminOrReadOnly]
+    permission_classes = [IsAdminOrManagementRead]
 
     def list(self, request):
         return Response(self.get_serializer(CompanySettings.load()).data)

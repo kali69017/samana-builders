@@ -927,47 +927,44 @@ test.describe('FIN-SEC — negative & security (API)', () => {
     );
   });
 
-  test('FIN-SEC-03 — No status-transition guards on approve/pay (illegal draft→paid, paid→approved)', async ({
+  test('FIN-SEC-03 — No status-transition guards on approve/pay (illegal pending→paid, paid→approved)', async ({
     request,
   }) => {
     const token = await apiLogin(request, 'admin');
     const ctx: Ctx = { request, token };
     const officeId = await createOffice(ctx, qa('QA-HO'));
     const categoryId = await createCategory(ctx, qa('QA-Rent'));
-    const draftId = await createExpense(ctx, {
+    const pendingId = await createExpense(ctx, {
       office: officeId,
       category: categoryId,
       amount: '25000.00',
       date: today(),
-      status: 'draft',
     });
     const paidId = await createExpense(ctx, {
       office: officeId,
       category: categoryId,
       amount: '30000.00',
       date: today(),
-      status: 'paid',
     });
     regObject(`/api/offices/${officeId}/`);
     regObject(`/api/expense-categories/${categoryId}/`);
-    regObject(`/api/office-expenses/${draftId}/`);
+    regObject(`/api/office-expenses/${pendingId}/`);
     regObject(`/api/office-expenses/${paidId}/`);
-    regLedger('office_expense', 'OfficeExpense', draftId);
+    regLedger('office_expense', 'OfficeExpense', pendingId);
     regLedger('office_expense', 'OfficeExpense', paidId);
 
-    // Pay may only follow approved — paying a draft must be refused.
-    const payRes = await request.post(`/api/office-expenses/${draftId}/pay/`, {
+    // Pay may only follow approve — paying a pending expense must be refused.
+    // FIXED: `pay` now guards the transition (only approved may be paid).
+    const payRes = await request.post(`/api/office-expenses/${pendingId}/pay/`, {
       headers: csrf(token),
     });
-    // CONFIRMED BUG: no transition guard on `pay` (documented in
-    // docs/qa/finance_analysis.md §4, NOT findings-confirmed.md — that file's
-    // "F3" is the unrelated API IDOR finding).
-    expect(payRes.status(), `draft→paid should be refused, got ${payRes.status()}`).toBe(400);
+    expect(payRes.status(), `pending→paid should be refused, got ${payRes.status()}`).toBe(400);
 
-    // Approve may only follow pending — approving a paid expense must be refused.
-    // FIXED 2026-09-29: `OfficeExpenseViewSet.approve` and
-    // `office_expense_approve_view` now refuse a `paid` source (400 / error toast),
-    // because its voucher is already posted and locked. This assertion must stay.
+    // Approve may only follow pending — approving an already-paid expense must be
+    // refused because its voucher is posted and locked. Reach 'paid' through the
+    // legitimate approve→pay flow first (status is read-only on the API create).
+    await request.post(`/api/office-expenses/${paidId}/approve/`, { headers: csrf(token) });
+    await request.post(`/api/office-expenses/${paidId}/pay/`, { headers: csrf(token) });
     const appRes = await request.post(`/api/office-expenses/${paidId}/approve/`, {
       headers: csrf(token),
     });

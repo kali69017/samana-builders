@@ -1,7 +1,10 @@
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from core.permissions import management_or_above
+from django.http import HttpResponse
+from django.utils import timezone
+from datetime import timedelta
+from core.permissions import management_or_above, get_user_role, SUPER_ADMIN, ADMIN
 from .models import NotificationLog
 
 
@@ -12,10 +15,20 @@ def notifications_view(request):
     type_filter = request.GET.get('type', '')
     status_filter = request.GET.get('status', '')
 
+    # Object-level scoping: super_admin/admin see the whole log; other roles see
+    # only the rows they created. This stops one management user from harvesting
+    # every customer's contact details.
+    role = get_user_role(request)
+    can_view_full = role in (SUPER_ADMIN, ADMIN)
+    if can_view_full:
+        scope = NotificationLog.objects.all()
+    else:
+        scope = NotificationLog.objects.filter(created_by=request.user)
+
     # Filter *before* slicing. Doing it the other way round raises
     # TypeError("Cannot filter a query once a slice has been taken."), which
     # turned every filter submit on this page into a 500.
-    logs = NotificationLog.objects.all()
+    logs = scope
     if channel_filter:
         logs = logs.filter(channel=channel_filter)
     if type_filter:
@@ -29,13 +42,31 @@ def notifications_view(request):
         'channel_filter': channel_filter,
         'type_filter': type_filter,
         'status_filter': status_filter,
-        'total_count': NotificationLog.objects.count(),
-        'sent_count': NotificationLog.objects.filter(status='sent').count(),
-        'skipped_count': NotificationLog.objects.filter(status='skipped').count(),
-        'failed_count': NotificationLog.objects.filter(status='failed').count(),
-        'pending_count': NotificationLog.objects.filter(status='pending').count(),
+        'total_count': scope.count(),
+        'sent_count': scope.filter(status='sent').count(),
+        'skipped_count': scope.filter(status='skipped').count(),
+        'failed_count': scope.filter(status='failed').count(),
+        'pending_count': scope.filter(status='pending').count(),
+        'can_view_full': can_view_full,
     }
     return render(request, 'notifications/notifications.html', context)
+
+
+def _manual_send_rate_limited(recipient_contact):
+    """Anti spam-blast: at most N manual 'general' sends to one address per day.
+
+    Counted on the raw posted contact string so formatting variants of the same
+    number still count once a victim is being hammered, while legit distinct
+    recipients are unaffected.
+    """
+    from django.conf import settings
+    cap = getattr(settings, 'NOTIFICATION_MANUAL_RATE_LIMIT', 3)
+    window = timezone.now() - timedelta(hours=24)
+    return NotificationLog.objects.filter(
+        notification_type='general',
+        recipient_contact=recipient_contact,
+        created_at__gte=window,
+    ).count() >= cap
 
 
 @login_required
@@ -52,6 +83,15 @@ def send_manual_notification(request):
         if not recipient_contact or not message:
             messages.error(request, 'Recipient contact and message are required.')
             return redirect('notifications')
+
+        if _manual_send_rate_limited(recipient_contact):
+            # Anti spam-blast: refuse with an HTTP 429 rather than another 302 +
+            # flash, so automation sees the throttle instead of a seemingly
+            # successful submission.
+            return HttpResponse(
+                'Rate limit: too many notifications to this recipient. Try again later.',
+                status=429,
+            )
 
         log = NotificationService.send_notification(
             recipient_name=recipient_name,

@@ -414,6 +414,7 @@ class OfficeExpenseLedgerTests(MoneyBase):
     def test_office_expense_api_create_paid_posts(self):
             # status is read-only on the API (server-controlled default 'pending'),
             # so a create never auto-posts; paying via the 'pay' action posts once.
+            # Pay may only follow approve (FIN-SEC-03), so route through the action.
             resp = self.client.post(reverse('officeexpense-list'), {
                 'office': self.office.pk, 'category': self.cat.pk,
                 'amount': '15000', 'expense_date': date.today().isoformat(),
@@ -424,6 +425,8 @@ class OfficeExpenseLedgerTests(MoneyBase):
             oe = OfficeExpense.objects.get(pk=resp.data['id'])
             self.assertEqual(oe.status, 'pending')
             self.assertFalse(Voucher.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).exists())
+            appr = self.client.post(reverse('officeexpense-approve', args=[oe.pk]), {}, format='json')
+            self.assertEqual(appr.status_code, status.HTTP_200_OK)
             pay_resp = self.client.post(reverse('officeexpense-pay', args=[oe.pk]), format='json')
             self.assertEqual(pay_resp.status_code, status.HTTP_200_OK)
             self.assertTrue(Voucher.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).exists())
@@ -440,9 +443,10 @@ class OfficeExpenseLedgerTests(MoneyBase):
         self.assertFalse(Voucher.objects.filter(reference_type='OfficeExpense', reference_id=oe.pk).exists())
 
     def test_office_expense_pay_action_posts_ledger(self):
+        # Pay may only follow approve (FIN-SEC-03) — create as approved.
         oe = OfficeExpense.objects.create(
             office=self.office, category=self.cat, amount=Decimal('8000'),
-            expense_date=date.today(), payment_method='cash', status='pending',
+            expense_date=date.today(), payment_method='cash', status='approved',
             created_by=self.admin,
         )
         resp = self.client.post(reverse('officeexpense-pay', args=[oe.pk]), {}, format='json')

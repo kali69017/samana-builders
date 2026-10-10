@@ -5,6 +5,12 @@ Reproduced against the local dev server http://127.0.0.1:8000 (DJANGO_DEBUG=True
 `requests`. "CODE-CONFIRMED" = unambiguous in source (file:line cited); will be re-confirmed
 by the test suite as RED tests.
 
+> **All findings below are RESOLVED (2026-10-10).** See `SECURITY_REMEDIATION.md` and
+> `CLAUDE.md` "Work status" for the fix + verification for each (F1–F8 and the notification /
+> finance security tests). Several were already fixed in code by the time of the audit and are
+> regression-guarded; the rest were closed in the hardening pass. This file is the historical
+> record; the live RED-test inventory lives in the E2E suites.
+
 ## Priority 1 — Critical
 
 ### F1 — Vertical privilege escalation (API): any staff user can self-elevate to super_admin

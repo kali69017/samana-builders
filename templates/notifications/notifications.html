@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load notif_filters %}
 
 {% block title %}Notifications - Samana Builders ERP{% endblock %}
 
@@ -118,7 +119,7 @@
                                 </span>
                             </td>
                             <td><strong>{{ log.recipient_name }}</strong></td>
-                            <td style="font-size:12px;">{{ log.recipient_contact }}</td>
+                            <td style="font-size:12px;">{% if can_view_full %}{{ log.recipient_contact }}{% else %}{{ log.recipient_contact|mask_contact }}{% endif %}</td>
                             <td>{{ log.get_notification_type_display }}</td>
                             <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ log.subject }}">{{ log.subject|default:"-" }}</td>
                             <td>

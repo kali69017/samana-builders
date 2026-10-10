@@ -4,7 +4,9 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.utils import timezone
 from django.db import models as db_models
+from django.db import transaction
 from .models import Payment, Receipt, Refund, PaymentAllocation
+from bookings.models import Booking
 from .serializers import (
     PaymentSerializer, PaymentCreateSerializer, PaymentDetailSerializer,
     PaymentVerificationSerializer, ReceiptSerializer, RefundSerializer,
@@ -18,8 +20,8 @@ class IsStaffReadAdminWrite(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
         if request.method in permissions.SAFE_METHODS:
-            from core.permissions import is_portal_customer
-            return not is_portal_customer(request.user)
+            from core.permissions import user_role_allows
+            return user_role_allows(request, ('super_admin', 'admin', 'management', 'accounts'))
         if request.user.is_superuser:
             return True
         if hasattr(request.user, 'profile'):
@@ -82,91 +84,102 @@ class PaymentViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'])
     def verify(self, request, pk=None):
-        """Verify or reject a payment. Admin-only in practice (checked below)."""
+        """Verify or reject a pending payment. Admin-only in practice (checked below).
+
+        Runs inside a transaction with row locks so two concurrent verifications of
+        the same payment cannot both apply its balance effects (finding F6).
+        """
         user_role = None
         if hasattr(request.user, 'profile'):
             user_role = request.user.profile.role
-        
+
         if not request.user.is_superuser and user_role not in ['super_admin', 'admin']:
             return Response(
                 {'error': 'Only administrators can verify payments.'},
                 status=status.HTTP_403_FORBIDDEN
             )
-        
-        payment = self.get_object()
 
-        # Guard against re-verifying/rejecting an already-finalized payment,
-        # which would double-count the booking advance and installment amounts.
-        if payment.status in ['verified', 'rejected', 'reversed']:
-            return Response(
-                {'error': f'Payment is already {payment.get_status_display()}.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        with transaction.atomic():
+            payment = Payment.objects.select_for_update().select_related(
+                'booking', 'installment'
+            ).get(pk=pk)
 
-        serializer = PaymentVerificationSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        action_type = serializer.validated_data['action']
-        notes = serializer.validated_data.get('notes', '')
-        
-        if action_type == 'verify':
-            payment.status = 'verified'
-            payment.verified_by = request.user
-            payment.verified_at = timezone.now()
-            payment.notes = notes
-
-            # Update installment if linked — track any overpayment so the
-            # money is not lost (mirrors the web flow).
-            if payment.installment:
-                installment = payment.installment
-                installment_total = installment.amount + installment.late_fee
-                remaining_before = installment_total - installment.paid_amount
-                if payment.amount > remaining_before:
-                    overpayment = payment.amount - remaining_before
-                    payment.unallocated_amount = overpayment
-                    payment.save(update_fields=['unallocated_amount'])
-                    installment.paid_amount = installment_total
-                else:
-                    installment.paid_amount += payment.amount
-                if installment.paid_amount >= installment_total:
-                    installment.status = 'paid'
-                    installment.paid_date = payment.payment_date
-                elif installment.paid_amount > 0:
-                    installment.status = 'partial'
-                installment.save()
-
-            # Update booking advance, capped at total so the remaining
-            # balance can never go negative.
-            booking = payment.booking
-            booking.advance_paid = min(
-                booking.advance_paid + payment.amount, booking.total_amount
-            )
-            if booking.remaining_balance <= 0:
-                booking.status = 'completed'
-            booking.save()
-
-            # Recalculate the installment plan so unpaid installments
-            # reflect the new remaining balance.
-            if hasattr(booking, 'installment_plan') and booking.installment_plan:
-                booking.installment_plan.recalculate()
-
-            # Auto-generate a receipt (mirrors the web verification flow).
-            from .models import Receipt
-            if not payment.receipts.exists():
-                Receipt.objects.create(
-                    payment=payment,
-                    receipt_date=payment.payment_date,
-                    generated_by=request.user,
+            # Only *pending* payments may be verified or rejected. Drafts have not
+            # been submitted and a bounced payment is already finalised — mutating
+            # either would let amounts flow twice (finding F6).
+            if payment.status != 'pending':
+                return Response(
+                    {'error': f'Only pending payments can be verified or rejected '
+                              f'(current status: {payment.get_status_display()}).'},
+                    status=status.HTTP_400_BAD_REQUEST
                 )
-                payment.receipt_generated = True
-        else:
-            payment.status = 'rejected'
-            payment.verified_by = request.user
-            payment.verified_at = timezone.now()
-            payment.notes = notes
-        
-        payment.save()
-        
+
+            serializer = PaymentVerificationSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+
+            action_type = serializer.validated_data['action']
+            notes = serializer.validated_data.get('notes', '')
+
+            if action_type == 'verify':
+                payment.status = 'verified'
+                payment.verified_by = request.user
+                payment.verified_at = timezone.now()
+                payment.notes = notes
+
+                # Lock the booking too — its advance/balance is updated below.
+                booking = Booking.objects.select_for_update().get(pk=payment.booking_id)
+
+                # Update installment if linked — track any overpayment so the
+                # money is not lost (mirrors the web flow).
+                if payment.installment:
+                    installment = payment.installment
+                    installment_total = installment.amount + installment.late_fee
+                    remaining_before = installment_total - installment.paid_amount
+                    if payment.amount > remaining_before:
+                        overpayment = payment.amount - remaining_before
+                        payment.unallocated_amount = overpayment
+                        payment.save(update_fields=['unallocated_amount'])
+                        installment.paid_amount = installment_total
+                    else:
+                        installment.paid_amount += payment.amount
+                    if installment.paid_amount >= installment_total:
+                        installment.status = 'paid'
+                        installment.paid_date = payment.payment_date
+                    elif installment.paid_amount > 0:
+                        installment.status = 'partial'
+                    installment.save()
+
+                # Update booking advance, capped at total so the remaining
+                # balance can never go negative.
+                booking.advance_paid = min(
+                    booking.advance_paid + payment.amount, booking.total_amount
+                )
+                if booking.remaining_balance <= 0:
+                    booking.status = 'completed'
+                booking.save()
+
+                # Recalculate the installment plan so unpaid installments
+                # reflect the new remaining balance.
+                if hasattr(booking, 'installment_plan') and booking.installment_plan:
+                    booking.installment_plan.recalculate()
+
+                # Auto-generate a receipt (mirrors the web verification flow).
+                from .models import Receipt
+                if not payment.receipts.exists():
+                    Receipt.objects.create(
+                        payment=payment,
+                        receipt_date=payment.payment_date,
+                        generated_by=request.user,
+                    )
+                    payment.receipt_generated = True
+            else:
+                payment.status = 'rejected'
+                payment.verified_by = request.user
+                payment.verified_at = timezone.now()
+                payment.notes = notes
+
+            payment.save()
+
         from core.models import AuditLog
         AuditLog.objects.create(
             user=request.user, action='verify' if action_type == 'verify' else 'reject',
@@ -174,7 +187,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
             object_id=payment.payment_id,
             description=f'{action_type.title()} payment {payment.payment_id} via API'
         )
-        
+
         return Response(PaymentSerializer(payment).data)
     
     @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])

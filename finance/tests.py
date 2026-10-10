@@ -74,7 +74,8 @@ class FinanceAPITest(APITestCase):
 
     def test_create_office_expense_posts_ledger(self):
         # status is read-only on the API (server default 'pending'); a create
-        # never auto-posts. Paying via the 'pay' action posts a voucher.
+        # never auto-posts. Paying via the 'pay' action posts a voucher, and pay
+        # may only follow approve (FIN-SEC-03).
         resp = self.client.post(reverse('officeexpense-list'), {
             'office': self.office.pk, 'category': self.category.pk, 'amount': '25000',
             'expense_date': date.today().isoformat(),
@@ -83,6 +84,8 @@ class FinanceAPITest(APITestCase):
         oe_id = resp.data['id']
         self.assertFalse(Voucher.objects.filter(
             reference_type='OfficeExpense', reference_id=oe_id).exists())
+        appr = self.client.post(reverse('officeexpense-approve', args=[oe_id]), format='json')
+        self.assertEqual(appr.status_code, status.HTTP_200_OK)
         pay_resp = self.client.post(reverse('officeexpense-pay', args=[oe_id]), format='json')
         self.assertEqual(pay_resp.status_code, status.HTTP_200_OK)
         self.assertTrue(Voucher.objects.filter(

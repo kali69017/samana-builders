@@ -23,7 +23,7 @@ class EmailService:
     def send(to_email, subject, message, from_email=None):
         if not to_email:
             return False, "No email address provided"
-        if not getattr(settings, 'EMAIL_ENABLED', True):
+        if not getattr(settings, 'EMAIL_ENABLED', False):
             logger.info(f"[Email disabled] to {to_email}: {subject}")
             return True, "Email disabled"
         try:

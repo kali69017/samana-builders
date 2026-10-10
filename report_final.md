@@ -117,7 +117,17 @@ The live **browser** verification (§5.1 finance bullet) confirms the Voucher le
 
 ## 6. Outstanding (outside this task's scope, tracked)
 
-- WhatsApp token rotation (user-side) and Phase-2 webhooks (app publication).
-- SEC findings in §5.3 (rate limiting, PII-at-rest, object scoping) — real security gaps, documented RED.
-- Type-dropdown omission + `recipient_name` overflow + welcome-channel premise (§5.3).
-- **Finance E2E spec drift (§5.4):** `finance.spec.ts` should-pass tests still assert the deprecated `AccountTransaction` single-entry ledger — rewrite `ledgerRowsFor`/ledger assertions to the Voucher double-entry contract (spec §3.7), flip FIN-EC-07/08/API-06 to the fixed behaviors (validation/guard), fix FIN-EC-05/06 auth via fresh `loginViaApi` (HEALING.md Pattern 6), and update FIN-API-07's serializer contract. No product code change needed; the live Voucher ledger is verified healthy.
+**SECURITY WORK IS DONE** — all documented Critical/High confirmed findings are closed and
+verified (see `CLAUDE.md` "Work status" 2026-10-10 and `SECURITY_REMEDIATION.md`). Full Django
+suite is green; Notifications E2E: 22 passed / 3 pre-existing documented RED bugs. Remaining:
+
+- WhatsApp token rotation (user-side) and Phase-2 webhooks (Meta app publication).
+- SMS/PTA branded "SAMANA" mask pending PTA approval (external regulatory).
+- **Finance E2E spec drift (§5.4):** `finance.spec.ts` should-pass tests still assert the
+  deprecated `AccountTransaction` single-entry ledger — rewrite `ledgerRowsFor`/ledger
+  assertions to the Voucher double-entry contract (spec §3.7), flip FIN-EC-07/08/API-06 to
+  the fixed behaviors, and update FIN-API-07's serializer contract. No product code change
+  needed; the live Voucher ledger is verified healthy.
+- Pre-existing documented RED tests kept failing by policy (not weakened): NOTIF-HP-03
+  (welcome SMS channel), NOTIF-EC-08 (type-dropdown omits welcome), NOTIF-EC-05 (recipient
+  name overflow), CUS-SEC-07 (customer-profile-create users can orphan on overwrite).

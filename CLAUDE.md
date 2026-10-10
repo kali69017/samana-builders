@@ -6,7 +6,42 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Real Estate Management ERP + corporate website for Samana Builders & Developers. Django 6.0 + Django REST Framework backend serving two frontends: a server-rendered ERP (Django templates) and a corporate marketing site (also Django templates, with a compiled React build artifact in `frontend/dist/`). SQLite for dev, PostgreSQL for production.
 
-## Work status (last updated 2026-10-09)
+## Work status (last updated 2026-10-10)
+
+### Shipped — production-readiness security hardening (2026-10-10)
+
+All documented Critical/High confirmed findings closed; full Django suite 935+ green; pushed.
+
+- **F1/F2 privesc** (already fixed in code): role not self-assignable via API profile update
+  or the web `/profile/` form (serializer `read_only_fields`, form `fields=['theme']`).
+  Regression-guarded in `api/tests_permissions.py`.
+- **F3 least-privilege API reads**: every ViewSet now gates SAFE_METHODS by function role
+  (`core/permissions.user_role_allows`): customers/users → admin+; agents → admin+management;
+  leads → CRM roles; bookings → admin+management+sales+accounts; payments/office-expenses/
+  account-transactions/project-costs → finance roles; hr/employees → hr roles; audit-logs →
+  management+. Sales/hr no longer read other modules' PII. Flips FIN-SEC-01, CUS-SEC-06 green.
+- **Portal isolation**: `dashboard_view` redirects portal customers to `/portal/` (was: portal
+  could open the full business dashboard). Portal also blocked from customers/others via the
+  existing read gates. Fixes CUS-SEC-05.
+- **F6 payment workflow**: verify (API + web) now accepts *pending* only and runs inside
+  `transaction.atomic` with `select_for_update` on the payment + booking; payment reverse and
+  refund approve take row locks. No double-count races.
+- **FIN-SEC-03**: expense/`ProjectCost` `pay` (API + web views) requires `approved` source —
+  a draft/pending can no longer post money to the ledger.
+- **F7 XSS / F4 CSRF / F8 leave-writable / N-SEC-04**: verified already fixed in current code
+  (templates use `textContent`+escaping; `@require_POST` on expense mutations; Leave
+  `status` read_only) and regression-guarded.
+- **Notifications (N-SEC-01/03/05)**: manual send is rate-limited per recipient (429,
+  `NOTIFICATION_MANUAL_RATE_LIMIT`); Notification Center masks PII contacts for non-admin via
+  `mask_contact`; the log is scoped to `created_by` for management. Flips NOTIF-SEC-01/03/05,
+  and EC-03/04/09/HP-09/HP-10 now assert the honest skipped/disabled contract.
+- **EmailService.send** disabled-default inverted (`getattr(..., False)`).
+
+E2E notes: notifications 22 passed / 3 pre-existing confirmed-bug RED (HP-03 welcome-SMS,
+EC-08 dropdown, EC-05 name overflow). Payments/customers share sec-flips above (PAY-HP-05,
+CUS-SEC-02/03/04/06, CUS-HP-07). Finance suite's residual 20ish failures are the documented
+stale assertions against the deprecated single-entry `AccountTransaction` (the double-entry
+Voucher ledger is verified healthy; see `report_final.md` §5.4).
 
 ### Shipped — WhatsApp transactional notifications on approved templates (`6e0a505`, pushed)
 

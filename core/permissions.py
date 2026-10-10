@@ -36,6 +36,17 @@ def is_portal_customer(user):
     return Customer.objects.filter(user=user).exists()
 
 
+def user_role_allows(request, roles):
+    """True when the request user is a superuser or their profile role is in
+    ``roles`` — the least-privilege read gate every API permission class uses."""
+    if not request.user or not request.user.is_authenticated:
+        return False
+    if request.user.is_superuser:
+        return True
+    role = getattr(getattr(request.user, 'profile', None), 'role', None)
+    return role in roles
+
+
 def get_user_role(request):
     """Return the effective ERP role for the request user (or None)."""
     if not request.user.is_authenticated:

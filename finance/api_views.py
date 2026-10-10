@@ -21,13 +21,13 @@ def _validation_error_detail(exc):
 
 
 class IsFinanceOrAbove(permissions.BasePermission):
-    """Read for authenticated staff, write for finance roles."""
+    """Read + write for finance roles (super_admin/admin/management/accounts)."""
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
         if request.method in permissions.SAFE_METHODS:
-            from core.permissions import is_portal_customer
-            return not is_portal_customer(request.user)
+            from core.permissions import user_role_allows
+            return user_role_allows(request, ('super_admin', 'admin', 'management', 'accounts'))
         if request.user.is_superuser:
             return True
         role = getattr(getattr(request.user, 'profile', None), 'role', None)
@@ -118,6 +118,16 @@ class OfficeExpenseViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def pay(self, request, pk=None):
         expense = self.get_object()
+        # Pay may only follow approve — paying a draft/pending expense would post
+        # money that was never approved (FIN-SEC-03).
+        if expense.status == 'paid':
+            return Response(OfficeExpenseSerializer(expense).data)
+        if expense.status != 'approved':
+            return Response(
+                {'detail': 'Only approved expenses can be paid '
+                           f'(current status: {expense.get_status_display()}).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         expense.status = 'paid'
         expense.save()
         expense.post_to_ledger()
@@ -159,6 +169,16 @@ class ProjectCostViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def pay(self, request, pk=None):
         cost = self.get_object()
+        # Pay may only follow approve — posting an unapproved cost would move
+        # money out of the ledger without approval (FIN-SEC-03).
+        if cost.status == 'paid':
+            return Response(ProjectCostSerializer(cost).data)
+        if cost.status != 'approved':
+            return Response(
+                {'detail': 'Only approved project costs can be paid '
+                           f'(current status: {cost.get_status_display()}).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         cost.status = 'paid'
         cost.save()
         cost.post_to_ledger()

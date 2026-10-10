@@ -323,13 +323,10 @@ test.describe('CUS — Happy path', () => {
     await page.locator('#id_nominee_name').fill('');
     await page.getByRole('button', { name: 'Save Nominee' }).click();
 
-    // NOTE: the template instructs "leave Nominee Name blank to remove", but
-    // `nominee_name` is a required field (customers/models.py:167, no blank=True),
-    // so the form re-renders with a required-field error and the nominee is NOT
-    // removed. We assert the actual current behaviour (form stays, nominee intact).
-    await expect(page).toHaveURL(new RegExp(`/customers/${cust.id}/nominee/$`));
+    // Blank nominee name removes the nominee and returns to the detail page.
+    await expect(page).toHaveURL(new RegExp(`/customers/${cust.id}/$`));
     const detail = await request.get(`/customers/${cust.id}/`);
-    expect(await detail.text()).toContain('Sara Khan');
+    expect(await detail.text()).not.toContain('Sara Khan');
 
     await deleteCustomerViaApi(request, token, cust.id);
   });
@@ -634,8 +631,9 @@ test.describe('CUS — Security (negative)', () => {
       }
     });
 
-    test('CUS-SEC-02 — IDOR: sales user edits any customer', async ({ page, request }) => {
-      // CONFIRMED BUG: docs/qa/findings-confirmed.md F3
+    test('CUS-SEC-02 — IDOR: sales user cannot edit any customer', async ({ page, request }) => {
+      // FIXED: customer_edit_view is management_or_above — a sales user is
+      // redirected away and cannot tamper with the victim's record.
       const token = await loginViaApi(request, 'admin');
       let victim: CustomerInfo | undefined;
       try {
@@ -644,34 +642,34 @@ test.describe('CUS — Security (negative)', () => {
         const tampered = makePhone();
 
         await page.goto(`/customers/${victim.id}/edit/`);
-        await page.getByLabel('Phone Number').fill(tampered);
-        await page.getByRole('button', { name: 'Update Customer' }).click();
-
-        // Correct behaviour: the edit is denied and the victim's phone is unchanged.
-        const res = await request.get(`/api/customers/${victim.id}/`);
-        expect((await res.json()).phone).toBe(originalPhone);
+        await expect(page).toHaveURL(/\/dashboard\//);
+        // Direct POST is also refused or lands elsewhere — assert the phone is intact.
+        await page.goto(`/customers/${victim.id}/edit/`);
+        const editRes = await page.request.post(`/customers/${victim.id}/edit/`, {
+          form: { first_name: victim.first_name, last_name: victim.last_name, phone: tampered },
+        });
+        expect([200, 302, 403]).toContain(editRes.status());
+        const adminRes = await request.get(`/api/customers/${victim.id}/`);
+        expect((await adminRes.json()).phone).toBe(originalPhone);
       } finally {
         if (victim) await deleteCustomerViaApi(request, token, victim.id);
       }
     });
 
-    test('CUS-SEC-03 — IDOR: sales user manages any customer’s nominee', async ({
+    test('CUS-SEC-03 — IDOR: sales user cannot manage any customer’s nominee', async ({
       page,
       request,
     }) => {
-      // CONFIRMED BUG: docs/qa/findings-confirmed.md F3
+      // FIXED: the nominee manage view is management_or_above — sales is redirected.
       const token = await loginViaApi(request, 'admin');
       let victim: CustomerInfo | undefined;
       try {
         victim = await createCustomerViaApi(request, token);
         await addNomineeViaApi(request, token, victim.id);
 
-        // sales edits the victim's nominee (the manage view is @login_required only).
         await page.goto(`/customers/${victim.id}/nominee/`);
-        await page.locator('#id_nominee_name').fill('Hacker Khan');
-        await page.getByRole('button', { name: 'Save Nominee' }).click();
-
-        // Correct behaviour: denied — the victim's nominee name is unchanged.
+        await expect(page).toHaveURL(/\/dashboard\//);
+        // Nominee is untouched.
         const detail = await request.get(`/customers/${victim.id}/`);
         expect(await detail.text()).toContain('Sara Khan');
       } finally {
@@ -679,18 +677,19 @@ test.describe('CUS — Security (negative)', () => {
       }
     });
 
-    test('CUS-SEC-04 — IDOR: any authenticated user downloads any customer profile PDF', async ({
+    test('CUS-SEC-04 — IDOR: sales user cannot download any customer profile PDF', async ({
       page,
       request,
     }) => {
-      // CONFIRMED BUG: docs/qa/findings-confirmed.md F3
+      // FIXED: customer_profile_pdf_view is management_or_above — sales is redirected
+      // to the dashboard (assert the pre-redirect 302, like the other deny tests).
       const token = await loginViaApi(request, 'admin');
       let victim: CustomerInfo | undefined;
       try {
         victim = await createCustomerViaApi(request, token);
-        const res = await page.request.get(`/customers/${victim.id}/pdf/`);
-        // Correct behaviour: denied for a non-owner (not a 200 PDF).
-        expect(res.status()).toBe(403);
+        const res = await page.request.get(`/customers/${victim.id}/pdf/`, { maxRedirects: 0 });
+        expect(res.status()).toBe(302);
+        expect(res.headers()['location'] ?? '').toContain('/dashboard/');
       } finally {
         if (victim) await deleteCustomerViaApi(request, token, victim.id);
       }
@@ -717,20 +716,18 @@ test.describe('CUS — Security (negative)', () => {
     });
   });
 
-  test('CUS-SEC-06 — API PII exposure: any authenticated user GETs full customer data', async ({
+  test('CUS-SEC-06 — API PII exposure: non-admin GET is forbidden (FIXED)', async ({
     request,
   }) => {
-    // CONFIRMED BUG: docs/qa/findings-confirmed.md F3
+    // FIXED (permission hardening): /api/customers/ is read-only for super_admin/admin;
+    // a sales user now gets 403 and no customer rows (previously the whole roster leaked).
     await loginViaApi(request, 'sales');
     const res = await request.get('/api/customers/');
-    // Correct behaviour: a non-admin GET is forbidden.
-    expect.soft(res.status()).toBe(403);
-    // Document the PII that is actually exposed (the bug): full cnic/phone/email.
-    const rows = await res.json();
-    expect(rows.length).toBeGreaterThan(0);
-    expect(rows[0]).toHaveProperty('cnic');
-    expect(rows[0]).toHaveProperty('phone');
-    expect(rows[0]).toHaveProperty('email');
+    expect(res.status()).toBe(403);
+    const body = await res.json();
+    // No customer rows are exposed, and no PII fields leak in the error payload.
+    expect(Array.isArray(body)).toBe(false);
+    expect(JSON.stringify(body)).not.toContain('cnic');
   });
 
   test('CUS-SEC-07 — Profile-create overwrite orphans the previous User', async ({ request }) => {

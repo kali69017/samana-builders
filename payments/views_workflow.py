@@ -61,12 +61,28 @@ def _apply_payment_effects(payment):
 @admin_or_above
 def payment_verify_view(request, pk):
     payment = get_object_or_404(Payment.objects.select_related('booking', 'installment'), pk=pk)
-    if payment.status in ['verified', 'rejected', 'reversed']:
-        messages.error(request, f'This payment is already {payment.get_status_display()}.')
+    # Only *pending* payments may be verified — drafts/ bounced/ finalised states
+    # would double-count the booking advance and installment amounts (F6).
+    if payment.status != 'pending':
+        messages.error(
+            request,
+            f'Only pending payments can be verified (current status: {payment.get_status_display()}).',
+        )
         return redirect('payment_detail', pk=pk)
 
     if request.method == 'POST':
         with transaction.atomic():
+            # Re-fetch under row locks so two concurrent verifications cannot both
+            # apply the balance effects (check-then-act race, finding F6).
+            payment = Payment.objects.select_for_update().select_related(
+                'booking', 'installment'
+            ).get(pk=pk)
+            if payment.status != 'pending':
+                messages.error(request, 'This payment is no longer pending.')
+                return redirect('payment_detail', pk=pk)
+            from bookings.models import Booking
+            Booking.objects.select_for_update().get(pk=payment.booking_id)
+
             payment.status = 'verified'
             payment.verified_by = request.user
             payment.verified_at = timezone.now()
@@ -127,10 +143,16 @@ def payment_bounce_view(request, pk):
 def payment_reverse_view(request, pk):
     payment = get_object_or_404(Payment.objects.select_related('booking', 'installment'), pk=pk)
     if request.method == 'POST':
-        if payment.status != 'verified':
-            messages.error(request, f'Only verified payments can be reversed.')
-            return redirect('payment_detail', pk=pk)
         with transaction.atomic():
+            # Row locks: a concurrent verify/reverse must not interleave with the
+            # balance effects below.
+            payment = Payment.objects.select_for_update().select_related(
+                'booking', 'installment'
+            ).get(pk=pk)
+            if payment.status != 'verified':
+                messages.error(request, f'Only verified payments can be reversed.')
+                return redirect('payment_detail', pk=pk)
+
             payment.status = 'reversed'
             payment.save()
 
@@ -198,20 +220,26 @@ def refund_create_view(request):
 def refund_approve_view(request, pk):
     refund = get_object_or_404(Refund.objects.select_related('booking'), pk=pk)
     if request.method == 'POST':
-        if refund.status != 'pending':
-            messages.error(request, f'Refund is already {refund.get_status_display()}; cannot approve/reject again.')
-            return redirect('refunds')
-        action = request.POST.get('action', 'approve')
-        try:
-            if action == 'reject':
-                refund.reject(notes=request.POST.get('notes', ''), user=request.user)
-            else:
-                # Approval applies the financial effect: reduce the booking's
-                # advance_paid so the balance reflects the money returned.
-                refund.apply_approval(user=request.user)
-        except Exception as exc:
-            messages.error(request, f'Unable to {action} refund: {exc}')
-            return redirect('refunds')
+        from bookings.models import Booking
+        with transaction.atomic():
+            # Lock the refund (and its booking) so a double-submit cannot approve
+            # the refund twice and reduce advance_paid twice (finding F6).
+            refund = Refund.objects.select_for_update().select_related('booking').get(pk=pk)
+            Booking.objects.select_for_update().get(pk=refund.booking_id)
+            if refund.status != 'pending':
+                messages.error(request, f'Refund is already {refund.get_status_display()}; cannot approve/reject again.')
+                return redirect('refunds')
+            action = request.POST.get('action', 'approve')
+            try:
+                if action == 'reject':
+                    refund.reject(notes=request.POST.get('notes', ''), user=request.user)
+                else:
+                    # Approval applies the financial effect: reduce the booking's
+                    # advance_paid so the balance reflects the money returned.
+                    refund.apply_approval(user=request.user)
+            except Exception as exc:
+                messages.error(request, f'Unable to {action} refund: {exc}')
+                return redirect('refunds')
         _log(request, 'update', 'Refund', refund.pk,
              f'{refund.get_status_display()} refund of {refund.amount} for booking {refund.booking.booking_id}')
         messages.success(request, f'Refund {refund.get_status_display()}.')

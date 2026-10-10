@@ -460,9 +460,11 @@ class PermissionApiTests(ApiBaseTestCase):
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_sales_can_read_customers(self):
+    def test_sales_cannot_read_customers(self):
+        # Hardening (F3): the customer API carries PII (CNIC/phone/email) and is
+        # admin-only on reads. Sales previously could read the whole roster.
         resp = self.client.get(reverse('customer-list'))
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_unauthenticated_gets_denied(self):
         self.client.force_authenticate(user=None)
