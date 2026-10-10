@@ -12,6 +12,7 @@ findings closed and verified (regression-guarded in `api/tests_permissions.py`,
 | F2 | Web privesc: portal POST /profile/ role | CLOSED (pre-existing fix verified) — form `fields=['theme']` |
 | F3 | Systemic IDOR/PII read-open (all ViewSets) | CLOSED — least-privilege read matrix (`user_role_allows`) + portal dashboard redirect |
 | F4 | CSRF-via-GET expense mutations | CLOSED (pre-existing `@require_POST` verified) |
+| F5 | Booking reopen conflict (re-sold plot) | CLOSED (pre-existing conflict guard verified) — tested |
 | F6 | Payment money-flow races / missing guards | CLOSED — pending-only verify + `select_for_update` (API+web), reverse/refund row locks |
 | F7 | Stored XSS (AI insights/hr) | CLOSED (pre-existing escape/textContent verified) |
 | F8 | HR read-open + leave status writable | CLOSED (pre-existing read_only verified) + reads tightened to HR roles |

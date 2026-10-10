@@ -146,6 +146,54 @@ class ApiReadAccessMatrixTests(SecurityBase):
         self.assertEqual(resp.status_code, 302)
         self.assertIn('portal', resp.url)
 
+    def test_booking_reopen_refused_when_plot_rebooked(self):
+        """F5: reopening a cancelled booking must not re-reserve a re-sold plot."""
+        from customers.models import Customer
+        from properties.models import Project, Plot
+        from bookings.models import Booking
+        from bookings import views as b_views
+        self.client.force_login(self.roles['management'])
+        project = Project.objects.create(name='Reopen P', location='L', total_plots=5)
+        plot = Plot.objects.create(
+            plot_number='R-1', project=project, size_marla=Decimal('5.00'),
+            price=Decimal('2000000'), status='reserved',
+        )
+        c1 = Customer.objects.create(first_name='ReA', last_name='One', cnic='35202-0000000-1',
+                                     phone='+92-300-0000001', created_by=self.superuser)
+        c2 = Customer.objects.create(first_name='ReB', last_name='Two', cnic='35202-0000000-2',
+                                     phone='+92-300-0000002', created_by=self.superuser)
+        first = Booking.objects.create(customer=c1, plot=plot, total_amount=Decimal('2000000'),
+                                       status='cancelled', created_by=self.superuser)
+        Booking.objects.create(customer=c2, plot=plot, total_amount=Decimal('2000000'),
+                               status='active', created_by=self.superuser)
+
+        resp = self.client.post(f'/bookings/{first.pk}/reopen/', {})
+        self.assertEqual(resp.status_code, 302)  # redirected (refused)
+        first.refresh_from_db()
+        plot.refresh_from_db()
+        self.assertEqual(first.status, 'cancelled')  # not reopened
+        self.assertEqual(plot.status, 'reserved')  # plot not freed/re-reserved by a stale reopen
+
+    def test_booking_reopen_succeeds_when_plot_free(self):
+        """F5: reopening is allowed when the plot has no other active booking."""
+        from customers.models import Customer
+        from properties.models import Project, Plot
+        from bookings.models import Booking
+        self.client.force_login(self.roles['management'])
+        project = Project.objects.create(name='Reopen P2', location='L', total_plots=5)
+        plot = Plot.objects.create(
+            plot_number='R-2', project=project, size_marla=Decimal('5.00'),
+            price=Decimal('2000000'), status='reserved',
+        )
+        c = Customer.objects.create(first_name='ReC', last_name='Solo', cnic='35202-0000000-3',
+                                    phone='+92-300-0000003', created_by=self.superuser)
+        booking = Booking.objects.create(customer=c, plot=plot, total_amount=Decimal('2000000'),
+                                         status='cancelled', created_by=self.superuser)
+        resp = self.client.post(f'/bookings/{booking.pk}/reopen/', {})
+        self.assertEqual(resp.status_code, 302)
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, 'pending')
+
     def test_payments_api_hidden_from_portal(self):
         self.auth('portal')
         resp = self.client.get('/api/payments/')
