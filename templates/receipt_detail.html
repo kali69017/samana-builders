@@ -21,8 +21,6 @@
             <h1>Receipt {{ receipt.receipt_number }}</h1>
             <div class="page-actions">
                 <a href="{% url 'receipt_pdf' receipt.pk %}" class="btn btn-primary btn-sm">📥 Download PDF</a>
-                <a href="https://wa.me/?text=Receipt%20{{ receipt.receipt_number }}%20-%20Rs.%20{{ payment.amount|floatformat:0 }}%20-%20Samana%20Builders" target="_blank" class="btn btn-sm" style="background:#25D366; color:white;">📱 Share via WhatsApp</a>
-                <a href="mailto:?subject=Receipt%20{{ receipt.receipt_number }}&body=Receipt%20{{ receipt.receipt_number }}%20-%20Amount:%20Rs.%20{{ payment.amount|floatformat:0 }}%0ABooking:%20{{ booking.booking_id }}%0APayment%20ID:%20{{ payment.payment_id }}" class="btn btn-sm" style="background:#EA4335; color:white;">📧 Share via Email</a>
                 <button onclick="window.print()" class="btn btn-secondary btn-sm">🖨️ Print Receipt</button>
                 <a href="{% url 'payment_detail' payment.pk %}" class="btn btn-secondary btn-sm">← Back to Payment</a>
             </div>
