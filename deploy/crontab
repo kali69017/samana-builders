@@ -1,0 +1,6 @@
+# Samana ERP - notification scheduler crontab (installed by the `scheduler` Docker service)
+# cron uses a minimal PATH; make sure python (and system tools) resolve.
+PATH=/usr/local/bin:/usr/bin:/bin
+# Run the installment reminders + overdue alerts every day at 08:00 server time.
+# Providers are gated by their own ENABLED env vars; when off, sends are recorded skipped.
+0 8 * * * cd /app && python manage.py send_installment_reminders --days=7 --cooldown=6 >> /var/log/samana-reminders.log 2>&1

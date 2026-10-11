@@ -44,6 +44,25 @@ Creates (password `admin123` for all): `admin` (existing superuser), `qa_managem
 `qa_accounts`, `qa_sales`, `qa_hr`, and `qa_customer` (a non-staff portal customer linked to a
 `Customer`, with no `UserProfile`). Re-running is safe.
 
+## 3b. Notification scheduler (installment reminders + overdue alerts)
+
+The email/SMS/WhatsApp reminders are **not** fired by any user-facing page. A scheduler must run
+this daily:
+
+```powershell
+D:\samana\.venv312\Scripts\python.exe manage.py send_installment_reminders --days=7 --cooldown=6
+```
+
+- Sends an **installment reminder** to customers whose installments are due within `--days` (default 7),
+  an **overdue alert** for installments now past-due, and **skips** anything already notified to that
+  booking/type within `--cooldown` (default 6) days (deduped, so no daily spam).
+- Providers are still gated by `*_ENABLED`; when off, rows are recorded `skipped` (never counted delivered).
+
+**Docker (Hostinger):** `docker-compose` ships a `scheduler` service that installs `deploy/crontab`
+and runs cron in the container (daily 08:00). It shares the `web` service's environment (DB +
+provider credentials via the `x-app-env` anchor), and keeps running (`tail -f /dev/null`). No host
+cron needed.
+
 ## 4. Run the tests
 
 ```powershell

@@ -1,3 +1,43 @@
+# Shared application environment (used by both `web` and `scheduler` so the
+# cron-driven notifications use the same DB + provider credentials).
+x-app-env: &app-env
+  DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY}"
+  DJANGO_DEBUG: "False"
+  DJANGO_ALLOWED_HOSTS: "${DJANGO_ALLOWED_HOSTS}"
+  DB_ENGINE: postgres
+  DB_NAME: "${DB_NAME:-samana}"
+  DB_USER: "${DB_USER:-samana}"
+  DB_PASSWORD: "${DB_PASSWORD}"
+  DB_HOST: db
+  DB_PORT: "5432"
+  SENDPK_ENABLED: "${SENDPK_ENABLED:-False}"
+  SENDPK_API_KEY: "${SENDPK_API_KEY:-}"
+  SENDPK_SENDER_ID: "${SENDPK_SENDER_ID:-SMS Alert}"
+  EMAIL_ENABLED: "${EMAIL_ENABLED:-False}"
+  EMAIL_HOST: "${EMAIL_HOST:-}"
+  EMAIL_HOST_USER: "${EMAIL_HOST_USER:-}"
+  EMAIL_HOST_PASSWORD: "${EMAIL_HOST_PASSWORD:-}"
+  EMAIL_BACKEND: "${EMAIL_BACKEND:-}"
+  DEFAULT_FROM_EMAIL: "${DEFAULT_FROM_EMAIL:-Samana Builders <noreply@samanabuilders.com>}"
+  AI_ENABLED: "${AI_ENABLED:-False}"
+  OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
+  OPENROUTER_MODEL: "${OPENROUTER_MODEL:-deepseek/deepseek-v4-flash-0731}"
+  OPENROUTER_BASE_URL: "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
+  OPENROUTER_REASONING: "${OPENROUTER_REASONING:-True}"
+  WHATSAPP_ENABLED: "${WHATSAPP_ENABLED:-False}"
+  WHATSAPP_API_TOKEN: "${WHATSAPP_API_TOKEN:-}"
+  WHATSAPP_PHONE_NUMBER_ID: "${WHATSAPP_PHONE_NUMBER_ID:-}"
+  WHATSAPP_TEMPLATE_PAYMENT_CONFIRMATION: "${WHATSAPP_TEMPLATE_PAYMENT_CONFIRMATION:-}"
+  WHATSAPP_TEMPLATE_BOOKING_NOTIFICATION: "${WHATSAPP_TEMPLATE_BOOKING_NOTIFICATION:-}"
+  WHATSAPP_TEMPLATE_BOOKING_APPROVAL: "${WHATSAPP_TEMPLATE_BOOKING_APPROVAL:-}"
+  WHATSAPP_TEMPLATE_INSTALLMENT_REMINDER: "${WHATSAPP_TEMPLATE_INSTALLMENT_REMINDER:-}"
+  WHATSAPP_TEMPLATE_OVERDUE_PAYMENT: "${WHATSAPP_TEMPLATE_OVERDUE_PAYMENT:-}"
+  WHATSAPP_TEMPLATE_RECEIPT_NOTIFICATION: "${WHATSAPP_TEMPLATE_RECEIPT_NOTIFICATION:-}"
+  SENDPK_TEMPLATE_CUSTOMER_WELCOME: "${SENDPK_TEMPLATE_CUSTOMER_WELCOME:-10904}"
+  SENDPK_TEMPLATE_PAYMENT_CONFIRMATION: "${SENDPK_TEMPLATE_PAYMENT_CONFIRMATION:-10901}"
+  SENDPK_TEMPLATE_INSTALLMENT_REMINDER: "${SENDPK_TEMPLATE_INSTALLMENT_REMINDER:-10902}"
+  SENDPK_TEMPLATE_OVERDUE_PAYMENT: "${SENDPK_TEMPLATE_OVERDUE_PAYMENT:-10903}"
+
 services:
   db:
     image: postgres:16-alpine
@@ -12,33 +52,21 @@ services:
   web:
     build: .
     command: sh -c "python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn samana_erp.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120"
-    environment:
-      DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY}"
-      DJANGO_DEBUG: "False"
-      DJANGO_ALLOWED_HOSTS: "${DJANGO_ALLOWED_HOSTS}"
-      DB_ENGINE: postgres
-      DB_NAME: "${DB_NAME:-samana}"
-      DB_USER: "${DB_USER:-samana}"
-      DB_PASSWORD: "${DB_PASSWORD}"
-      DB_HOST: db
-      DB_PORT: "5432"
-      SENDPK_ENABLED: "${SENDPK_ENABLED:-False}"
-      SENDPK_API_KEY: "${SENDPK_API_KEY:-}"
-      SENDPK_SENDER_ID: "${SENDPK_SENDER_ID:-SMS Alert}"
-      EMAIL_ENABLED: "${EMAIL_ENABLED:-False}"
-      EMAIL_HOST: "${EMAIL_HOST:-}"
-      EMAIL_HOST_USER: "${EMAIL_HOST_USER:-}"
-      EMAIL_HOST_PASSWORD: "${EMAIL_HOST_PASSWORD:-}"
-      DEFAULT_FROM_EMAIL: "${DEFAULT_FROM_EMAIL:-Samana Builders <noreply@samanabuilders.com>}"
-      AI_ENABLED: "${AI_ENABLED:-False}"
-      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
-      OPENROUTER_MODEL: "${OPENROUTER_MODEL:-deepseek/deepseek-v4-flash-0731}"
-      OPENROUTER_BASE_URL: "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
-      OPENROUTER_REASONING: "${OPENROUTER_REASONING:-True}"
+    environment: *app-env
     depends_on:
       - db
     volumes:
       - media:/app/media
+    restart: unless-stopped
+
+  # Notification scheduler: runs the payment reminders + overdue alerts once a day.
+  # Installs deploy/crontab and runs cron in the foreground (container stays up).
+  scheduler:
+    build: .
+    command: sh -c "crontab /app/deploy/crontab && cron && tail -f /dev/null"
+    environment: *app-env
+    depends_on:
+      - db
     restart: unless-stopped
 
   caddy:

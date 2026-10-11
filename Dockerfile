@@ -5,9 +5,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install system deps needed by psycopg2 / reportlab (PDF generation)
+# Install system deps needed by psycopg2 / reportlab (PDF generation) + cron for
+# the notification scheduler (installment reminders / overdue alerts).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends gcc libpq-dev \
+    && apt-get install -y --no-install-recommends gcc libpq-dev cron \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

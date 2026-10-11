@@ -1,6 +1,6 @@
 ﻿"""Tests for the SendPK SMS integration and notification messages."""
 import json
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from unittest.mock import Mock, patch
 
@@ -1156,3 +1156,61 @@ class WhatsAppTemplateListTest(TestCase):
         self.assertIn('200', detail)
         self.assertIn('Insufficient permissions', detail)
 
+
+
+class SendInstallmentRemindersCommandTest(TestCase):
+    """The scheduler command fires installment reminders + overdue alerts, with cooldown."""
+
+    def _booking_with_plan(self):
+        from decimal import Decimal
+        from bookings.models import Booking, InstallmentPlan, Installment
+        from customers.models import Customer
+        from properties.models import Project, Plot
+        project = Project.objects.create(name='Cmd P', location='Lahore', total_plots=5)
+        plot = Plot.objects.create(
+            plot_number='A-1', project=project, size_marla=Decimal('5.00'),
+            price=Decimal('1000000'), status='reserved',
+        )
+        customer = Customer.objects.create(
+            first_name='Cmd', last_name='User', phone='+92-300-1234567',
+            cnic='35202-1234567-1', email='cmd@example.com',
+        )
+        booking = Booking.objects.create(
+            customer=customer, plot=plot, total_amount=Decimal('1000000'),
+            advance_paid=Decimal('0'), status='active',
+        )
+        plan = InstallmentPlan.objects.create(
+            booking=booking, total_installments=2,
+            installment_amount=Decimal('500000'), down_payment_amount=Decimal('0'),
+            start_date=date.today(), frequency='monthly',
+        )
+        return booking, plan, Installment
+
+    def test_reminder_and_overdue_fire_once(self):
+        from django.core.management import call_command
+        from bookings.models import Installment
+        tomorrow = date.today() + timedelta(days=3)
+        past = date.today() - timedelta(days=5)
+        booking, plan, Installment = self._booking_with_plan()
+        Installment.objects.create(plan=plan, installment_number=1, due_date=tomorrow, amount=500000, status='pending')
+        Installment.objects.create(plan=plan, installment_number=2, due_date=past, amount=500000, status='overdue')
+
+        call_command('send_installment_reminders', days=7, cooldown=6)
+
+        rows = NotificationLog.objects.filter(related_booking_id=str(booking.booking_id))
+        self.assertTrue(rows.filter(notification_type='installment_reminder').exists())
+        self.assertTrue(rows.filter(notification_type='overdue_payment').exists())
+        count = rows.count()
+
+        # Cooldown: a second run within 6 days must not re-send.
+        call_command('send_installment_reminders', days=7, cooldown=6)
+        self.assertEqual(rows.count(), count)
+
+    def test_installment_outside_window_ignored(self):
+        from django.core.management import call_command
+        from bookings.models import Installment
+        far_future = date.today() + timedelta(days=60)
+        booking, plan, Installment = self._booking_with_plan()
+        Installment.objects.create(plan=plan, installment_number=1, due_date=far_future, amount=500000, status='pending')
+        call_command('send_installment_reminders', days=7, cooldown=6)
+        self.assertFalse(NotificationLog.objects.filter(related_booking_id=str(booking.booking_id)).exists())
