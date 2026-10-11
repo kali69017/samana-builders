@@ -6,7 +6,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Real Estate Management ERP + corporate website for Samana Builders & Developers. Django 6.0 + Django REST Framework backend serving two frontends: a server-rendered ERP (Django templates) and a corporate marketing site (also Django templates, with a compiled React build artifact in `frontend/dist/`). SQLite for dev, PostgreSQL for production.
 
-## Work status (last updated 2026-10-10)
+## Work status (last updated 2026-10-11)
+
+### Shipped — production-ready finalization (cron scheduler + Docker deploy, 2026-10-11)
+
+- **Notification scheduler**: `send_installment_reminders` now fires both installment
+  reminders (due within N days) and overdue alerts, with a per-booking cooldown dedupe via
+  `NotificationLog`. Docker ships a `scheduler` service running `deploy/crontab` daily at
+  08:00 (no host cron needed) — see `RUNBOOK.md` §3b. Tests: 100 OK.
+- **Deploy (Docker/Caddy)**: `DEPLOY.md` step-by-step guide; Caddy now serves `/media/*` from
+  the shared volume; `docker-compose` wires WhatsApp + SMS template env through `x-app-env`;
+  `settings.py` adds HSTS/nosniff/X-Frame-Options in prod; `.env.example` is a complete prod
+  template. `manage.py check --deploy` clean except optional HSTS subdomain/preload.
+- Pushed as `77fcf0a`, `88b485a` (this sits on top of the 2026-10-10 hardening batch).
 
 ### Shipped — production-readiness security hardening (2026-10-10)
 
