@@ -1,4 +1,14 @@
 samanabuilders.com, www.samanabuilders.com {
-    reverse_proxy web:8000
     encode gzip
+
+    # Serve uploaded files (customer images/documents, logos) from the shared
+    # media volume. Gunicorn/whitenoise only serve static, not media.
+    handle /media/* {
+        root * /app/media
+        file_server
+    }
+
+    handle {
+        reverse_proxy web:8000
+    }
 }
