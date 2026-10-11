@@ -18,7 +18,7 @@ class BookingForm(forms.ModelForm):
             'customer': forms.Select(attrs={'class': 'form-control'}),
             'plot': forms.Select(attrs={'class': 'form-control'}),
             'total_amount': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': ' ', 'step': '0.01'}),
-            'advance_paid': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': ' ', 'step': '0.01'}),
+            'advance_paid': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': ' ', 'step': '1', 'min': '0'}),
             'source': forms.Select(attrs={'class': 'form-control'}),
             'agent': forms.Select(attrs={'class': 'form-control'}),
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': ' '}),

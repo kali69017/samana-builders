@@ -31,6 +31,45 @@ class CustomerFormTest(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn('cnic', form.errors)
 
+    def test_first_name_max_length_enforced(self):
+        form_data = {
+            'first_name': 'A' * 25,  # exceeds max_length=20
+            'last_name': 'Khan',
+            'phone': '+92-300-1234567',
+            'cnic': '3520212345671',
+            'email': 'ahmed@example.com'
+        }
+        form = CustomerForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertIn('first_name', form.errors)
+
+    def test_last_name_max_length_enforced(self):
+        form_data = {
+            'first_name': 'Ahmed',
+            'last_name': 'K' * 25,  # exceeds max_length=20
+            'phone': '+92-300-1234567',
+            'cnic': '3520212345671',
+            'email': 'ahmed@example.com'
+        }
+        form = CustomerForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertIn('last_name', form.errors)
+
+    def test_name_trimmed_and_required(self):
+        # Whitespace-only names trim to empty and are rejected; leading/trailing
+        # spaces are stripped from stored values.
+        form_data = {
+            'first_name': '   ',
+            'last_name': '  Khan  ',
+            'phone': '+92-300-1234567',
+            'cnic': '3520212345671',
+            'email': 'ahmed@example.com'
+        }
+        form = CustomerForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertIn('first_name', form.errors)  # blank after trim
+        self.assertEqual(form.cleaned_data.get('last_name'), 'Khan')
+
     def test_cnic_with_dashes_accepted_and_canonicalized(self):
         # Dashed input is accepted for usability (paste / edit prefill) and
         # stored in the canonical format.

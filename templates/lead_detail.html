@@ -16,6 +16,7 @@
         <div class="page-header">
             <h1>{{ lead.display_name }}</h1>
             <div class="page-actions">
+                <a href="{% url 'leads' %}" class="btn btn-secondary btn-sm">← Back to List</a>
                 {% if lead.status != 'converted' %}
                 <a href="{% url 'lead_convert' lead.pk %}" class="btn btn-success btn-sm">Convert to Customer</a>
                 {% endif %}

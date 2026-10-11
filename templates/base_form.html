@@ -136,5 +136,48 @@
     @media (max-width: 768px) {
         .form-grid { grid-template-columns: 1fr; }
     }
+    /* ── Clean "label above, input below" + uniform controls ────────────────
+       The floating-label pattern breaks on date/month/number inputs (the label
+       overlaps the value/placeholder). Switch to a static label-above layout and
+       equal-height inputs/selects so every row in every form aligns. */
+    .form-grid .floating-group {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0 !important;
+        margin-bottom: 8px !important;
+    }
+    /* floating-group puts the <label> AFTER the input in the DOM, so it must be
+       pulled to the top with order:-1 to sit above; form-group labels already
+       precede the control. */
+    .form-grid .floating-group label { order: -1 !important; }
+    .form-grid .form-group label { order: 0 !important; }
+    .form-grid .floating-group label,
+    .form-grid .form-group label {
+        position: static !important;
+        display: block !important;
+        height: 16px !important;
+        line-height: 16px !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        color: var(--text-primary) !important;
+        margin: 0 0 6px 0 !important;
+        padding: 0 !important;
+        transform: none !important;
+        background: none !important;
+        pointer-events: auto !important;
+    }
+    .form-grid .floating-group label span,
+    .form-grid .form-group label span { color: var(--accent-red); }
+    .form-grid .floating-group .form-control,
+    .form-grid .form-group .form-control {
+        height: 42px !important;
+        padding: 8px 12px !important;
+    }
+    .form-grid .floating-group textarea.form-control {
+        height: auto !important;
+        min-height: 72px;
+    }
+    .form-grid .floating-group .form-hint,
+    .form-grid .floating-group .form-error { width: 100%; }
 </style>
 {% endblock %}

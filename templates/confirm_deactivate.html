@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ title }} - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    <div class="top-bar">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <span class="top-bar-title">{{ title }}</span>
+        <div class="top-bar-actions"></div>
+    </div>
+
+    {% include 'includes/sidebar.html' %}
+
+    <main class="main-content">
+        <div class="page-header">
+            <h1>{{ title }}</h1>
+            <div class="page-actions"></div>
+        </div>
+
+        <!-- Confirm Deactivate / Activate -->
+        <div class="card animate-scale-in" style="max-width:520px; margin:40px auto;">
+            <div style="text-align:center; padding:20px 16px;">
+                <div style="font-size:64px; margin-bottom:16px;">&#9888;&#65039;</div>
+                <h2 style="font-size:22px; font-weight:700; color:var(--text-primary); margin-bottom:8px;">
+                    Confirm {{ action_label|default:"Deactivate" }}</h2>
+                <p style="color:var(--text-secondary); font-size:14px; line-height:1.6; margin-bottom:12px;">
+                    {{ message }}
+                </p>
+                <p style="color:var(--text-3); font-size:13px; margin-bottom:24px;">
+                    {% if user.is_active %}
+                    Deactivating locks the user out of sign-in, but the <strong>account and all its data are
+                    preserved</strong> — it can be re-activated anytime. This is <strong>not</strong> a deletion.
+                    {% else %}
+                    Reactivating restores this user's sign-in access. Any roles/permissions they had are still intact.
+                    {% endif %}
+                </p>
+
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="{{ action_label|default:'Deactivate' }}">
+                    <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+                        <button type="submit" class="btn btn-{% if user.is_active %}danger{% else %}success{% endif %} btn-lg" style="min-width:180px;">
+                            <span class="spinner"></span>
+                            <span class="btn-text">&#10003; Yes, {{ action_label|default:"Deactivate" }}</span>
+                        </button>
+                        <a href="{% if cancel_url %}{% url cancel_url %}{% else %}javascript:history.back(){% endif %}" class="btn btn-secondary btn-lg" style="min-width:160px;">
+                            &#8646; Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

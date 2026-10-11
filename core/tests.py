@@ -183,6 +183,44 @@ class UserProfileTest(TestCase):
         self.assertIn('Sales', str(profile))
 
 
+class UserDeactivateConfirmTest(TestCase):
+    """The deactivate flow must confirm DEACTIVATION, never say DELETE."""
+
+    def setUp(self):
+        from django.contrib.auth.models import User
+        from .models import UserProfile
+        self.admin = User.objects.create_user('adm', 'adm@example.com', 'pass123456')
+        UserProfile.objects.create(user=self.admin, role='admin')
+        self.target = User.objects.create_user('target', 'target@example.com', 'pass123456')
+        UserProfile.objects.create(user=self.target, role='sales')
+        self.client.login(username='adm', password='pass123456')
+
+    def test_confirm_page_says_deactivate_not_delete(self):
+        resp = self.client.get(f'/users/{self.target.pk}/toggle-active/')
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode()
+        self.assertIn('Deactivate', html)
+        self.assertNotIn('Yes, Delete', html)
+        self.assertNotIn('Confirm Deletion', html)
+        self.assertNotIn('cannot be undone', html)
+        # It must clearly state the account is preserved (not deleted).
+        self.assertIn('not</strong> a deletion', html)
+
+    def test_post_deactivates_but_does_not_delete(self):
+        resp = self.client.post(f'/users/{self.target.pk}/toggle-active/')
+        self.assertEqual(resp.status_code, 302)
+        self.target.refresh_from_db()
+        self.assertFalse(self.target.is_active)   # deactivated
+        self.assertTrue(User.objects.filter(pk=self.target.pk).exists())  # NOT deleted
+
+    def test_post_reactivates(self):
+        self.target.is_active = False
+        self.target.save()
+        self.client.post(f'/users/{self.target.pk}/toggle-active/')
+        self.target.refresh_from_db()
+        self.assertTrue(self.target.is_active)
+
+
 class AuditLogTest(TestCase):
     def test_audit_log_creation(self):
         user = User.objects.create_user('testuser', 'test@example.com', 'testpass123')

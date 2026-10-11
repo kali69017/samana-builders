@@ -41,6 +41,9 @@
                         <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
                     </select>
                     <button type="submit" class="btn btn-primary btn-sm" style="height:42px; padding:0 20px; white-space:nowrap;">Filter</button>
+                    {% if office_filter or status_filter %}
+                    <a href="{% url 'finance_office_expenses' %}" class="btn btn-secondary btn-sm" style="height:42px; padding:0 16px; white-space:nowrap;">Clear</a>
+                    {% endif %}
                 </div>
             </form>
         </div>

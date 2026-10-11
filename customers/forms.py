@@ -24,8 +24,8 @@ class CustomerForm(forms.ModelForm):
                   'cnic', 'occupation', 'occupation_other', 'address', 'city',
                   'notes', 'document', 'image', 'is_active']
         widgets = {
-            'first_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
-            'last_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+            'first_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' ', 'maxlength': '20'}),
+            'last_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' ', 'maxlength': '20'}),
             'email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': ' '}),
             'phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '+92-300-1234567'}),
             'alternate_phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '+92-300-1234567'}),
@@ -71,6 +71,22 @@ class CustomerForm(forms.ModelForm):
             phone = format_phone(phone)
         validate_phone(phone)
         return phone
+
+    def clean_first_name(self):
+        value = (self.cleaned_data.get('first_name') or '').strip()
+        if not value:
+            raise forms.ValidationError('First name is required.')
+        if len(value) > 20:
+            raise forms.ValidationError('First name cannot exceed 20 characters.')
+        return value
+
+    def clean_last_name(self):
+        value = (self.cleaned_data.get('last_name') or '').strip()
+        if not value:
+            raise forms.ValidationError('Last name is required.')
+        if len(value) > 20:
+            raise forms.ValidationError('Last name cannot exceed 20 characters.')
+        return value
 
     def clean_alternate_phone(self):
         phone = self.cleaned_data.get('alternate_phone')

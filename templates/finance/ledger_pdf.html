@@ -3,25 +3,57 @@
 <head>
     <meta charset="utf-8">
     <style>
-        @page { size: A4 landscape; margin: 1.5cm; }
-        body { font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #222; }
-        h1 { font-size: 18px; margin: 0 0 2px; }
-        .muted { color: #666; }
-        .meta { margin-bottom: 12px; }
+        @page {
+            size: A4 landscape;
+            margin: 15mm 15mm 22mm;
+            @frame footer {
+                -pdf-frame-content: footerContent;
+                left: 15mm;
+                width: 267mm;
+                top: 190mm;
+                height: 12mm;
+            }
+        }
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #1e293b; }
+        #footerContent { font-family: Helvetica, Arial, sans-serif; font-size: 8px; color: #64748b; text-align: center; line-height: 1.5; }
+        .header { margin-bottom: 14px; border-bottom: 3px solid #1e40af; padding-bottom: 12px; }
+        .company-name { font-size: 20px; font-weight: 800; color: #1e40af; }
+        .company-tagline { font-size: 10px; color: #64748b; }
+        .doc-title { font-size: 18px; font-weight: 800; color: #1e40af; text-align: right; letter-spacing: 2px; }
+        .doc-sub { font-size: 10px; color: #64748b; text-align: right; }
+        .meta { margin-bottom: 10px; }
+        .meta div { margin-bottom: 2px; }
+        .muted { color: #64748b; }
         table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #ccc; padding: 5px 6px; text-align: left; }
-        th { background: #f0f0f0; }
+        th, td { border: 1px solid #cbd5e1; padding: 5px 6px; text-align: left; font-size: 10px; }
+        th { background: #f1f5f9; color: #475569; font-weight: 700; }
         td.num, th.num { text-align: right; }
-        .totals { margin-top: 12px; width: 60%; }
-        .totals td { border: none; padding: 3px 6px; }
+        .totals { margin-top: 10px; width: 60%; }
+        .totals td { border: none; padding: 3px 6px; font-size: 10px; }
         .strong { font-weight: bold; }
     </style>
 </head>
 <body>
-    <h2>{{ company_name|default:"Samana Builders" }} — Ledger</h2>
+    <div class="header">
+        <table style="width:100%; border-collapse:collapse;">
+            <tr>
+                <td style="width:80px; vertical-align:middle;">
+                    <img src="images/samana-logo.png" style="height:40px;" alt="Samana Builders logo">
+                </td>
+                <td style="vertical-align:middle;">
+                    <div class="company-name">Samana Builders &amp; Developers</div>
+                    <div class="company-tagline">Excellence in Real Estate</div>
+                </td>
+                <td style="text-align:right; vertical-align:middle;">
+                    <div class="doc-title">LEDGER</div>
+                    <div class="doc-sub">{{ date_from|default:"—" }} to {{ date_to|default:"—" }}</div>
+                </td>
+            </tr>
+        </table>
+    </div>
+
     <div class="meta">
         <div><strong>Account:</strong> {% if report.head %}{{ report.head.code }} - {{ report.head.name }}{% else %}All accounts{% endif %}</div>
-        <div><strong>Date range:</strong> {{ date_from|default:"—" }} to {{ date_to|default:"—" }}</div>
         <div class="muted">{% if report.head %}Basis: {{ report.nature }}-normal{% else %}All accounts — no single running balance applies{% endif %}</div>
     </div>
 
@@ -62,5 +94,10 @@
         <tr><td>Posting lines</td><td class="num">{{ report.rows|length }}</td></tr>
         {% endif %}
     </table>
+
+    <div id="footerContent">
+        Office No. 207, 2nd Floor, Shayan Iconic Tower, Plot No. 5-A, Delhi Mercantile Cooperative Society, Karachi, Pakistan<br>
+        0320 6229330 &nbsp;&nbsp;|&nbsp;&nbsp; info@samanabuilders.com &nbsp;&nbsp;|&nbsp;&nbsp; www.samanabuilders.com
+    </div>
 </body>
 </html>

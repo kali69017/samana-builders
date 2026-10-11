@@ -160,5 +160,33 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+// Auto-fill booking amounts from the selected plot (fetch the real price from the DB).
+document.addEventListener('DOMContentLoaded', function() {
+    var plotSelect = document.getElementById('id_plot');
+    var totalInput = document.getElementById('id_total_amount');
+    var advanceInput = document.getElementById('id_advance_paid');
+    if (!plotSelect || !totalInput) return;
+
+    function fillFromPlot() {
+        var id = plotSelect.value;
+        if (!id) return;
+        fetch('/properties/plot/' + id + '/price/')
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.total_cost) totalInput.value = d.total_cost;
+                // Prefill advance with the required holding deposit, but only when
+                // the user hasn't already typed an amount.
+                var adv = advanceInput ? advanceInput.value : '';
+                if (advanceInput && (adv === '' || adv === '0' || parseFloat(adv) === 0) && parseFloat(d.holding_deposit) > 0) {
+                    advanceInput.value = d.holding_deposit;
+                }
+            })
+            .catch(function () { /* leave fields as-is on error */ });
+    }
+    plotSelect.addEventListener('change', fillFromPlot);
+    // On create (empty total), populate as soon as a plot is pre-selected.
+    if (!totalInput.value) fillFromPlot();
+});
 </script>
 {% endblock %}

@@ -68,6 +68,45 @@ class PropertyViewTest(TestCase):
         response = self.client.get('/properties/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Properties')
+
+    def test_project_search_filters_by_name_and_plot(self):
+        # Search must filter the plots and projects lists (was ignored before).
+        from decimal import Decimal
+        plot = Plot.objects.create(
+            plot_number='A-101', project=self.project, size_marla=Decimal('5.00'),
+            price=Decimal('5000000'), status='available',
+        )
+        other = Project.objects.create(name='Other Estate', location='Karachi', total_plots=10)
+        Plot.objects.create(
+            plot_number='Z-999', project=other, size_marla=Decimal('5.00'),
+            price=Decimal('5000000'), status='available',
+        )
+
+        resp = self.client.get('/properties/', {'search': 'Test Project'})
+        self.assertContains(resp, 'Test Project')
+        self.assertContains(resp, 'A-101')
+        self.assertNotContains(resp, 'Other Estate')
+        self.assertNotContains(resp, 'Z-999')
+        self.assertEqual(resp.context['plots'].count(), 1)
+
+        resp2 = self.client.get('/properties/', {'search': 'A-101'})
+        self.assertContains(resp2, 'A-101')
+        self.assertEqual(resp2.context['plots'].count(), 1)
+
+    def test_plot_price_json_endpoint(self):
+        """The booking form's auto-fill source returns the plot's real price/holding."""
+        from decimal import Decimal
+        plot = Plot.objects.create(
+            plot_number='A-101', project=self.project, size_marla=Decimal('5.00'),
+            price=Decimal('1185600'), status='available',
+        )
+        resp = self.client.get(f'/properties/plot/{plot.pk}/price/')
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data['id'], plot.pk)
+        self.assertEqual(data['price'], '1185600.00')
+        self.assertEqual(data['total_cost'], '1185600.00')
+        self.assertEqual(data['holding_deposit'], '0.00')
     
     def test_project_create_view(self):
         response = self.client.get('/properties/project/create/')

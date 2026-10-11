@@ -40,8 +40,9 @@ urlpatterns = [
     path('properties/plot/create/', core_views.plot_create_view, name='plot_create'),
     path('properties/reserve/', core_views.reservation_create_view, name='reservation_create'),
     path('properties/plot/<int:pk>/edit/', core_views.plot_edit_view, name='plot_edit'),
-        path('properties/plot/<int:pk>/', core_views.plot_detail_view, name='plot_detail'),
-        path('properties/plot/<int:pk>/delete/', core_views.plot_delete_view, name='plot_delete'),
+    path('properties/plot/<int:pk>/', core_views.plot_detail_view, name='plot_detail'),
+    path('properties/plot/<int:pk>/price/', core_views.plot_price_json_view, name='plot_price_json'),
+    path('properties/plot/<int:pk>/delete/', core_views.plot_delete_view, name='plot_delete'),
     
     # Bookings
     path('bookings/', core_views.bookings_view, name='bookings'),

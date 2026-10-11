@@ -54,6 +54,9 @@
                         <option value="other" {% if category_filter == 'other' %}selected{% endif %}>Other</option>
                     </select>
                     <button type="submit" class="btn btn-primary btn-sm" style="height:42px; padding:0 20px; white-space:nowrap;">Filter</button>
+                    {% if project_filter or category_filter %}
+                    <a href="{% url 'finance_project_costs' %}" class="btn btn-secondary btn-sm" style="height:42px; padding:0 16px; white-space:nowrap;">Clear</a>
+                    {% endif %}
                 </div>
             </form>
         </div>

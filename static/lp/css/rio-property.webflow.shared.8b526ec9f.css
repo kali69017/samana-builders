@@ -2195,7 +2195,7 @@ textarea.w-input, textarea.w-select {
   --_theme---text-link--text: var(--swatch--brand-500);
   --_theme---text-link--text-hover: var(--_theme---text-link--text);
   --_typography---font-size--text-main: clamp(1 * 1rem, ((1 - ((1 - 1) / (var(--site--viewport-max)  - var(--site--viewport-min)) * var(--site--viewport-min))) * 1rem + ((1 - 1) / (var(--site--viewport-max)  - var(--site--viewport-min))) * 100vw), 1 * 1rem);
-  --swatch--brand-500: #4725b8;
+  --swatch--brand-500: #003781;
   --button-size--medium: 3rem;
   --button-size--large: 5rem;
   --focus--offset-inner: calc(var(--focus--width) * -1);
@@ -2222,7 +2222,7 @@ textarea.w-input, textarea.w-select {
   --swatch--light-100: #e0e0e0;
   --_spacing---space--1-5-1-5rem-copy: clamp(1.5 * 1rem, ((1.5 - ((1.5 - 1.5) / (var(--site--viewport-max)  - var(--site--viewport-min)) * var(--site--viewport-min))) * 1rem + ((1.5 - 1.5) / (var(--site--viewport-max)  - var(--site--viewport-min))) * 100vw), 1.5 * 1rem);
   --_typography---font-size--h2: clamp(2.125 * 1rem, ((2.125 - ((3.25 - 2.125) / (var(--site--viewport-max)  - var(--site--viewport-min)) * var(--site--viewport-min))) * 1rem + ((3.25 - 2.125) / (var(--site--viewport-max)  - var(--site--viewport-min))) * 100vw), 3.25 * 1rem);
-  --swatch--brand-800: #230f66;
+  --swatch--brand-800: #002a5e;
   --swatch--light-400: #a3a3a3;
   --_typography---font--secondary-family: "Blauer Nue", Verdana, sans-serif;
   --_typography---font-size--h5: clamp(1.375 * 1rem, ((1.375 - ((2 - 1.375) / (var(--site--viewport-max)  - var(--site--viewport-min)) * var(--site--viewport-min))) * 1rem + ((2 - 1.375) / (var(--site--viewport-max)  - var(--site--viewport-min))) * 100vw), 2 * 1rem);

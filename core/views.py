@@ -846,21 +846,48 @@ def properties_view(request):
     
     project_filter = request.GET.get('project', '')
     status_filter = request.GET.get('status', '')
+    search = request.GET.get('search', '').strip()
     
     if project_filter:
         plots = plots.filter(project_id=project_filter)
         projects = projects.filter(pk=project_filter)
     if status_filter:
         plots = plots.filter(status=status_filter)
+    if search:
+        plots = plots.filter(
+            Q(plot_number__icontains=search) |
+            Q(project__name__icontains=search)
+        )
+        projects = projects.filter(
+            Q(name__icontains=search) |
+            Q(location__icontains=search)
+        )
     
     context = {
         'projects': projects,
         'plots': plots,
         'project_filter': project_filter,
         'status_filter': status_filter,
+        'search': search,
         'available_plots_count': plots.filter(status='available').count(),
     }
     return render(request, 'properties.html', context)
+
+
+@login_required
+@management_or_above
+def plot_price_json_view(request, pk):
+    """JSON price for a plot, used by the booking/create forms to auto-fill the
+    Total amount from the DB (so sellers never under-sell the defined price)."""
+    from properties.models import Plot
+    plot = get_object_or_404(Plot, pk=pk)
+    from django.http import JsonResponse
+    return JsonResponse({
+        'id': plot.pk,
+        'price': str(plot.price or 0),
+        'total_cost': str(plot.total_cost if hasattr(plot, 'total_cost') else (plot.price or 0)),
+        'holding_deposit': str(plot.holding_deposit if plot.holding_deposit is not None else 0),
+    })
 
 
 @login_required
@@ -2019,9 +2046,11 @@ def user_deactivate_view(request, pk):
         messages.success(request, f'User {user.username} {status} successfully!')
         return redirect('users')
 
-    return render(request, 'confirm_delete.html', {
+    return render(request, 'confirm_deactivate.html', {
         'object': user,
+        'user': user,
         'title': f'{"Deactivate" if user.is_active else "Activate"} User',
+        'action_label': 'Deactivate' if user.is_active else 'Activate',
         'message': f'Are you sure you want to {"deactivate" if user.is_active else "activate"} user "{user.username}"?',
         'cancel_url': 'users',
     })
