@@ -272,7 +272,10 @@ else:
 
 # Allow an explicit backend override (e.g. EMAIL_BACKEND=console in dev to capture
 # emails without any external send, or locmem/filebackend for automated checks).
-EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', _DEFAULT_EMAIL_BACKEND)
+# ``or`` so an empty/blank value falls back to the default (a blank env var is
+# present-but-empty, and Django's import_string('') would raise
+# "doesn't look like a module path").
+EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND') or _DEFAULT_EMAIL_BACKEND
 
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'Samana Builders <noreply@samanabuilders.com>')
 
