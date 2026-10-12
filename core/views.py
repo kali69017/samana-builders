@@ -893,12 +893,19 @@ def plot_price_json_view(request, pk):
 @login_required
 @management_or_above
 def project_create_view(request):
-    from properties.forms import ProjectForm
-    
+    from properties.forms import ProjectForm, ProjectPhaseFormSet
+
     if request.method == 'POST':
         form = ProjectForm(request.POST)
-        if form.is_valid():
+        # Only bind/validate the phase formset when phase rows were actually
+        # submitted, so a project without phases still saves (backward compatible).
+        has_phase = any(k.startswith('phases-') for k in request.POST)
+        formset = ProjectPhaseFormSet(request.POST) if has_phase else None
+        if form.is_valid() and (formset is None or formset.is_valid()):
             project = form.save()
+            if has_phase:
+                formset.instance = project
+                formset.save()
             AuditLog.objects.create(
                 user=request.user, action='create', model_name='Project',
                 object_id=str(project.id),
@@ -906,22 +913,33 @@ def project_create_view(request):
             )
             messages.success(request, f'Project "{project.name}" created successfully!')
             return redirect('properties')
+        elif has_phase:
+            formset = ProjectPhaseFormSet(request.POST)
+        else:
+            formset = ProjectPhaseFormSet()
     else:
         form = ProjectForm()
-    
-    return render(request, 'project_form.html', {'form': form, 'title': 'Add New Project'})
+        formset = ProjectPhaseFormSet()
+
+    return render(request, 'project_form.html', {
+        'form': form, 'formset': formset, 'title': 'Add New Project'
+    })
 
 
 @login_required
 @management_or_above
 def project_edit_view(request, pk):
-    from properties.forms import ProjectForm
-    
+    from properties.forms import ProjectForm, ProjectPhaseFormSet
+
     project = get_object_or_404(Project, pk=pk)
     if request.method == 'POST':
         form = ProjectForm(request.POST, instance=project)
-        if form.is_valid():
+        has_phase = any(k.startswith('phases-') for k in request.POST)
+        formset = ProjectPhaseFormSet(request.POST, instance=project) if has_phase else None
+        if form.is_valid() and (formset is None or formset.is_valid()):
             form.save()
+            if has_phase:
+                formset.save()
             AuditLog.objects.create(
                 user=request.user, action='update', model_name='Project',
                 object_id=str(project.id),
@@ -929,10 +947,17 @@ def project_edit_view(request, pk):
             )
             messages.success(request, f'Project "{project.name}" updated successfully!')
             return redirect('properties')
+        elif has_phase:
+            formset = ProjectPhaseFormSet(request.POST, instance=project)
+        else:
+            formset = ProjectPhaseFormSet(instance=project)
     else:
         form = ProjectForm(instance=project)
+        formset = ProjectPhaseFormSet(instance=project)
     
-    return render(request, 'project_form.html', {'form': form, 'title': f'Edit Project', 'project': project})
+    return render(request, 'project_form.html', {
+        'form': form, 'formset': formset, 'title': f'Edit Project', 'project': project
+    })
 
 
 @login_required

@@ -30,6 +30,12 @@ class ProjectPhaseForm(forms.ModelForm):
         }
 
 
+# Inline phases on the project form, so a project's phases are set where it's created.
+ProjectPhaseFormSet = forms.inlineformset_factory(
+    Project, ProjectPhase, form=ProjectPhaseForm, extra=2, can_delete=True,
+)
+
+
 class PlotForm(forms.ModelForm):
     class Meta:
         model = Plot

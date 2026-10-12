@@ -105,6 +105,8 @@
                 {% endif %}
                 {% endfor %}
 
+                {% block form_extra %}{% endblock %}
+
                 <div class="btn-group mt-2 form-grid-full" style="margin-top:24px; padding-top:20px; border-top:1px solid var(--border);">
                     <button type="submit" class="btn btn-primary">
                         <span class="spinner"></span>

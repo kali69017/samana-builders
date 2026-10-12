@@ -1,2 +1,112 @@
 {% extends 'base_form.html' %}
 {% block title %}{{ title }} - Samana Builders ERP{% endblock %}
+
+{% block form_extra %}
+<div class="form-group form-grid-full" style="margin-top:8px; padding-top:16px; border-top:1px dashed var(--border);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <label style="font-size:13px; font-weight:700; color:var(--text-primary); text-transform:uppercase; letter-spacing:1px;">
+            Phases <span style="color:var(--text-3); font-weight:400; text-transform:none; letter-spacing:0;">(each plot belongs to one phase of this project)</span>
+        </label>
+    </div>
+
+    {{ formset.management_form }}
+    <div id="phase-forms">
+        {% for phase_form in formset.forms %}
+        <div class="phase-form" style="border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:10px; background:var(--bg);">
+            {{ phase_form.id }}
+            <div class="form-grid">
+                <div class="form-group">
+                    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Phase Name</label>
+                    {{ phase_form.name }}
+                    {% if phase_form.name.errors %}<div class="form-error">{{ phase_form.name.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Launch Date</label>
+                    {{ phase_form.launch_date }}
+                </div>
+                <div class="form-group">
+                    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Total Plots</label>
+                    {{ phase_form.total_plots }}
+                </div>
+                <div class="form-group">
+                    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Price / Marla</label>
+                    {{ phase_form.price_per_marla }}
+                </div>
+                <div class="form-group form-grid-full">
+                    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Description</label>
+                    {{ phase_form.description }}
+                </div>
+                <div class="form-group">
+                    {{ phase_form.is_active }} <label class="form-check-label" for="{{ phase_form.is_active.id_for_label }}">Active</label>
+                </div>
+                {% if phase_form.instance.pk %}
+                <div class="form-group" style="align-self:end;">
+                    <label class="form-check-label" for="{{ phase_form.DELETE.id_for_label }}">Delete</label>
+                    {{ phase_form.DELETE }}
+                </div>
+                {% endif %}
+            </div>
+            {% if phase_form.non_field_errors %}<div class="form-error">{{ phase_form.non_field_errors }}</div>{% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    <button type="button" class="btn btn-secondary btn-sm" id="add-phase" style="margin-top:4px;">+ Add Phase</button>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var container = document.getElementById('phase-forms');
+    var addBtn = document.getElementById('add-phase');
+    var totalInput = document.querySelector('#id_phases-TOTAL_FORMS');
+    var lastIdx = (totalInput ? parseInt(totalInput.value || '0', 10) : 0) - 1;
+    // re-index prefix values so appended rows use the next index
+    if (!addBtn || !container) return;
+
+    function setNames(prefix, value) {
+        ['name','launch_date','total_plots','price_per_marla','description','is_active','id','DELETE'].forEach(function (f) {
+            var el = container.querySelector('[name="' + prefix + '-' + f + '"]');
+            if (el) el.name = prefix + '-' + value + '-' + f;
+            var label = container.querySelector('label[for="' + prefix + '_' + f + '"]');
+            if (label) label.htmlFor = prefix + '_' + value + '_' + f;
+        });
+    }
+
+    addBtn.addEventListener('click', function () {
+        var sets = container.querySelectorAll('.phase-form');
+        var next = 0;
+        if (totalInput) next = parseInt(totalInput.value || '0', 10);
+        // find the max existing index for safety
+        var maxIdx = -1;
+        sets.forEach(function (s) {
+            var m = s.querySelector('[name$="-id"]');
+            if (m) {
+                var v = parseInt(m.name.split('-')[1], 10);
+                if (v > maxIdx) maxIdx = v;
+            }
+        });
+        if (maxIdx >= next) next = maxIdx + 1;
+
+        var tmpl = sets[0] ? sets[0].cloneNode(true) : null;
+        if (!tmpl) return;
+        tmpl.querySelector('[name$="-DELETE"]') && (function(){})(); // noop
+        // clear inputs
+        tmpl.querySelectorAll('input, textarea').forEach(function (el) {
+            if (el.type !== 'hidden') el.value = '';
+        });
+        tmpl.querySelectorAll('select').forEach(function (el) { el.selectedIndex = 0; });
+        // re-number every existing form if needed (simple append with next index)
+        var prefix = 'id_phases';
+        tmpl.querySelectorAll('[name^="phases-"]').forEach(function (el) {
+            var parts = el.name.split('-');
+            el.name = 'phases-' + next + '-' + parts.slice(2).join('-');
+        });
+        tmpl.querySelectorAll('[id^="id_phases-"]').forEach(function (el) {
+            var parts = el.id.split('-');
+            el.id = 'id_phases-' + next + '-' + parts.slice(2).join('-');
+        });
+        container.appendChild(tmpl);
+        if (totalInput) totalInput.value = next + 1;
+    });
+});
+</script>
+{% endblock %}
