@@ -9,6 +9,9 @@ from django.db import transaction
 from django.db.models import Sum
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
+import logging
+
+logger = logging.getLogger(__name__)
 
 from core.models import AuditLog
 from core.permissions import finance_or_above, management_or_above, admin_or_above
@@ -143,38 +146,44 @@ def payment_bounce_view(request, pk):
 def payment_reverse_view(request, pk):
     payment = get_object_or_404(Payment.objects.select_related('booking', 'installment'), pk=pk)
     if request.method == 'POST':
-        with transaction.atomic():
-            # Row locks: a concurrent verify/reverse must not interleave with the
-            # balance effects below.
-            payment = Payment.objects.select_for_update().select_related(
-                'booking', 'installment'
-            ).get(pk=pk)
-            if payment.status != 'verified':
-                messages.error(request, f'Only verified payments can be reversed.')
-                return redirect('payment_detail', pk=pk)
+        try:
+            with transaction.atomic():
+                # Row locks: a concurrent verify/reverse must not interleave with the
+                # balance effects below.
+                payment = Payment.objects.select_for_update().select_related(
+                    'booking', 'installment'
+                ).get(pk=pk)
+                if payment.status != 'verified':
+                    messages.error(request, f'Only verified payments can be reversed.')
+                    return redirect('payment_detail', pk=pk)
 
-            payment.status = 'reversed'
-            payment.save()
+                payment.status = 'reversed'
+                payment.save()
 
-            # Reverse effects on installment and booking
-            if payment.installment:
-                installment = payment.installment
-                installment.paid_amount = max(installment.paid_amount - payment.amount, 0)
-                if installment.paid_amount <= 0:
-                    installment.status = 'pending'
-                    installment.paid_date = None
-                else:
-                    installment.status = 'partial'
-                installment.save()
+                # Reverse effects on installment and booking
+                if payment.installment:
+                    installment = payment.installment
+                    installment.paid_amount = max(installment.paid_amount - payment.amount, 0)
+                    if installment.paid_amount <= 0:
+                        installment.status = 'pending'
+                        installment.paid_date = None
+                    else:
+                        installment.status = 'partial'
+                    installment.save()
 
-            booking = payment.booking
-            booking.advance_paid = max(booking.advance_paid - payment.amount, 0)
-            if booking.status == 'completed' and booking.remaining_balance > 0:
-                booking.status = 'active'
-            booking.save()
+                booking = payment.booking
+                booking.advance_paid = max(booking.advance_paid - payment.amount, 0)
+                if booking.status == 'completed' and booking.remaining_balance > 0:
+                    booking.status = 'active'
+                booking.save()
 
-        _log(request, 'cancel', 'Payment', payment.payment_id, f'Reversed payment {payment.payment_id}')
-        messages.success(request, f'Payment {payment.payment_id} reversed.')
+            _log(request, 'cancel', 'Payment', payment.payment_id, f'Reversed payment {payment.payment_id}')
+            messages.success(request, f'Payment {payment.payment_id} reversed.')
+        except Exception as exc:
+            # Never 500 a payment reversal on odd data — surface the reason and
+            # log the full traceback for diagnosis.
+            logger.exception('payment_reverse_view failed for payment %s', pk)
+            messages.error(request, f'Could not reverse payment: {exc}')
     return redirect('payment_detail', pk=pk)
 
 

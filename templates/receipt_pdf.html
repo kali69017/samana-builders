@@ -1,111 +1,174 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
     <style>
         @page {
             size: A4;
-            margin: 15mm 15mm 22mm;
+            margin: 14mm 14mm 22mm;
             @frame footer {
                 -pdf-frame-content: footerContent;
-                left: 15mm;
-                width: 180mm;
-                top: 283mm;
-                height: 14mm;
+                left: 14mm; width: 182mm; top: 281mm; height: 14mm;
             }
         }
         body { font-family: Helvetica, Arial, sans-serif; font-size: 12px; color: #1e293b; }
-        #footerContent { font-family: Helvetica, Arial, sans-serif; font-size: 8px; color: #64748b; text-align: center; line-height: 1.5; }
-        .header { margin-bottom: 20px; border-bottom: 3px solid #1e40af; padding-bottom: 15px; }
-        .company-name { font-size: 22px; font-weight: 800; color: #1e40af; }
-        .company-tagline { font-size: 11px; color: #64748b; }
-        .receipt-title { font-size: 20px; font-weight: 800; color: #1e40af; text-align: right; letter-spacing: 2px; }
-        .receipt-number { font-size: 12px; color: #64748b; text-align: right; font-family: monospace; }
-        .meta-table { width: 100%; margin-bottom: 15px; }
-        .meta-table td { padding: 4px 8px; font-size: 11px; }
-        .meta-label { color: #64748b; width: 120px; }
-        .meta-value { color: #1e293b; font-weight: 600; }
-        .section-title { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin: 12px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #e2e8f0; }
-        .info-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-        .info-table td { padding: 5px 8px; font-size: 11px; border-bottom: 1px solid #f1f5f9; }
-        .info-label { color: #64748b; width: 130px; }
-        .info-value { color: #1e293b; font-weight: 600; }
-        .payment-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-        .payment-table th { background: #f8fafc; padding: 8px; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; text-align: left; border-bottom: 2px solid #e2e8f0; }
-        .payment-table td { padding: 8px; font-size: 11px; border-bottom: 1px solid #f1f5f9; }
-        .payment-table tfoot td { background: #f8fafc; border-top: 2px solid #e2e8f0; font-weight: 700; }
-        .amount-words { font-size: 12px; font-weight: 600; color: #1e40af; font-style: italic; padding: 8px; background: #f0f5ff; border-radius: 4px; text-align: center; margin: 10px 0; }
-        .footer { margin-top: 30px; padding-top: 15px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; }
-        .signature { width: 180px; text-align: center; }
-        .signature-line { border-top: 1px solid #1e293b; margin-bottom: 5px; margin-top: 40px; }
-        .signature-label { font-size: 10px; font-weight: 600; }
-        .notice { text-align: center; font-size: 9px; color: #94a3b8; margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 10px; }
-        .footer-label { font-weight: 700; color: #1e40af; }
+        #footerContent { font-family: Helvetica, Arial, sans-serif; font-size: 8.5px; color: #64748b; text-align: center; line-height: 1.5; }
+        .receipt { padding: 6px 4px; }
+        .hdr-table { width: 100%; border-collapse: collapse; }
+        .hdr-brand td { vertical-align: middle; }
+        .company { font-size: 20px; font-weight: 800; color: #1e293b; }
+        .tagline { font-size: 11px; color: #64748b; }
+        .rec-title { font-size: 20px; font-weight: 800; color: #1e40af; letter-spacing: 2px; text-align: right; text-transform: uppercase; }
+        .rec-id { font-size: 13px; color: #64748b; text-align: right; font-family: 'Courier New', monospace; font-weight: 600; }
+        .divider { border-top: 2px dashed #cbd5e1; margin: 12px 0; }
+        .sec-title { font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin: 8px 0 6px; }
+        table.meta-t { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+        table.meta-t td { padding: 2px 6px; font-size: 11.5px; }
+        .lbl { color: #64748b; font-weight: 500; width: 95px; }
+        .val { color: #1e293b; font-weight: 600; }
+        table.info-t { width: 100%; border-collapse: collapse; }
+        table.info-t td { padding: 4px 8px; font-size: 11.5px; border-bottom: 1px solid #f1f5f9; }
+        .i-lbl { color: #64748b; font-weight: 500; width: 120px; }
+        table.pay-t { width: 100%; border-collapse: collapse; }
+        table.pay-t th { background: #f8fafc; color: #64748b; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; padding: 7px 10px; border-bottom: 2px solid #e2e8f0; text-align: left; }
+        table.pay-t td { padding: 9px 10px; font-size: 12px; border-bottom: 1px solid #f1f5f9; }
+        table.pay-t td.num, table.pay-t th.num { text-align: right; }
+        table.pay-t tfoot td { background: #f8fafc; border-top: 2px solid #e2e8f0; font-weight: 800; font-size: 14px; }
+        .words { font-size: 13px; font-style: italic; font-weight: 600; color: #1e40af; text-align: center; background: #f0f5ff; padding: 7px 10px; }
+        .sign-table { width: 100%; border-collapse: collapse; margin-top: 26px; }
+        .sign-table td { width: 50%; text-align: center; vertical-align: top; }
+        .sig-line { border-top: 2px solid #1e293b; margin-bottom: 6px; margin-top: 30px; line-height: 0; }
+        .sig-label { font-size: 12px; font-weight: 600; color: #1e293b; }
+        .sig-sub { font-size: 10.5px; color: #64748b; }
+        .notice { text-align: center; font-size: 10px; color: #64748b; margin-top: 18px; border-top: 1px solid #e2e8f0; padding-top: 10px; line-height: 1.6; }
     </style>
 </head>
 <body>
-    <div class="header">
-            <table style="width:100%; border-collapse:collapse;">
-                <tr>
-                    <td style="width:80px; vertical-align:middle;">
-                        <img src="images/samana-logo.png" style="height:44px;" alt="Samana Builders logo">
-                    </td>
-                    <td style="vertical-align:middle;">
-                        <div class="company-name">Samana Builders &amp; Developers</div>
-                        <div class="company-tagline">Excellence in Real Estate</div>
-                    </td>
-                    <td style="text-align:right; vertical-align:middle;">
-                        <div class="receipt-title">OFFICIAL RECEIPT</div>
-                        <div class="receipt-number">{{ receipt.receipt_number }}</div>
-                    </td>
-                </tr>
-            </table>
-        </div>
-
-    <table class="meta-table">
-        <tr>
-            <td class="meta-label">Receipt No.</td><td class="meta-value">{{ receipt.receipt_number }}</td>
-            <td class="meta-label">Date</td><td class="meta-value">{{ receipt.receipt_date|date:"d F Y" }}</td>
-        </tr>
-        <tr>
-            <td class="meta-label">Payment Ref</td><td class="meta-value">{{ payment.payment_id }}</td>
-            <td class="meta-label">Status</td><td class="meta-value">{{ payment.get_status_display }}</td>
-        </tr>
-    </table>
-
-    <div class="section-title">Customer & Property Details</div>
-    <table class="info-table">
-        <tr><td class="info-label">Customer Name</td><td class="info-value">{{ booking.customer.full_name }}</td><td class="info-label">Booking No.</td><td class="info-value">{{ booking.booking_id }}</td></tr>
-        <tr><td class="info-label">Phone</td><td class="info-value">{{ booking.customer.phone }}</td><td class="info-label">Plot No.</td><td class="info-value">{{ booking.plot.plot_number }}</td></tr>
-        <tr><td class="info-label">CNIC</td><td class="info-value">{{ booking.customer.cnic }}</td><td class="info-label">Project</td><td class="info-value">{{ booking.plot.project.name }}</td></tr>
-    </table>
-
-    <div class="section-title">Payment Details</div>
-    <table class="payment-table">
-        <thead><tr><th>Description</th><th>Type</th><th>Method</th><th style="text-align:right;">Amount (PKR)</th></tr></thead>
-        <tbody>
+    <div class="receipt">
+        <!-- Header: logo + company | OFFICIAL RECEIPT -->
+        <table class="hdr-table">
             <tr>
-                <td>Payment against Booking {{ booking.booking_id }}</td>
-                <td>{{ payment.get_payment_type_display }}</td>
-                <td>{{ payment.get_payment_method_display }}</td>
-                <td style="text-align:right; font-weight:700;">Rs. {{ payment.amount|floatformat:0 }}</td>
+                <td class="hdr-brand" style="width:70%">
+                    <table class="hdr-table"><tr>
+                        <td style="width:60px"><img src="images/samana-logo.png" style="height:44px; width:44px;" alt="Samana Builders logo"></td>
+                        <td>
+                            <div class="company">Samana Builders &amp; Developers</div>
+                            <div class="tagline">Excellence in Real Estate</div>
+                        </td>
+                    </tr></table>
+                </td>
+                <td style="width:30%">
+                    <div class="rec-title">Official Receipt</div>
+                    <div class="rec-id">{{ receipt.receipt_number }}</div>
+                </td>
             </tr>
-        </tbody>
-        <tfoot>
-            <tr><td colspan="3" style="text-align:right;">Total Amount</td><td style="text-align:right; font-size:14px;">Rs. {{ payment.amount|floatformat:0 }}</td></tr>
-        </tfoot>
-    </table>
+        </table>
 
-    <div class="amount-words">{{ amount_words }}</div>
+        <div class="divider"></div>
 
-    <div class="footer">
-        <div class="signature"><div class="signature-line"></div><div class="signature-label">Authorized Signatory</div></div>
-        <div class="signature"><div class="signature-line"></div><div class="signature-label">Receiver's Signature</div></div>
+        <!-- Meta: left | right -->
+        <table class="meta-t">
+            <tr>
+                <td style="width:50%">
+                    <table class="meta-t">
+                        <tr><td class="lbl">Receipt No.</td><td class="val">{{ receipt.receipt_number }}</td></tr>
+                        <tr><td class="lbl">Date</td><td class="val">{{ receipt.receipt_date|date:"d F Y" }}</td></tr>
+                        <tr><td class="lbl">Financial Year</td><td class="val">
+                            {% if receipt.receipt_date.month >= 7 %}FY{{ receipt.receipt_date.year|stringformat:"s"|slice:"2:4" }}-{{ receipt.receipt_date.year|add:1|stringformat:"s"|slice:"2:4" }}
+                            {% else %}FY{{ receipt.receipt_date.year|add:-1|stringformat:"s"|slice:"2:4" }}-{{ receipt.receipt_date.year|stringformat:"s"|slice:"2:4" }}{% endif %}
+                        </td></tr>
+                        <tr><td class="lbl">Payment Ref</td><td class="val">{{ payment.payment_id }}</td></tr>
+                    </table>
+                </td>
+                <td style="width:50%">
+                    <table class="meta-t">
+                        <tr><td class="lbl">Status</td><td class="val">{{ payment.get_status_display }}</td></tr>
+                        <tr><td class="lbl">Generated By</td><td class="val">{% if receipt.generated_by %}{{ receipt.generated_by.get_full_name|default:receipt.generated_by.username }}{% else %}-{% endif %}</td></tr>
+                        <tr><td class="lbl">Generated At</td><td class="val">{{ receipt.generated_at|date:"d M Y H:i" }}</td></tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+
+        <div class="divider"></div>
+
+        <div class="sec-title">Customer &amp; Property Details</div>
+        <table class="info-t">
+            <tr><td class="i-lbl">Customer Name</td><td class="val">{{ booking.customer.full_name }}</td><td class="i-lbl">Booking No.</td><td class="val">{{ booking.booking_id }}</td></tr>
+            <tr><td class="i-lbl">Phone</td><td class="val">{{ booking.customer.phone|default:"—" }}</td><td class="i-lbl">Plot No.</td><td class="val">{{ booking.plot.plot_number }}</td></tr>
+            <tr><td class="i-lbl">CNIC</td><td class="val">{{ booking.customer.cnic|default:"—" }}</td><td class="i-lbl">Project</td><td class="val">{{ booking.plot.project.name }}</td></tr>
+            <tr><td class="i-lbl">Address</td><td class="val" colspan="3">{{ booking.customer.address|default:"—" }}</td></tr>
+        </table>
+
+        <div class="divider"></div>
+
+        <div class="sec-title">Payment Details</div>
+        <table class="pay-t">
+            <thead><tr><th>Description</th><th>Type</th><th>Method</th><th class="num">Amount (PKR)</th></tr></thead>
+            <tbody>
+                <tr>
+                    <td>
+                        {% if payment.payment_type == 'down_payment' %}Down Payment for Plot {{ booking.plot.plot_number }}
+                        {% elif payment.payment_type == 'installment' %}Installment Payment — {{ booking.plot.plot_number }}
+                        {% elif payment.payment_type == 'full_payment' %}Full Payment — {{ booking.booking_id }}
+                        {% else %}Payment against Booking {{ booking.booking_id }}{% endif %}
+                    </td>
+                    <td>{{ payment.get_payment_type_display }}</td>
+                    <td>{{ payment.get_payment_method_display }}</td>
+                    <td class="num">Rs. {{ payment.amount|floatformat:0 }}</td>
+                </tr>
+            </tbody>
+            <tfoot><tr><td colspan="3" class="num">Total Amount</td><td class="num">Rs. {{ payment.amount|floatformat:0 }}</td></tr></tfoot>
+        </table>
+
+        <div class="divider"></div>
+
+        <div class="words">{{ amount_words }}</div>
+
+        <div class="divider"></div>
+
+        <div class="sec-title">Payment Method Details</div>
+        <table class="info-t">
+            {% if payment.payment_method == 'cash' %}
+            <tr><td class="i-lbl">Received By</td><td class="val">{% if payment.method_data %} {{ payment.method_data.received_by }}{% else %}{{ payment.created_by.get_full_name|default:payment.created_by.username }}{% endif %}</td></tr>
+            {% elif payment.payment_method == 'cheque' %}
+            <tr><td class="i-lbl">Bank Name</td><td class="val">{{ payment.bank_name|default:"—" }}</td></tr>
+            <tr><td class="i-lbl">Cheque Number</td><td class="val">{{ payment.cheque_number|default:"—" }}</td></tr>
+            <tr><td class="i-lbl">Cheque Date</td><td class="val">{{ payment.cheque_date|date:"d M Y"|default:"—" }}</td></tr>
+            {% elif payment.payment_method == 'bank_transfer' %}
+            <tr><td class="i-lbl">Company Account</td><td class="val">{% if payment.method_data %}{{ payment.method_data.company_account_title|default:"—" }} ({{ payment.method_data.company_account_number|default:"—" }}){% else %}{{ payment.reference_number|default:"—" }}{% endif %}</td></tr>
+            <tr><td class="i-lbl">Reference</td><td class="val">{{ payment.reference_number|default:"—" }}</td></tr>
+            {% elif payment.payment_method == 'jazzcash' or payment.payment_method == 'easypaisa' %}
+            <tr><td class="i-lbl">Transaction ID</td><td class="val">{% if payment.method_data %}{{ payment.method_data.transaction_id|default:"—" }}{% else %}—{% endif %}</td></tr>
+            <tr><td class="i-lbl">Customer Mobile</td><td class="val">{% if payment.method_data %}{{ payment.method_data.customer_mobile|default:"—" }}{% else %}—{% endif %}</td></tr>
+            {% elif payment.payment_method == 'raast' %}
+            <tr><td class="i-lbl">Transaction ID</td><td class="val">{% if payment.method_data %}{{ payment.method_data.transaction_id|default:"—" }}{% else %}—{% endif %}</td></tr>
+            {% elif payment.payment_method == 'online' %}
+            <tr><td class="i-lbl">Transaction ID</td><td class="val">{% if payment.method_data %}{{ payment.method_data.transaction_id|default:"—" }}{% else %}—{% endif %}</td></tr>
+            {% endif %}
+            {% if payment.notes %}<tr><td class="i-lbl">Notes</td><td class="val">{{ payment.notes }}</td></tr>{% endif %}
+        </table>
+
+        <div class="divider"></div>
+
+        <!-- Signatures -->
+        <table class="sign-table">
+            <tr>
+                <td><div class="sig-line"></div><div class="sig-label">Authorized Signatory</div><div class="sig-sub">Samana Builders &amp; Developers</div></td>
+                <td><div class="sig-line"></div><div class="sig-label">Receiver's Signature</div></td>
+            </tr>
+        </table>
+
+        <div class="notice">
+            Office No. 207, 2nd Floor, Shayan Iconic Tower | Plot No. 5-A | Delhi Mercantile Cooperative Society | Karachi, Pakistan<br>
+            info@samanabuilders.com &nbsp;|&nbsp; 03206229330
+        </div>
     </div>
 
     <div id="footerContent">
-        Office No. 207, 2nd Floor, Shayan Iconic Tower, Plot No. 5-A, Delhi Mercantile Cooperative Society, Karachi, Pakistan<br>
-        0320 6229330 &nbsp;&nbsp;|&nbsp;&nbsp; info@samanabuilders.com
+        Samana Builders &amp; Developers — Official Receipt {{ receipt.receipt_number }}<br>
+        Office No. 207, 2nd Floor, Shayan Iconic Tower | Plot No. 5-A | Delhi Mercantile Cooperative Society | Karachi<br>
+        0320 6229330 &nbsp;|&nbsp; info@samanabuilders.com
     </div>
 </body>
 </html>
