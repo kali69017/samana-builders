@@ -37,11 +37,21 @@ ProjectPhaseFormSet = forms.inlineformset_factory(
 
 
 class PlotForm(forms.ModelForm):
+    SIZE_UNITS = [('marla', 'Size in Marla'), ('sqyards', 'Size in Square Yards')]
+    size_unit = forms.ChoiceField(
+        choices=SIZE_UNITS, initial='marla', label='Size Unit',
+        widget=forms.Select(attrs={'class': 'form-control'}),
+    )
+    size_value = forms.DecimalField(
+        max_digits=12, decimal_places=2, label='Size Value',
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'placeholder': ' ', 'step': '0.01'}),
+    )
+
     class Meta:
         model = Plot
         fields = ['plot_number', 'project', 'phase', 'block', 'street_number',
-                  'plot_type', 'size_marla', 'size_sqft', 'price',
-                  'holding_deposit', 'status', 'is_corner', 'is_park_facing',
+                  'plot_type', 'size_unit', 'size_value', 'size_marla', 'size_sqft',
+                  'price', 'holding_deposit', 'status', 'is_corner', 'is_park_facing',
                   'facing_direction', 'features', 'description']
         widgets = {
             'plot_number': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
@@ -50,8 +60,9 @@ class PlotForm(forms.ModelForm):
             'block': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
             'street_number': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
             'plot_type': forms.Select(attrs={'class': 'form-control'}),
-            'size_marla': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': ' ', 'step': '0.01'}),
-            'size_sqft': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': ' ', 'step': '0.01'}),
+            # Derived from size_unit + size_value — hidden so the user picks one.
+            'size_marla': forms.HiddenInput(),
+            'size_sqft': forms.HiddenInput(),
             'price': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': ' ', 'step': '0.01'}),
             'holding_deposit': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': ' ', 'step': '0.01'}),
             'status': forms.Select(attrs={'class': 'form-control'}),
@@ -62,29 +73,55 @@ class PlotForm(forms.ModelForm):
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': ' '}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # The size fields are derived from unit+value; make the hidden ones optional so
+        # the form doesn't require them directly.
+        self.fields['size_marla'].required = False
+        self.fields['size_sqft'].required = False
+        self.fields['size_value'].required = True
+
+        # Prefill unit + value from the stored size when editing a plot.
+        if self.instance and self.instance.pk:
+            if getattr(self.instance, 'size_sqft', None):
+                self.fields['size_unit'].initial = 'sqyards'
+                self.fields['size_value'].initial = round(float(self.instance.size_sqft) / 9, 2)
+            else:
+                self.fields['size_value'].initial = self.instance.size_marla
+
+        # Dynamic phase queryset: only show phases belonging to the selected project.
+        project = getattr(self.instance, 'project', None)
+        if project is not None:
+            self.fields['phase'].queryset = project.phases.all()
+        else:
+            self.fields['phase'].queryset = ProjectPhase.objects.all()
+
+    def clean_size_value(self):
+        value = self.cleaned_data.get('size_value')
+        if value is None or value <= 0:
+            raise forms.ValidationError('Size must be greater than 0')
+        return value
+
     def clean_price(self):
         price = self.cleaned_data.get('price')
         if price and price <= 0:
             raise forms.ValidationError('Price must be greater than 0')
         return price
 
-    def clean_size_marla(self):
-        size = self.cleaned_data.get('size_marla')
-        if size and size <= 0:
-            raise forms.ValidationError('Size must be greater than 0')
-        return size
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Dynamic phase queryset: only show phases belonging to the selected
-        # project (on edit the plot already has a project attached).
-        project = getattr(self.instance, 'project', None)
-        if project is not None:
-            self.fields['phase'].queryset = project.phases.all()
-        else:
-            # No project selected yet (create form) -> expose all phases so the
-            # picker isn't empty before a project is chosen.
-            self.fields['phase'].queryset = ProjectPhase.objects.all()
+    def clean(self):
+        cleaned = super().clean()
+        from decimal import Decimal as _D
+        unit = cleaned.get('size_unit')
+        value = cleaned.get('size_value')
+        if value is not None:
+            if unit == 'sqyards':
+                sqft = value * 9
+                cleaned['size_sqft'] = sqft
+                cleaned['size_marla'] = round(sqft / _D('272.25'), 2)
+            else:  # marla
+                cleaned['size_marla'] = value
+                cleaned['size_sqft'] = round(value * _D('272.25'), 2)
+        return cleaned
 
 
 class PlotBulkCreateForm(forms.Form):

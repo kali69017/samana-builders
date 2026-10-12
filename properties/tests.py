@@ -28,20 +28,40 @@ class PlotFormTest(TestCase):
             'plot_number': 'A-101',
             'project': self.project.pk,
             'plot_type': 'residential',
-            'size_marla': '5.00',
+            'size_unit': 'marla',
+            'size_value': '5.00',
             'price': '5000000',
             'holding_deposit': '0',
             'status': 'available'
         }
         form = PlotForm(data=form_data)
         self.assertTrue(form.is_valid())
-    
+        # unit + value maps to stored marla/sqft.
+        self.assertEqual(form.cleaned_data['size_marla'], Decimal('5.00'))
+
+    def test_valid_plot_form_sqyards(self):
+        form_data = {
+            'plot_number': 'A-102',
+            'project': self.project.pk,
+            'plot_type': 'residential',
+            'size_unit': 'sqyards',
+            'size_value': '90',
+            'price': '5000000',
+            'holding_deposit': '0',
+            'status': 'available'
+        }
+        form = PlotForm(data=form_data)
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data['size_sqft'], Decimal('810'))
+        self.assertEqual(form.cleaned_data['size_marla'], round(Decimal('810') / Decimal('272.25'), 2))
+
     def test_invalid_price(self):
         form_data = {
             'plot_number': 'A-101',
             'project': self.project.pk,
             'plot_type': 'residential',
-            'size_marla': '5.00',
+            'size_unit': 'marla',
+            'size_value': '5.00',
             'price': '-100',
             'holding_deposit': '0',
             'status': 'available'
@@ -131,7 +151,8 @@ class PropertyViewTest(TestCase):
             'plot_number': 'B-201',
             'project': self.project.pk,
             'plot_type': 'commercial',
-            'size_marla': '10.00',
+            'size_unit': 'marla',
+            'size_value': '10.00',
             'price': '10000000',
             'holding_deposit': '0',
             'status': 'available'
