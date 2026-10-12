@@ -20,7 +20,6 @@
         <div class="page-header no-print">
             <h1>Receipt {{ receipt.receipt_number }}</h1>
             <div class="page-actions">
-                <a href="{% url 'receipt_pdf' receipt.pk %}" class="btn btn-primary btn-sm">📥 Download PDF</a>
                 <button onclick="window.print()" class="btn btn-secondary btn-sm">🖨️ Print Receipt</button>
                 <a href="{% url 'payment_detail' payment.pk %}" class="btn btn-secondary btn-sm">← Back to Payment</a>
             </div>
