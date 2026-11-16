@@ -1,5 +1,20 @@
+import re
+
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.contrib.auth.models import User
+from decimal import Decimal
+
+# Single source of truth for size conversions (one place, reused by forms,
+# serializers, read-only previews). 1 marla = 272.25 sq ft; 1 sq yard = 9 sq ft.
+MARLA_TO_SQFT = Decimal('272.25')
+SQYARD_TO_SQFT = Decimal('9')
+
+
+def parse_phase_number(name):
+    """Return N for a society-style phase name like "Phase 3", else None."""
+    match = re.fullmatch(r'\s*Phase\s+(\d+)\s*', name or '', re.IGNORECASE)
+    return int(match.group(1)) if match else None
 
 
 class Project(models.Model):
@@ -39,16 +54,43 @@ class Project(models.Model):
 
 
 class ProjectPhase(models.Model):
+    STATUS_CHOICES = [
+        ('coming_soon', 'Coming Soon'),
+        ('booking_open', 'Booking Open'),
+        ('inactive', 'Inactive'),
+    ]
+
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='phases')
+    phase_number = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)],
+        help_text='Society-style phase number, for example 3 in Phase 3',
+    )
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
-    launch_date = models.DateField()
+    launch_date = models.DateField(null=True, blank=True)
     total_plots = models.PositiveIntegerField(default=0)
-    is_active = models.BooleanField(default=True)
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='booking_open')
     price_per_marla = models.DecimalField(max_digits=15, decimal_places=2, default=0)
-    
+
     def __str__(self):
         return f"{self.project.name} - {self.name}"
+
+    @property
+    def is_sold_out(self):
+        """Derived status: every plot in the phase is sold and capacity exists."""
+        total = self.total_plots or 0
+        if not self.pk:
+            return False
+        return total > 0 and self.plots.filter(status='sold').count() == total
+
+    class Meta:
+        ordering = ['project', 'phase_number', 'name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['project', 'phase_number'],
+                name='uniq_project_phase_number',
+            ),
+        ]
 
 
 class PlotFeature(models.Model):
@@ -81,6 +123,14 @@ class Plot(models.Model):
         ('commercial', 'Commercial'),
         ('industrial', 'Industrial'),
     ]
+
+    FACING_CHOICES = [
+        ('N', 'N'), ('S', 'S'), ('E', 'E'), ('W', 'W'),
+        ('NE', 'NE'), ('NW', 'NW'), ('SE', 'SE'), ('SW', 'SW'),
+    ]
+    # Statuses a user may set directly on create; booked/sold/cancelled are
+    # reserved for the booking/payment flow.
+    CREATABLE_STATUSES = ['available', 'on_hold', 'reserved']
     
     plot_number = models.CharField(max_length=50)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='plots')
@@ -94,7 +144,8 @@ class Plot(models.Model):
     street_number = models.CharField(max_length=20, blank=True)
     is_corner = models.BooleanField(default=False)
     is_park_facing = models.BooleanField(default=False)
-    facing_direction = models.CharField(max_length=20, blank=True, help_text="North/South/East/West")
+    facing_direction = models.CharField(max_length=20, choices=FACING_CHOICES, blank=True, help_text="North/South/East/West and diagonals")
+    price_overridden = models.BooleanField(default=False, help_text="True when the price was set manually, not auto-calculated from phase price per marla")
     features = models.ManyToManyField(PlotFeature, blank=True)
     holding_deposit = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text="Required token/holding amount")
     development_charge = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text="Development/infrastructure charge payable by the buyer")
@@ -129,8 +180,8 @@ class Plot(models.Model):
         return Decimal(self.price or 0) + self.total_charges
 
     class Meta:
-        unique_together = ['project', 'plot_number']
-        ordering = ['project', 'plot_number']
+        unique_together = ['project', 'block', 'plot_number']
+        ordering = ['project', 'block', 'plot_number']
         indexes = [
             models.Index(fields=['status']),
             models.Index(fields=['project', 'status']),

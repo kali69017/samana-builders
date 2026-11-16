@@ -1,7 +1,7 @@
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 from decimal import Decimal
-from .models import Project, Plot
+from .models import Project, ProjectPhase, Plot
 from .forms import ProjectForm, PlotForm
 
 
@@ -31,7 +31,7 @@ class PlotFormTest(TestCase):
             'size_unit': 'marla',
             'size_value': '5.00',
             'price': '5000000',
-            'holding_deposit': '0',
+            'holding_deposit': '500000',
             'status': 'available'
         }
         form = PlotForm(data=form_data)
@@ -47,7 +47,7 @@ class PlotFormTest(TestCase):
             'size_unit': 'sqyards',
             'size_value': '90',
             'price': '5000000',
-            'holding_deposit': '0',
+            'holding_deposit': '500000',
             'status': 'available'
         }
         form = PlotForm(data=form_data)
@@ -63,7 +63,7 @@ class PlotFormTest(TestCase):
             'size_unit': 'marla',
             'size_value': '5.00',
             'price': '-100',
-            'holding_deposit': '0',
+            'holding_deposit': '500000',
             'status': 'available'
         }
         form = PlotForm(data=form_data)
@@ -154,11 +154,66 @@ class PropertyViewTest(TestCase):
             'size_unit': 'marla',
             'size_value': '10.00',
             'price': '10000000',
-            'holding_deposit': '0',
+            'holding_deposit': '500000',
             'status': 'available'
         })
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Plot.objects.count(), 1)
+
+    def test_project_create_with_phases_web(self):
+        resp = self.client.post('/properties/project/create/', {
+            'name': 'Phased', 'location': 'L', 'total_plots': 10, 'status': 'booking_open',
+            'phases-TOTAL_FORMS': '2', 'phases-INITIAL_FORMS': '0',
+            'phases-MIN_NUM_FORMS': '0', 'phases-MAX_NUM_FORMS': '1000',
+            'phases-0-phase_number': '1',
+            'phases-0-name': 'Phase One', 'phases-0-total_plots': '6', 'phases-0-price_per_marla': '100',
+            'phases-0-status': 'booking_open',
+            'phases-1-phase_number': '2',
+            'phases-1-name': 'Phase Two', 'phases-1-total_plots': '4', 'phases-1-price_per_marla': '100',
+            'phases-1-status': 'booking_open',
+        })
+        self.assertEqual(resp.status_code, 302)
+        project = Project.objects.get(name='Phased')
+        self.assertEqual(project.phases.count(), 2)
+
+    def test_project_total_derived_from_phase_sum_web(self):
+        resp = self.client.post('/properties/project/create/', {
+            'name': 'Over', 'location': 'L', 'total_plots': 5, 'status': 'booking_open',
+            'phases-TOTAL_FORMS': '2', 'phases-INITIAL_FORMS': '0',
+            'phases-MIN_NUM_FORMS': '0', 'phases-MAX_NUM_FORMS': '1000',
+            'phases-0-phase_number': '1',
+            'phases-0-name': 'A', 'phases-0-total_plots': '4', 'phases-0-price_per_marla': '100',
+            'phases-0-status': 'booking_open',
+            'phases-1-phase_number': '2',
+            'phases-1-name': 'B', 'phases-1-total_plots': '2', 'phases-1-price_per_marla': '100',
+            'phases-1-status': 'booking_open',
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(Project.objects.get(name='Over').total_plots, 6)
+
+    def test_plot_create_with_phase_web(self):
+        phase = ProjectPhase.objects.create(project=self.project, phase_number=1, name='Ph',
+                                            total_plots=10, status='booking_open',
+                                            price_per_marla=100)
+        resp = self.client.post('/properties/plot/create/', {
+            'plot_number': 'C-301', 'project': self.project.pk, 'phase': phase.pk,
+            'plot_type': 'residential', 'size_unit': 'marla', 'size_value': '5',
+            'price': '500000', 'holding_deposit': '50000', 'status': 'available',
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(Plot.objects.filter(plot_number='C-301').exists())
+
+    def test_plot_duplicate_web_shows_friendly_error(self):
+        Plot.objects.create(plot_number='D-1', project=self.project, block='A', plot_type='residential',
+                            size_marla=5, size_sqft=1361.25, price=500000, holding_deposit=50000,
+                            status='available')
+        resp = self.client.post('/properties/plot/create/', {
+            'plot_number': 'D-1', 'project': self.project.pk, 'block': 'A',
+            'plot_type': 'residential', 'size_unit': 'marla', 'size_value': '5',
+            'price': '500000', 'holding_deposit': '50000', 'status': 'available',
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'already exists in this project and block')
     
     def test_plot_filter_by_status(self):
         Plot.objects.create(

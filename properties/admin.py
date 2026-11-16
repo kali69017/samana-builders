@@ -11,8 +11,8 @@ class ProjectAdmin(admin.ModelAdmin):
 
 @admin.register(ProjectPhase)
 class ProjectPhaseAdmin(admin.ModelAdmin):
-    list_display = ['name', 'project', 'launch_date', 'total_plots', 'price_per_marla', 'is_active']
-    list_filter = ['project', 'is_active', 'launch_date']
+    list_display = ['name', 'project', 'launch_date', 'total_plots', 'price_per_marla', 'status']
+    list_filter = ['project', 'status', 'launch_date']
     search_fields = ['name', 'project__name']
 
 

@@ -1,0 +1,40 @@
+{% if phase_form.id %}{{ phase_form.id }}{% endif %}
+<div class="phase-field-grid">
+    <div class="form-group">
+        <label>Phase Number *</label>
+        {{ phase_form.phase_number }}
+        {% if phase_form.phase_number.errors %}<div class="form-error">{{ phase_form.phase_number.errors.0 }}</div>{% endif %}
+    </div>
+    <div class="form-group">
+        <label>Phase Name *</label>
+        {{ phase_form.name }}
+        {% if phase_form.name.errors %}<div class="form-error">{{ phase_form.name.errors.0 }}</div>{% endif %}
+    </div>
+    <div class="form-group">
+        <label>Status</label>
+        {{ phase_form.status }}
+        {% if phase_form.status.errors %}<div class="form-error">{{ phase_form.status.errors.0 }}</div>{% endif %}
+    </div>
+    <div class="form-group">
+        <label>Launch Date</label>
+        {{ phase_form.launch_date }}
+        {% if phase_form.launch_date.errors %}<div class="form-error">{{ phase_form.launch_date.errors.0 }}</div>{% endif %}
+    </div>
+    <div class="form-group">
+        <label>Total Plots *</label>
+        {{ phase_form.total_plots }}
+        {% if phase_form.total_plots.errors %}<div class="form-error">{{ phase_form.total_plots.errors.0 }}</div>{% endif %}
+    </div>
+    <div class="form-group">
+        <label>Price / Marla *</label>
+        {{ phase_form.price_per_marla }}
+        {% if phase_form.price_per_marla.errors %}<div class="form-error">{{ phase_form.price_per_marla.errors.0 }}</div>{% endif %}
+    </div>
+    <div class="form-group phase-description">
+        <label>Description</label>
+        {{ phase_form.description }}
+        {% if phase_form.description.errors %}<div class="form-error">{{ phase_form.description.errors.0 }}</div>{% endif %}
+    </div>
+</div>
+{% if phase_form.non_field_errors %}<div class="form-error">{{ phase_form.non_field_errors.0 }}</div>{% endif %}
+{% if phase_form.DELETE.errors %}<div class="form-error">{{ phase_form.DELETE.errors.0 }}</div>{% endif %}

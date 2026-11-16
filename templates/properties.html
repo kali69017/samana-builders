@@ -104,7 +104,18 @@
                                             <tbody class="pr-collapsible">
                                                 {% for project in projects %}
                                                 <tr>
-                                                    <td><strong>{{ project.name }}</strong></td>
+                                                    <td>
+                                                        <strong>{{ project.name }}</strong>
+                                                        {% if project.phases.all %}
+                                                        <div class="phase-list" style="display:flex; flex-wrap:wrap; gap:4px; margin-top:4px;">
+                                                            {% for phase in project.phases.all %}
+                                                            <span class="badge {% if phase.is_sold_out %}badge-secondary{% else %}badge-info{% endif %}">
+                                                                {{ phase.name }}{% if phase.is_sold_out %} (Sold Out){% endif %}
+                                                            </span>
+                                                            {% endfor %}
+                                                        </div>
+                                                        {% endif %}
+                                                    </td>
                                                     <td>
                                                         {{ project.location }}
                                                     </td>

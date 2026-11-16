@@ -66,6 +66,17 @@ class ProjectPhaseViewSet(viewsets.ModelViewSet):
             qs = qs.filter(project_id=project_id)
         return qs
 
+    def destroy(self, request, *args, **kwargs):
+        phase = self.get_object()
+        from .forms import phase_has_dependents
+        if phase_has_dependents(phase):
+            return Response(
+                {'error': f'Phase "{phase.name}" already has plots or bookings and cannot be '
+                          'deleted. Move or delete those plots first.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
+
 
 class PlotViewSet(viewsets.ModelViewSet):
     queryset = Plot.objects.select_related('project', 'phase').prefetch_related('features').all()
@@ -93,7 +104,15 @@ class PlotViewSet(viewsets.ModelViewSet):
         return qs
     
     def perform_create(self, serializer):
-        plot = serializer.save()
+        from django.db import IntegrityError
+        from rest_framework import serializers as drf_serializers
+        try:
+            plot = serializer.save()
+        except IntegrityError:
+            raise drf_serializers.ValidationError(
+                {'plot_number': 'A plot with this number already exists in this project and block. '
+                                'Plot numbers must be unique per project and block.'}
+            )
         from core.models import AuditLog
         AuditLog.objects.create(
             user=self.request.user, action='create', model_name='Plot',
@@ -102,10 +121,17 @@ class PlotViewSet(viewsets.ModelViewSet):
         )
     
     def perform_update(self, serializer):
+        from django.db import IntegrityError
+        from rest_framework import serializers as drf_serializers
         old_price = None
         if self.get_object():
             old_price = self.get_object().price
-        plot = serializer.save()
+        try:
+            plot = serializer.save()
+        except IntegrityError:
+            raise drf_serializers.ValidationError(
+                {'plot_number': 'A plot with this number already exists in this project and block.'}
+            )
         # Track price change
         if old_price and old_price != plot.price:
             PriceHistory.objects.create(

@@ -1,2 +1,341 @@
-{% extends 'base_form.html' %}
+{% extends 'base.html' %}
+{% load static %}
+{% load form_errors %}
+
 {% block title %}{{ title }} - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content form-page">
+        <div class="page-header">
+            <h1>{{ title }}</h1>
+            <div class="page-actions">
+                <button class="btn btn-secondary btn-sm" onclick="history.back()">← Back</button>
+            </div>
+        </div>
+
+        {% if form.non_field_errors %}
+        <div class="alert alert-error animate-slide-right">
+            <span>⚠️</span>
+            <span>{% for e in form.non_field_errors %}{{ e }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</span>
+        </div>
+        {% endif %}
+
+        <div class="card animate-fade-up">
+            {% form_error_summary form %}
+            <form method="post" novalidate id="plot-form">
+                {% csrf_token %}
+
+                <!-- Hidden derived fields -->
+                {{ form.size_marla }}
+                {{ form.size_sqft }}
+                {{ form.price_overridden }}
+
+                <!-- ============ Basic ============ -->
+                <div class="form-section">
+                    <div class="form-section-title">Basic</div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Plot Number *</label>
+                            {{ form.plot_number }}
+                            <div class="form-error">{{ form.plot_number.errors }}</div>
+                        </div>
+                        <div class="form-group">
+                            <label for="project-search">Search Project</label>
+                            <input type="text" id="project-search" class="form-control" placeholder="Type to filter projects">
+                            <label style="margin-top:8px;">Project *</label>
+                            {{ form.project }}
+                            <div class="form-error">{{ form.project.errors }}</div>
+                        </div>
+                        <div class="form-group">
+                            <label>Phase</label>
+                            {{ form.phase }}
+                            <div class="form-hint">Only the selected project's phases are shown. Required when the project has phases.</div>
+                            <div class="form-error">{{ form.phase.errors }}</div>
+                            <div class="form-error" id="phase-error" style="display:none;"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>Block</label>
+                            {{ form.block }}
+                            <div class="form-hint">e.g. A, B, C</div>
+                            <div class="form-error">{{ form.block.errors }}</div>
+                        </div>
+                        <div class="form-group">
+                            <label>Street Number</label>
+                            {{ form.street_number }}
+                            <div class="form-error">{{ form.street_number.errors }}</div>
+                        </div>
+                        <div class="form-group">
+                            <label>Plot Type *</label>
+                            {{ form.plot_type }}
+                            <div class="form-error">{{ form.plot_type.errors }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============ Size and Price ============ -->
+                <div class="form-section">
+                    <div class="form-section-title">Size and Price</div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Size Unit *</label>
+                            {{ form.size_unit }}
+                            <div class="form-error">{{ form.size_unit.errors }}</div>
+                        </div>
+                        <div class="form-group">
+                            <label>Size Value *</label>
+                            {{ form.size_value }}
+                            <div class="form-error">{{ form.size_value.errors }}</div>
+                        </div>
+                        <div class="form-group">
+                            <label>Size (Marla) <span class="text-muted">read only</span></label>
+                            <input type="text" class="form-control" id="size-marla-preview" readonly value="{{ form.instance.size_marla|default:'' }}">
+                        </div>
+                        <div class="form-group">
+                            <label>Size (Sq Ft) <span class="text-muted">read only</span></label>
+                            <input type="text" class="form-control" id="size-sqft-preview" readonly value="{{ form.instance.size_sqft|default:'' }}">
+                        </div>
+                        <div class="form-group">
+                            <label>Price *</label>
+                            {{ form.price }}
+                            <div class="form-hint" id="price-autofill-hint">Auto-fills from the phase price per marla when possible.</div>
+                            <div class="form-error">{{ form.price.errors }}</div>
+                        </div>
+                        <div class="form-group">
+                            <label>Holding Deposit *</label>
+                            {{ form.holding_deposit }}
+                            <div class="form-error">{{ form.holding_deposit.errors }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============ Availability ============ -->
+                <div class="form-section">
+                    <div class="form-section-title">Availability</div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Status *</label>
+                            {{ form.status }}
+                            <div class="form-error">{{ form.status.errors }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============ Attributes ============ -->
+                <div class="form-section">
+                    <div class="form-section-title">Attributes</div>
+                    <div class="form-grid">
+                        <div class="form-check">{{ form.is_corner }} <label class="form-check-label" for="{{ form.is_corner.id_for_label }}">Is Corner</label></div>
+                        <div class="form-check">{{ form.is_park_facing }} <label class="form-check-label" for="{{ form.is_park_facing.id_for_label }}">Is Park Facing</label></div>
+                        <div class="form-group">
+                            <label>Facing Direction</label>
+                            {{ form.facing_direction }}
+                            <div class="form-error">{{ form.facing_direction.errors }}</div>
+                        </div>
+                        <div class="form-group">
+                            <label>Features</label>
+                            {{ form.features }}
+                            <div class="form-error">{{ form.features.errors }}</div>
+                        </div>
+                        <div class="form-group form-grid-full">
+                            <label>Description</label>
+                            {{ form.description }}
+                            <div class="form-error">{{ form.description.errors }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="btn-group form-grid-full" style="margin-top:24px; padding-top:20px; border-top:1px solid var(--border);">
+                    <button type="submit" class="btn btn-primary" id="plot-submit">
+                        <span class="spinner"></span>
+                        <span class="btn-text">{% if form.instance.pk %}Update Plot{% else %}Create Plot{% endif %}</span>
+                    </button>
+                    <a href="javascript:history.back()" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </main>
+</div>
+
+<style>
+    .form-section { margin-bottom: 22px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
+    .form-section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text-2); margin-bottom: 12px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 18px; align-items: start; }
+    .form-grid-full { grid-column: 1 / -1; }
+    .form-group label { display:block; font-size:13px; font-weight:600; color:var(--text-primary); margin-bottom:6px; }
+    .form-error ul { list-style:none; margin:4px 0 0; padding:0; color:var(--accent-red); font-size:12px; }
+    .form-grid .form-control, .form-grid select.form-control { height:42px; }
+    @media (max-width: 768px) { .form-grid { grid-template-columns: 1fr; } }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var unitSel = document.getElementById('id_size_unit');
+    var valueIn = document.getElementById('id_size_value');
+    var marlaBox = document.getElementById('size-marla-preview');
+    var sqftBox = document.getElementById('size-sqft-preview');
+    var priceIn = document.getElementById('id_price');
+    var overriddenIn = document.querySelector('input[name="price_overridden"]');
+    var phaseSel = document.getElementById('id_phase');
+    var projectSel = document.getElementById('id_project');
+    var projectSearch = document.getElementById('project-search');
+    var phaseError = document.getElementById('phase-error');
+    var phaseRequest = 0;
+    var allProjectOptions = projectSel ? Array.prototype.map.call(projectSel.options, function (option) {
+        return { value: option.value, text: option.textContent };
+    }) : [];
+    var submitBtn = document.getElementById('plot-submit');
+    var isEdit = {{ form.instance.pk|yesno:"true,false" }};
+    var initialPhaseId = phaseSel ? (phaseSel.dataset.initialPhase || '') : '';
+    var MARLA_TO_SQFT = 272.25, SQYARD_TO_SQFT = 9;
+    var phases = {};
+
+    function updateSize() {
+        var unit = unitSel ? unitSel.value : 'marla';
+        var v = parseFloat(valueIn.value);
+        if (!v || v <= 0 || !unit) { marlaBox.value = ''; sqftBox.value = ''; return; }
+        var marla, sqft;
+        if (unit === 'sqyards') { sqft = v * SQYARD_TO_SQFT; marla = sqft / MARLA_TO_SQFT; }
+        else { marla = v; sqft = v * MARLA_TO_SQFT; }
+        marlaBox.value = marla.toFixed(2);
+        sqftBox.value = sqft.toFixed(2);
+        updatePrice();
+    }
+    if (valueIn) valueIn.addEventListener('input', updateSize);
+    if (unitSel) unitSel.addEventListener('change', updateSize);
+
+    function setPhaseOptions(data, preserve) {
+        if (!phaseSel) return;
+        phases = {};
+        phaseSel.innerHTML = '';
+        var blank = document.createElement('option');
+        blank.value = '';
+        blank.textContent = '---------';
+        phaseSel.appendChild(blank);
+        (data || []).forEach(function (p) {
+            phases[p.id] = p;
+            var option = document.createElement('option');
+            option.value = p.id;
+            option.textContent = p.name;
+            phaseSel.appendChild(option);
+        });
+        if (preserve && initialPhaseId && phases[initialPhaseId]) {
+            phaseSel.value = initialPhaseId;
+        } else {
+            phaseSel.value = '';
+        }
+        phaseSel.required = (data || []).length > 0;
+        updatePrice();
+    }
+
+    function showPhaseError(message) {
+        if (phaseError) {
+            phaseError.textContent = message;
+            phaseError.style.display = '';
+        }
+    }
+    function clearPhaseError() {
+        if (phaseError) {
+            phaseError.textContent = '';
+            phaseError.style.display = 'none';
+        }
+    }
+    function loadPhases(preserve) {
+        if (!projectSel || !phaseSel) return;
+        var requestId = ++phaseRequest;
+        clearPhaseError();
+        setPhaseOptions([], false);
+        if (!projectSel.value) {
+            return;
+        }
+        fetch('/api/project-phases/?project=' + encodeURIComponent(projectSel.value))
+            .then(function (r) {
+                if (!r.ok) throw new Error('phase request failed');
+                return r.json();
+            })
+            .then(function (data) {
+                if (requestId !== phaseRequest) return;
+                setPhaseOptions(data, preserve);
+            })
+            .catch(function () {
+                if (requestId !== phaseRequest) return;
+                setPhaseOptions([], false);
+                showPhaseError('Could not load phases for this project. Try again.');
+            });
+    }
+    if (projectSel) {
+        projectSel.addEventListener('change', function () {
+            initialPhaseId = '';
+            loadPhases(false);
+        });
+    }
+    if (projectSearch && projectSel) {
+        projectSearch.addEventListener('input', function () {
+            var query = projectSearch.value.trim().toLowerCase();
+            var selected = projectSel.value;
+            var matches = allProjectOptions.filter(function (option) {
+                if (!option.value) return true;
+                if (option.value === selected) return true;
+                return query === '' || option.text.toLowerCase().indexOf(query) !== -1;
+            });
+            projectSel.innerHTML = '';
+            matches.forEach(function (option) {
+                var node = document.createElement('option');
+                node.value = option.value;
+                node.textContent = option.text;
+                projectSel.appendChild(node);
+            });
+            if (selected && matches.some(function (option) { return option.value === selected; })) {
+                projectSel.value = selected;
+            } else {
+                projectSel.value = '';
+            }
+            var hasNonBlank = matches.some(function (option) { return option.value; });
+            if (!hasNonBlank && query !== '') {
+                var none = document.createElement('option');
+                none.value = '';
+                none.textContent = 'No matching projects';
+                none.disabled = true;
+                projectSel.appendChild(none);
+            }
+        });
+    }
+
+    function updatePrice() {
+        if (!priceIn || !marlaBox) return;
+        var marla = parseFloat(marlaBox.value);
+        var phase = phases[phaseSel ? phaseSel.value : ''];
+        if (!isEdit && marla > 0 && phase && phase.price_per_marla && !priceIn.dataset.touched) {
+            priceIn.value = (phase.price_per_marla * marla).toFixed(2);
+            if (overriddenIn) overriddenIn.value = '';
+        }
+        var hint = document.getElementById('price-autofill-hint');
+        if (hint) {
+            if (isEdit) hint.textContent = 'Price is a snapshot. It is not recalculated when the phase changes.';
+            else if (priceIn.dataset.touched) hint.textContent = 'Price set manually (kept).';
+            else hint.textContent = 'Auto-fills from the phase price per marla when possible.';
+        }
+    }
+    if (priceIn) {
+        if (isEdit) priceIn.dataset.touched = '1';
+        priceIn.addEventListener('input', function () {
+            priceIn.dataset.touched = '1';
+            if (overriddenIn) overriddenIn.value = 'on';
+            updatePrice();
+        });
+    }
+    if (phaseSel) phaseSel.addEventListener('change', updatePrice);
+
+    if (submitBtn) {
+        document.getElementById('plot-form').addEventListener('submit', function () {
+            submitBtn.disabled = true;
+        });
+    }
+
+    loadPhases(true);
+    updateSize();
+});
+</script>
+{% endblock %}
