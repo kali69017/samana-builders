@@ -59,6 +59,15 @@ services:
       - media:/app/media
     restart: unless-stopped
 
+  # Notification queue worker: drains queued outbox rows continuously.
+  worker:
+    build: .
+    command: python manage.py process_notification_queue --loop --interval 10 --limit 50
+    environment: *app-env
+    depends_on:
+      - db
+    restart: unless-stopped
+
   # Notification scheduler: runs the payment reminders + overdue alerts once a day.
   # Installs deploy/crontab and runs cron in the foreground (container stays up).
   scheduler:

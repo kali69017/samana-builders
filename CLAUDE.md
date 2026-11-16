@@ -43,10 +43,9 @@ All documented Critical/High confirmed findings closed; full Django suite 935+ g
 - **F7 XSS / F4 CSRF / F8 leave-writable / N-SEC-04**: verified already fixed in current code
   (templates use `textContent`+escaping; `@require_POST` on expense mutations; Leave
   `status` read_only) and regression-guarded.
-- **Notifications (N-SEC-01/03/05)**: manual send is rate-limited per recipient (429,
-  `NOTIFICATION_MANUAL_RATE_LIMIT`); Notification Center masks PII contacts for non-admin via
-  `mask_contact`; the log is scoped to `created_by` for management. Flips NOTIF-SEC-01/03/05,
-  and EC-03/04/09/HP-09/HP-10 now assert the honest skipped/disabled contract.
+- **Notifications (N-SEC-01/03/05)**: manual sending was removed; notifications are automatic
+  only. Notification Center masks PII contacts for non-admin via `mask_contact`; the log is
+  scoped to `created_by` for management.
 - **EmailService.send** disabled-default inverted (`getattr(..., False)`).
 
 E2E notes: notifications 22 passed / 3 pre-existing confirmed-bug RED (HP-03 welcome-SMS,
@@ -89,8 +88,8 @@ delivery could not be tracked), and an unconfigured channel still reported `sent
 5. **Late-fee wording removed** from both the WhatsApp templates and the email bodies
    (`send_installment_reminder`, `send_overdue_payment_alert`) per business decision that no
    late fees are charged; the overdue template no longer sends a `late_fee` parameter.
-6. **UI** — the manual-send modal warns that free-form WhatsApp only works within 24h of the
-   customer's last message.
+6. **UI** - the Notification Center is read-only; automatic triggers prefer approved
+   WhatsApp templates, so free-form 24h-window limits do not apply to them.
 
 New file: `notifications/wa_templates.json`. Settings: 7 new `WHATSAPP_TEMPLATE_*` entries.
 No migration — `NotificationLog` already carried `provider_message_id` and `error_message`.
@@ -214,8 +213,8 @@ verified (913 tests green, transport re-verified live against SendPK):
   `OK ID:655087f4-...`.
 - A switched-off provider is recorded `skipped`, not `sent` (docs/qa finding #2):
   new `skipped` status (`notifications/0004` migration), Notification Center
-  stat + filter option, and a disabled manual send now warns instead of claiming
-  "sent successfully".
+  stat + filter option. The Notification Center is read-only; automatic triggers queue
+  work for the outbox worker.
 - Notification Center filters no longer 500 — Django raises
   `TypeError: Cannot filter a query once a slice has been taken`; the log list
   filters before slicing.

@@ -137,6 +137,15 @@ else:
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': BASE_DIR / 'db.sqlite3',
+            # SQLite only. Keeps short concurrent writes waiting instead of
+            # failing immediately, and uses WAL plus IMMEDIATE transactions so
+            # readers do not block writers and two writers do not deadlock on
+            # a shared lock upgrade.
+            'OPTIONS': {
+                'timeout': 20,
+                'init_command': 'PRAGMA journal_mode=WAL;',
+                'transaction_mode': 'IMMEDIATE',
+            },
         }
     }
 
@@ -262,6 +271,7 @@ EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() in ('1', 'true', 'yes')
+EMAIL_TIMEOUT = int(os.environ.get('EMAIL_TIMEOUT', '10'))
 
 if EMAIL_HOST and EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
     _DEFAULT_EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -318,6 +328,14 @@ SENDPK_TEMPLATE_CUSTOMER_WELCOME = os.environ.get('SENDPK_TEMPLATE_CUSTOMER_WELC
 SENDPK_TEMPLATE_PAYMENT_CONFIRMATION = os.environ.get('SENDPK_TEMPLATE_PAYMENT_CONFIRMATION', '10901')
 SENDPK_TEMPLATE_INSTALLMENT_REMINDER = os.environ.get('SENDPK_TEMPLATE_INSTALLMENT_REMINDER', '10902')
 SENDPK_TEMPLATE_OVERDUE_PAYMENT = os.environ.get('SENDPK_TEMPLATE_OVERDUE_PAYMENT', '10903')
+
+# Best-effort immediate delivery after commit. Forced off under manage.py test
+# so tests only exercise the queue and workers deterministically.
+NOTIFICATIONS_SEND_IN_THREAD = (
+    not TESTING
+    and os.environ.get('NOTIFICATIONS_SEND_IN_THREAD', 'True').lower()
+    in ('1', 'true', 'yes')
+)
 
 # ─── OpenRouter AI (LangChain) ─────────────────────────────────────────────
 # AI assistant features are powered by OpenRouter's unified chat API through

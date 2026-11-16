@@ -4,3 +4,7 @@ PATH=/usr/local/bin:/usr/bin:/bin
 # Run the installment reminders + overdue alerts every day at 08:00 server time.
 # Providers are gated by their own ENABLED env vars; when off, sends are recorded skipped.
 0 8 * * * cd /app && python manage.py send_installment_reminders --days=7 --cooldown=6 >> /var/log/samana-reminders.log 2>&1
+
+# Retry failed notification logs once a day. The queue itself is drained by the
+# long running `worker` service, not by cron.
+15 2 * * * cd /app && python manage.py retry_failed_notifications --days=2 >> /var/log/samana-retry.log 2>&1
