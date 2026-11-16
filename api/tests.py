@@ -14,6 +14,7 @@ from rest_framework.test import APITestCase
 
 from core.models import UserProfile, Lead, LeadNote, Agent, CompanySettings
 from customers.models import Customer
+from finance.models import AccountHead
 from properties.models import Project, Plot, ProjectMilestone
 from bookings.models import Booking, InstallmentPlan, Installment
 from payments.models import Payment, Receipt, Refund
@@ -25,6 +26,7 @@ class ApiBaseTestCase(APITestCase):
     def setUp(self):
         self.admin = User.objects.create_superuser('admin', 'admin@example.com', 'adminpass123')
         self.client.force_authenticate(user=self.admin)
+        self.cash = AccountHead.objects.get(system_role='cash_default')
 
         self.project = Project.objects.create(name='Samana Hills', location='Lahore', total_plots=100)
         self.plot = Plot.objects.create(
@@ -141,7 +143,10 @@ class PropertyApiTests(ApiBaseTestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
     def test_create_project(self):
-        resp = self.client.post(reverse('project-list'), {'name': 'New Project', 'location': 'Islamabad', 'total_plots': 50}, format='json')
+        # Zero phases is only allowed for Coming Soon projects (new rule).
+        resp = self.client.post(reverse('project-list'), {
+            'name': 'New Project', 'location': 'Islamabad', 'total_plots': 50, 'status': 'coming_soon',
+        }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 
     def test_list_plots_filter(self):
@@ -242,7 +247,7 @@ class InstallmentApiTests(ApiBaseTestCase):
 class PaymentApiTests(ApiBaseTestCase):
     def test_create_payment(self):
         resp = self.client.post(reverse('payment-list'), {
-            'booking': self.booking.pk, 'amount': '100000',
+            'booking': self.booking.pk, 'received_into': self.cash.pk, 'amount': '100000',
             'payment_date': date.today().isoformat(), 'payment_method': 'cash',
             'payment_type': 'installment',
         }, format='json')
@@ -311,7 +316,8 @@ class RefundApiTests(ApiBaseTestCase):
             payment_date=date.today(), status='verified', created_by=self.admin,
         )
         resp = self.client.post(reverse('refund-list'), {
-            'booking': self.booking.pk, 'amount': '50000', 'reason': 'overpayment',
+            'booking': self.booking.pk, 'paid_from': self.cash.pk, 'amount': '50000',
+            'reason': 'overpayment', 'refund_method': 'cash',
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 
@@ -454,7 +460,7 @@ class PermissionApiTests(ApiBaseTestCase):
 
     def test_sales_cannot_create_payment(self):
         resp = self.client.post(reverse('payment-list'), {
-            'booking': self.booking.pk, 'amount': '100000',
+            'booking': self.booking.pk, 'received_into': self.cash.pk, 'amount': '100000',
             'payment_date': date.today().isoformat(), 'payment_method': 'cash',
             'payment_type': 'installment',
         }, format='json')

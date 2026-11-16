@@ -157,9 +157,9 @@ def seed_phases(projects):
         (projects[1], 'Block B', date(2025, 9, 1), 70, Decimal('135000')),
     ]
     phases = []
-    for project, name, launch, total, rate in rows:
+    for index, (project, name, launch, total, rate) in enumerate(rows, start=1):
         phases.append(ProjectPhase.objects.create(
-            project=project, name=name, launch_date=launch,
+            project=project, phase_number=index, name=name, launch_date=launch,
             total_plots=total, price_per_marla=rate,
         ))
     return phases

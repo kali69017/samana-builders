@@ -233,8 +233,9 @@ class AgentFlowTests(CrmHrBase):
 class PropertyFlowTests(CrmHrBase):
 
     def test_project_create(self):
+        # Zero phases only allowed when status=coming_soon (new rule).
         resp = self.client.post(reverse('project-list'), {
-            'name': 'New Project', 'location': 'Karachi', 'total_plots': 100,
+            'name': 'New Project', 'location': 'Karachi', 'total_plots': 100, 'status': 'coming_soon',
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 
@@ -298,8 +299,9 @@ class PropertyFlowTests(CrmHrBase):
 
     def test_project_phase_create(self):
         resp = self.client.post(reverse('projectphase-list'), {
-            'project': self.project.pk, 'name': 'Phase 1',
+            'project': self.project.pk, 'phase_number': 1, 'name': 'Phase 1',
             'launch_date': date.today().isoformat(), 'total_plots': 20,
+            'price_per_marla': '100',
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 

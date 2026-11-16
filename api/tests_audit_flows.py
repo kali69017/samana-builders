@@ -20,8 +20,8 @@ from core.models import AuditLog, Agent, Lead
 from customers.models import Customer, CustomerNominee
 from expenses.models import Expense
 from finance.models import (
-    AccountTransaction, Office, ExpenseCategory, OfficeExpense, ProjectCost,
-    ProjectBudget,
+    AccountHead, AccountTransaction, Office, ExpenseCategory, OfficeExpense,
+    ProjectCost, ProjectBudget,
 )
 from hr.models import (
     Department, Designation, Employee, SalaryComponent, EmployeeSalary,
@@ -38,6 +38,7 @@ class AuditBase(APITestCase):
     def setUp(self):
         self.admin = User.objects.create_superuser('auditadmin', 'a@example.com', 'pass12345')
         self.client.force_authenticate(user=self.admin)
+        self.cash = AccountHead.objects.get(system_role='cash_default')
         self.project = Project.objects.create(name='Audit Project', location='Lahore', total_plots=50)
         self.plot = Plot.objects.create(
             plot_number='AP-001', project=self.project, size_marla=Decimal('5'),
@@ -625,7 +626,7 @@ class PaymentFlowTests(AuditBase):
         foreign_inst = plan2.installments.first()
         resp = self.client.post(reverse('payment-list'), {
             'booking': self.booking.pk, 'installment': foreign_inst.pk,
-            'amount': '10000', 'payment_date': date.today().isoformat(),
+            'amount': '10000', 'payment_date': date.today().isoformat(), 'received_into': self.cash.pk,
             'payment_method': 'cash',
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
@@ -694,14 +695,14 @@ class PaymentFlowTests(AuditBase):
     def test_payment_amount_must_be_positive(self):
         resp = self.client.post(reverse('payment-list'), {
             'booking': self.booking.pk, 'amount': '-100',
-            'payment_date': date.today().isoformat(), 'payment_method': 'cash',
+            'payment_date': date.today().isoformat(), 'received_into': self.cash.pk, 'payment_method': 'cash',
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_payment_amount_zero_rejected(self):
         resp = self.client.post(reverse('payment-list'), {
             'booking': self.booking.pk, 'amount': '0',
-            'payment_date': date.today().isoformat(), 'payment_method': 'cash',
+            'payment_date': date.today().isoformat(), 'received_into': self.cash.pk, 'payment_method': 'cash',
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
@@ -761,8 +762,8 @@ class RefundFlowTests(AuditBase):
         # A refund must be backed by verified payments on the booking.
         self.make_payment(amount='20000', status='verified')
         resp = self.client.post(reverse('refund-list'), {
-            'booking': self.booking.pk, 'amount': '10000',
-            'reason': 'overpayment',
+            'booking': self.booking.pk, 'paid_from': self.cash.pk, 'amount': '10000',
+            'reason': 'overpayment', 'refund_method': 'cash',
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertEqual(resp.data['status'], 'pending')
@@ -781,7 +782,7 @@ class RefundFlowTests(AuditBase):
 
     def test_refund_amount_positive(self):
         resp = self.client.post(reverse('refund-list'), {
-            'booking': self.booking.pk, 'amount': '-100',
+            'booking': self.booking.pk, 'paid_from': self.cash.pk, 'amount': '-100',
             'reason': 'overpayment',
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
@@ -789,8 +790,9 @@ class RefundFlowTests(AuditBase):
     def test_refund_linked_to_payment(self):
         p = self.make_payment(amount='10000', status='verified')
         resp = self.client.post(reverse('refund-list'), {
-            'booking': self.booking.pk, 'original_payment': p.pk,
-            'amount': '10000', 'reason': 'overpayment',
+            'booking': self.booking.pk, 'paid_from': self.cash.pk,
+            'original_payment': p.pk, 'amount': '10000', 'reason': 'overpayment',
+            'refund_method': 'cash',
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 
@@ -871,7 +873,7 @@ class AuditLogFlowTests(AuditBase):
     def test_payment_create_audited(self):
         resp = self.client.post(reverse('payment-list'), {
             'booking': self.booking.pk, 'amount': '10000',
-            'payment_date': date.today().isoformat(), 'payment_method': 'cash',
+            'payment_date': date.today().isoformat(), 'received_into': self.cash.pk, 'payment_method': 'cash',
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertTrue(AuditLog.objects.filter(model_name='Payment', action='create').exists())

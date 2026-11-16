@@ -17,8 +17,8 @@ from core.models import AuditLog
 from customers.models import Customer
 from expenses.models import Expense
 from finance.models import (
-    AccountTransaction, Office, ExpenseCategory, OfficeExpense, ProjectCost,
-    ProjectBudget, ProjectInvestment, Voucher,
+    AccountHead, AccountTransaction, Office, ExpenseCategory, OfficeExpense,
+    ProjectCost, ProjectBudget, ProjectInvestment, Voucher,
 )
 from notifications.models import NotificationLog
 from payments.models import Payment, Receipt, Refund, PaymentAllocation
@@ -30,6 +30,9 @@ class MoneyBase(APITestCase):
     def setUp(self):
         self.admin = User.objects.create_superuser('moneyadmin', 'm@example.com', 'pass12345')
         self.client.force_authenticate(user=self.admin)
+        self.cash = AccountHead.objects.get(system_role='cash_default')
+        self.office_expense_head = AccountHead.objects.get(system_role='office_expenses')
+        self.project_cost_head = AccountHead.objects.get(system_role='project_costs')
         self.project = Project.objects.create(name='Money Project', location='Lahore', total_plots=30)
         self.plot = Plot.objects.create(
             plot_number='MP-001', project=self.project, size_marla=Decimal('5'),
@@ -418,6 +421,8 @@ class OfficeExpenseLedgerTests(MoneyBase):
             resp = self.client.post(reverse('officeexpense-list'), {
                 'office': self.office.pk, 'category': self.cat.pk,
                 'amount': '15000', 'expense_date': date.today().isoformat(),
+                'expense_account': self.office_expense_head.pk,
+                'paid_from': self.cash.pk,
                 'payment_method': 'cash',
                 'description': 'Rent',
             }, format='json')
@@ -435,6 +440,8 @@ class OfficeExpenseLedgerTests(MoneyBase):
         resp = self.client.post(reverse('officeexpense-list'), {
             'office': self.office.pk, 'category': self.cat.pk,
             'amount': '15000', 'expense_date': date.today().isoformat(),
+            'expense_account': self.office_expense_head.pk,
+            'paid_from': self.cash.pk,
             'payment_method': 'cash', 'status': 'pending',
             'description': 'Rent',
         }, format='json')
@@ -534,6 +541,8 @@ class ProjectCostLedgerTests(MoneyBase):
         resp = self.client.post(reverse('projectcost-list'), {
             'project': self.project.pk, 'cost_category': 'labor',
             'amount': '30000', 'cost_date': date.today().isoformat(),
+            'expense_account': self.project_cost_head.pk,
+            'paid_from': self.cash.pk,
             'vendor': 'Workers', 'status': 'paid',
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
@@ -547,6 +556,8 @@ class ProjectCostLedgerTests(MoneyBase):
         resp = self.client.post(reverse('projectcost-list'), {
             'project': self.project.pk, 'cost_category': 'labor',
             'amount': '30000', 'cost_date': date.today().isoformat(),
+            'expense_account': self.project_cost_head.pk,
+            'paid_from': self.cash.pk,
             'vendor': 'Workers', 'status': 'draft',
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)

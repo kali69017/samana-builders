@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load form_errors %}
 {% block title %}{{ title }} - Samana Builders ERP{% endblock %}
 
 {% block content %}
@@ -29,11 +30,12 @@
         {% endif %}
 
         <div class="card animate-fade-up">
+            {% form_error_summary form %}
             <form method="post" novalidate class="form-grid">
                 {% csrf_token %}
 
                 {% for field in form %}
-                {% if field.field.widget.input_type == 'checkbox' %}
+                {% if field.field.widget.input_type == 'hidden' %}{{ field }}{% elif field.field.widget.input_type == 'checkbox' %}
                 <div class="form-check" style="margin-bottom:16px;">
                     {{ field }}
                     <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span style="color:var(--accent-red);">*</span>{% endif %}</label>

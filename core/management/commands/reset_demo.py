@@ -3,6 +3,7 @@ Management command to reset the database to a minimal demo set.
 Run with: python manage.py reset_demo
 """
 import os, django
+from decimal import Decimal
 from django.conf import settings
 from django.db import connection
 from django.core.management.base import BaseCommand
@@ -52,27 +53,30 @@ def _seed_demo():
         defaults={'description': 'Demo housing scheme', 'total_plots': 10},
     )
     phase, _ = ProjectPhase.objects.get_or_create(
-        project=project, name='Phase 1', launch_date=django.utils.timezone.now().date(),
-        total_plots=10, price_per_marla=django.db.models.DecimalField('900.00'),
+        project=project, name='Phase 1', phase_number=1,
+        launch_date=django.utils.timezone.now().date(),
+        total_plots=10, price_per_marla=Decimal('900.00'),
     )
 
     # Plots
     plot1, _ = Plot.objects.get_or_create(
         project=project, phase=phase, plot_number='A-001',
-        defaults={'plot_type': 'residential', 'size_marla': django.db.models.DecimalField('5'),
-                  'size_sqft': django.db.models.DecimalField('1361.25'), 'price': django.db.models.DecimalField('1000.00'),
+        defaults={'plot_type': 'residential', 'size_marla': Decimal('5'),
+                  'size_sqft': Decimal('1361.25'), 'price': Decimal('1000.00'),
                   'status': 'available', 'block': 'A', 'street_number': '1',
-                  'facing_direction': 'North', 'holding_deposit': django.db.models.DecimalField('0'),
+                  'facing_direction': 'North', 'holding_deposit': Decimal('0'),
                   'description': 'Demo plot A-001, total price Rs 1000.',
-        )
+        },
+    )
     plot2, _ = Plot.objects.get_or_create(
         project=project, phase=phase, plot_number='A-002',
-        defaults={'plot_type': 'residential', 'size_marla': django.db.models.DecimalField('5'),
-                  'size_sqft': django.db.models.DecimalField('1361.25'), 'price': django.db.models.DecimalField('1200.00'),
+        defaults={'plot_type': 'residential', 'size_marla': Decimal('5'),
+                  'size_sqft': Decimal('1361.25'), 'price': Decimal('1200.00'),
                   'status': 'available', 'block': 'A', 'street_number': '2',
-                  'facing_direction': 'South', 'holding_deposit': django.db.models.DecimalField('0'),
+                  'facing_direction': 'South', 'holding_deposit': Decimal('0'),
                   'description': 'Demo plot A-002, total price Rs 1200.',
-        )
+        },
+    )
 
     # Customers (3)
     c1, _ = Customer.objects.get_or_create(
@@ -96,19 +100,19 @@ def _seed_demo():
 
     # Bookings (2)
     b1, _ = Booking.objects.get_or_create(
-        customer=c1, plot=plot1, total_amount=django.db.models.DecimalField('1000.00'),
-        advance_paid=django.db.models.DecimalField('0'), status='active', source='walk_in',
+        customer=c1, plot=plot1, total_amount=Decimal('1000.00'),
+        advance_paid=Decimal('0'), status='active', source='walk_in',
         defaults={'notes': 'Demo booking 1 for payment testing.', 'created_by': sales_user},
     )
     b2, _ = Booking.objects.get_or_create(
-        customer=c2, plot=plot2, total_amount=django.db.models.DecimalField('1200.00'),
-        advance_paid=django.db.models.DecimalField('0'), status='active', source='website',
+        customer=c2, plot=plot2, total_amount=Decimal('1200.00'),
+        advance_paid=Decimal('0'), status='active', source='website',
         defaults={'notes': 'Demo booking 2 for payment testing.', 'created_by': sales_user},
     )
     for b in (b1, b2):
         CustomerLedgerEntry.objects.get_or_create(
             customer=b.customer, booking=b, transaction_type='booking',
-            reference_id=b.booking_id, debit=b.total_amount, credit=django.db.models.DecimalField('0'),
+            reference_id=b.booking_id, debit=b.total_amount, credit=Decimal('0'),
             running_balance=b.total_amount,
             defaults={'entry_date': django.utils.timezone.now(), 'created_by': sales_user},
         )
@@ -122,7 +126,7 @@ def _seed_demo():
             booking=booking, total_installments=total,
             installment_amount=amount, down_payment_amount=booking.advance_paid,
             start_date=django.utils.timezone.now().date(), frequency='monthly',
-            due_day=10, late_fee_per_day=django.db.models.DecimalField('100.00'),
+            due_day=10, late_fee_per_day=Decimal('100.00'),
             grace_period_days=7,
         )[0]
         for j in range(1, total + 1):
@@ -157,7 +161,7 @@ def _seed_demo():
         CustomerLedgerEntry.objects.get_or_create(
             customer=booking.customer, booking=booking,
             transaction_type='payment', reference_id=p.payment_id,
-            defaults={'debit': django.db.models.DecimalField('0'),
+            defaults={'debit': Decimal('0'),
                       'credit': amount,
                       'running_balance': booking.remaining_balance,
                       'description': f'Payment {p.payment_id} (Rs {amount}) for installment #{installment.installment_number}',
@@ -165,26 +169,26 @@ def _seed_demo():
         )
         return p
 
-    p1 = make_payment(b1, plan1.installments.get(installment_number=1), django.db.models.DecimalField('100.00'))
-    p2 = make_payment(b1, plan1.installments.get(installment_number=2), django.db.models.DecimalField('200.00'))
-    p3 = make_payment(b2, plan2.installments.get(installment_number=1), django.db.models.DecimalField('200.00'))
+    p1 = make_payment(b1, plan1.installments.get(installment_number=1), Decimal('100.00'))
+    p2 = make_payment(b1, plan1.installments.get(installment_number=2), Decimal('200.00'))
+    p3 = make_payment(b2, plan2.installments.get(installment_number=1), Decimal('200.00'))
 
     # Update installment statuses and booking advance
     plan1.installments.get(installment_number=1).status = 'partial'
-    plan1.installments.get(installment_number=1).paid_amount = django.db.models.DecimalField('100.00')
+    plan1.installments.get(installment_number=1).paid_amount = Decimal('100.00')
     plan1.installments.get(installment_number=1).paid_date = django.utils.timezone.now()
     plan1.installments.get(installment_number=1).save()
     plan1.installments.get(installment_number=2).status = 'paid'
-    plan1.installments.get(installment_number=2).paid_amount = django.db.models.DecimalField('200.00')
+    plan1.installments.get(installment_number=2).paid_amount = Decimal('200.00')
     plan1.installments.get(installment_number=2).paid_date = django.utils.timezone.now()
     plan1.installments.get(installment_number=2).save()
     plan2.installments.get(installment_number=1).status = 'paid'
-    plan2.installments.get(installment_number=1).paid_amount = django.db.models.DecimalField('200.00')
+    plan2.installments.get(installment_number=1).paid_amount = Decimal('200.00')
     plan2.installments.get(installment_number=1).paid_date = django.utils.timezone.now()
     plan2.installments.get(installment_number=1).save()
-    b1.advance_paid = django.db.models.DecimalField('300.00')
+    b1.advance_paid = Decimal('300.00')
     b1.save()
-    b2.advance_paid = django.db.models.DecimalField('200.00')
+    b2.advance_paid = Decimal('200.00')
     b2.save()
 
     # Audit log

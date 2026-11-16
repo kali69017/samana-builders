@@ -143,10 +143,10 @@ class Command(BaseCommand):
         self.stdout.write('  Creating project phases...')
         
         phases_data = [
-            {'project': gold_city, 'name': 'Phase 1', 'launch_date': date(2025, 1, 15), 'total_plots': 150, 'price_per_marla': Decimal('85000')},
-            {'project': gold_city, 'name': 'Phase 2', 'launch_date': date(2025, 6, 1), 'total_plots': 200, 'price_per_marla': Decimal('95000')},
-            {'project': silver_oak, 'name': 'Block A', 'launch_date': date(2025, 3, 1), 'total_plots': 80, 'price_per_marla': Decimal('120000')},
-            {'project': silver_oak, 'name': 'Block B', 'launch_date': date(2025, 9, 1), 'total_plots': 70, 'price_per_marla': Decimal('135000')},
+            {'project': gold_city, 'phase_number': 1, 'name': 'Phase 1', 'launch_date': date(2025, 1, 15), 'total_plots': 150, 'price_per_marla': Decimal('85000')},
+            {'project': gold_city, 'phase_number': 2, 'name': 'Phase 2', 'launch_date': date(2025, 6, 1), 'total_plots': 200, 'price_per_marla': Decimal('95000')},
+            {'project': silver_oak, 'phase_number': 1, 'name': 'Block A', 'launch_date': date(2025, 3, 1), 'total_plots': 80, 'price_per_marla': Decimal('120000')},
+            {'project': silver_oak, 'phase_number': 2, 'name': 'Block B', 'launch_date': date(2025, 9, 1), 'total_plots': 70, 'price_per_marla': Decimal('135000')},
         ]
 
         for ph_data in phases_data:
@@ -154,6 +154,7 @@ class Command(BaseCommand):
                 project=ph_data['project'],
                 name=ph_data['name'],
                 defaults={
+                    'phase_number': ph_data['phase_number'],
                     'launch_date': ph_data['launch_date'],
                     'total_plots': ph_data['total_plots'],
                     'price_per_marla': ph_data['price_per_marla'],

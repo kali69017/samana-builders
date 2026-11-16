@@ -28,6 +28,7 @@ from rest_framework.test import APITestCase
 from bookings.models import Booking, InstallmentPlan, InstallmentPlanTemplate, Reservation
 from core.models import UserProfile, Lead
 from customers.models import Customer
+from finance.models import AccountHead
 from payments.models import Payment, Receipt
 from properties.models import Plot, Project
 
@@ -36,6 +37,7 @@ class FlawFixBase(APITestCase):
     def setUp(self):
         self.admin = User.objects.create_superuser('admin', 'admin@example.com', 'adminpass123')
         self.client.force_authenticate(user=self.admin)
+        self.cash = AccountHead.objects.get(system_role='cash_default')
         self.project = Project.objects.create(name='FlawFix Project', location='Lahore', total_plots=100)
         self.plot = Plot.objects.create(
             plot_number='FF-001', project=self.project, size_marla=Decimal('5'),
@@ -211,7 +213,8 @@ class PaymentLinkTests(FlawFixBase):
         foreign_inst = other_plan.installments.first()
 
         resp = self.client.post(reverse('payment-list'), {
-            'booking': self.booking.pk, 'installment': foreign_inst.pk,
+            'booking': self.booking.pk, 'received_into': self.cash.pk,
+            'installment': foreign_inst.pk,
             'amount': '100000', 'payment_date': date.today().isoformat(),
             'payment_method': 'cash', 'payment_type': 'installment',
         }, format='json')
@@ -225,7 +228,8 @@ class PaymentLinkTests(FlawFixBase):
         plan.auto_generate()
         inst = plan.installments.first()
         resp = self.client.post(reverse('payment-list'), {
-            'booking': self.booking.pk, 'installment': inst.pk,
+            'booking': self.booking.pk, 'received_into': self.cash.pk,
+            'installment': inst.pk,
             'amount': '100000', 'payment_date': date.today().isoformat(),
             'payment_method': 'cash', 'payment_type': 'installment',
         }, format='json')

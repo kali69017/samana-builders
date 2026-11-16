@@ -60,6 +60,7 @@ class Command(BaseCommand):
             ProjectPhase.objects.get_or_create(
                 project=p, name=f'Phase {random.randint(1, 5)}',
                 defaults={
+                    'phase_number': i + 1,
                     'launch_date': date.today() - timedelta(days=random.randint(30, 700)),
                     'total_plots': random.randint(50, 300),
                     'price_per_marla': Decimal(random.randint(50000, 180000)),

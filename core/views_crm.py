@@ -156,6 +156,7 @@ def lead_note_add_view(request, pk):
 
 
 @login_required
+@transaction.atomic
 def lead_convert_view(request, pk):
     """Convert a lead into a Customer record (and optionally a portal login)."""
     lead = get_object_or_404(Lead, pk=pk)

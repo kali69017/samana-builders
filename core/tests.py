@@ -1,3 +1,6 @@
+import io
+
+from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.contrib.auth.models import User
 from datetime import date, timedelta
@@ -272,6 +275,7 @@ class BookingConfirmWhatsAppTest(TestCase):
         resp.json.return_value = {'messages': [{'id': 'wamid.CONFIRM1'}]}
         with patch('notifications.services.requests.post', return_value=resp) as mock_post:
             self.client.post(f'/bookings/{self.booking.pk}/confirm/')
+            call_command('process_notification_queue', stdout=io.StringIO())
 
         self.booking.refresh_from_db()
         self.assertEqual('confirmed', self.booking.status)

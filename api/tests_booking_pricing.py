@@ -26,7 +26,7 @@ class BookingPricingValidationTests(TestCase):
         self.admin = User.objects.create_superuser('bkadmin', 'bk@x.com', 'x')
         UserProfile.objects.create(user=self.admin, role='super_admin')
         self.project = Project.objects.create(name='QA Proj', location='Karachi')
-        self.phase = ProjectPhase.objects.create(project=self.project, name='P1', launch_date='2026-01-01')
+        self.phase = ProjectPhase.objects.create(project=self.project, phase_number=1, name='P1', launch_date='2026-01-01')
         self.plot = Plot.objects.create(
             plot_number='QA-01', project=self.project, phase=self.phase,
             size_marla='5', price='100000.00', holding_deposit='10000.00',
@@ -96,7 +96,7 @@ class BookingCancelReopenTests(TestCase):
         self.admin = User.objects.create_superuser('bkadm2', 'bk2@x.com', 'x')
         UserProfile.objects.create(user=self.admin, role='super_admin')
         self.project = Project.objects.create(name='QA Proj2', location='Lahore')
-        self.phase = ProjectPhase.objects.create(project=self.project, name='P1', launch_date='2026-01-01')
+        self.phase = ProjectPhase.objects.create(project=self.project, phase_number=1, name='P1', launch_date='2026-01-01')
         self.plot = Plot.objects.create(
             plot_number='QA-02', project=self.project, phase=self.phase,
             size_marla='5', price='50000.00', holding_deposit='5000.00', status='booked',

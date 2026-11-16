@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load form_errors %}
 
 {% block title %}{{ title }} - Samana Builders ERP{% endblock %}
 
@@ -28,10 +29,10 @@
             </div>
         </div>
 
-        {% if form.errors %}
+        {% if form.errors or formset and formset.non_form_errors %}
         <div class="alert alert-error animate-slide-right">
             <span>⚠️</span>
-            <span>Please correct the errors below.</span>
+            <span>Please correct the errors below.{% if form.non_field_errors %}<ul style="margin:6px 0 0 18px;">{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}{% if formset and formset.non_form_errors %}<ul style="margin:6px 0 0 18px;">{% for e in formset.non_form_errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}</span>
         </div>
         {% endif %}
 
@@ -39,11 +40,12 @@
 
         <!-- Form Card -->
         <div class="card animate-fade-up">
+            {% form_error_summary form %}
             <form method="post" novalidate enctype="multipart/form-data" class="form-grid">
                 {% csrf_token %}
 
                 {% for field in form %}
-                {% if field.field.widget.input_type == 'checkbox' %}
+                {% if field.field.widget.input_type == 'hidden' %}{{ field }}{% elif field.field.widget.input_type == 'checkbox' %}
                 <div class="form-check" style="margin-bottom:16px;">
                     {{ field }}
                     <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span style="color:var(--accent-red);">*</span>{% endif %}</label>
@@ -121,6 +123,25 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script>
+(function () {
+  function lockSubmit(form) {
+    var btn = form.querySelector('button[type="submit"]');
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    var text = btn.querySelector('.btn-text');
+    if (text) { text.textContent = 'Saving'; } else { btn.textContent = 'Saving'; }
+  }
+  document.querySelectorAll('form[method="post"]').forEach(function (form) {
+    form.addEventListener('submit', function () { lockSubmit(form); });
+  });
+  window.addEventListener('pageshow', function () {
+    document.querySelectorAll('button[type="submit"][disabled]').forEach(function (btn) {
+      btn.disabled = false;
+    });
+  });
+})();
+</script>
 <style>
     .floating-group { margin-bottom: 12px !important; }
     .floating-group .form-control { height: 44px !important; padding: 14px 14px 4px !important; }

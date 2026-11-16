@@ -1,0 +1,10 @@
+﻿{% if items %}
+<div class="alert alert-error animate-slide-right" role="alert">
+    <strong>Please correct the following:</strong>
+    <ul style="margin:8px 0 0 18px;">
+        {% for item in items %}
+        <li><strong>{{ item.label }}:</strong> {{ item.errors|join:", " }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}

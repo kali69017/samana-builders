@@ -16,6 +16,7 @@ from bookings.models import Booking, InstallmentPlan, Installment
 from core.models import AuditLog, Agent, CompanySettings, UserProfile
 from customers.models import Customer, CustomerNominee
 from expenses.models import Expense
+from finance.models import AccountHead
 from hr.models import Department, Designation, Employee
 from notifications.models import NotificationLog, NotificationPreference
 from payments.models import Payment, Receipt
@@ -28,6 +29,8 @@ class WebBase(APITestCase):
     def setUp(self):
         self.admin = User.objects.create_superuser('webadmin', 'w@example.com', 'pass12345')
         self.client.force_login(self.admin)
+        self.cash = AccountHead.objects.get(system_role='cash_default')
+        self.project_cost_head = AccountHead.objects.get(system_role='project_costs')
         self.project = Project.objects.create(name='Web Project', location='Lahore', total_plots=20)
         self.plot = Plot.objects.create(
             plot_number='WP-001', project=self.project, size_marla=Decimal('5'),
@@ -184,10 +187,11 @@ class WebFormSubmitTests(WebBase):
 
     def test_expense_create_form(self):
         resp = self.client.post('/expenses/create/', {
-            'project': self.project.pk, 'description': 'Form expense',
+            'project': self.project.pk, 'expense_account': self.project_cost_head.pk,
+            'paid_from': self.cash.pk, 'description': 'Form expense',
             'amount': '1500', 'expense_type': 'external',
             'paid_to': 'Vendor', 'expense_date': date.today().isoformat(),
-            'payment_method': 'bank_transfer',
+            'payment_method': 'cash',
         })
         self.assertIn(resp.status_code, (200, 302))
         self.assertTrue(Expense.objects.filter(description='Form expense').exists())
@@ -245,7 +249,7 @@ class WebFormSubmitTests(WebBase):
 
     def test_payment_create_form_marks_verified(self):
         resp = self.client.post('/payments/create/', {
-            'booking': self.booking.pk, 'amount': '20000',
+            'booking': self.booking.pk, 'received_into': self.cash.pk, 'amount': '20000',
             'payment_date': date.today().isoformat(),
             'payment_method': 'cash', 'payment_type': 'installment',
         })
@@ -257,13 +261,13 @@ class WebFormSubmitTests(WebBase):
 
     def test_payment_create_form_duplicate_blocked(self):
         self.client.post('/payments/create/', {
-            'booking': self.booking.pk, 'amount': '20000',
+            'booking': self.booking.pk, 'received_into': self.cash.pk, 'amount': '20000',
             'payment_date': date.today().isoformat(),
             'payment_method': 'cash',
         })
         count_before = Payment.objects.count()
         self.client.post('/payments/create/', {
-            'booking': self.booking.pk, 'amount': '20000',
+            'booking': self.booking.pk, 'received_into': self.cash.pk, 'amount': '20000',
             'payment_date': date.today().isoformat(),
             'payment_method': 'cash',
         })
@@ -286,7 +290,8 @@ class WebFormSubmitTests(WebBase):
         plan2.auto_generate()
         foreign_inst = plan2.installments.first()
         resp = self.client.post('/payments/create/', {
-            'booking': self.booking.pk, 'installment': foreign_inst.pk,
+            'booking': self.booking.pk, 'received_into': self.cash.pk,
+            'installment': foreign_inst.pk,
             'amount': '5000', 'payment_date': date.today().isoformat(),
             'payment_method': 'cash',
         })
