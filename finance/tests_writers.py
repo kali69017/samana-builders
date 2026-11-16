@@ -63,7 +63,7 @@ class WriterMigrationTest(TestCase):
         self.assertTrue(voucher.is_locked)
         self._assert_balanced(voucher)
 
-        cash = AccountHead.objects.get(code='1000')
+        cash = AccountHead.objects.get(system_role='cash_default')
         self.assertTrue(any(
             line.account_head_id == cash.pk and line.debit == Decimal('100000')
             for line in voucher.lines.all()
@@ -78,7 +78,7 @@ class WriterMigrationTest(TestCase):
         self.assertEqual(voucher.voucher_type, 'BR')
         self._assert_balanced(voucher)
 
-        bank = AccountHead.objects.get(code='1010')
+        bank = AccountHead.objects.get(system_role='bank_default')
         self.assertTrue(any(
             line.account_head_id == bank.pk and line.debit == Decimal('250000')
             for line in voucher.lines.all()
@@ -118,7 +118,7 @@ class WriterMigrationTest(TestCase):
         self.assertFalse(AccountTransaction.objects.filter(
             reference_type='OfficeExpense', reference_id=expense.pk).exists())
 
-        cash = AccountHead.objects.get(code='1000')
+        cash = AccountHead.objects.get(system_role='cash_default')
         self.assertTrue(any(
             line.account_head_id == cash.pk and line.credit == Decimal('25000')
             for line in voucher.lines.all()
@@ -133,7 +133,7 @@ class WriterMigrationTest(TestCase):
         expense.post_to_ledger()
         voucher = self._voucher_for('OfficeExpense', expense.pk)
         self.assertEqual(voucher.voucher_type, 'BP')
-        bank = AccountHead.objects.get(code='1010')
+        bank = AccountHead.objects.get(system_role='bank_default')
         self.assertTrue(any(
             line.account_head_id == bank.pk and line.credit == Decimal('25000')
             for line in voucher.lines.all()
@@ -191,8 +191,8 @@ class WriterMigrationTest(TestCase):
 class VoucherAuditLogTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_superuser('sup', 'sup@example.com', 'pass12345')
-        self.cash = AccountHead.objects.create(code='1000', name='Cash', nature='debit')
-        self.capital = AccountHead.objects.create(code='3000', name='Capital', nature='credit')
+        self.cash = AccountHead.objects.get(system_role='cash_default')
+        self.capital = AccountHead.objects.get(code='3.1')
         self.voucher = Voucher.objects.create(
             voucher_type='JV', date=date.today(), created_by=self.user,
         )

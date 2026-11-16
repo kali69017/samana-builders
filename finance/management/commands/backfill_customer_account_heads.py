@@ -11,7 +11,7 @@ without writing anything.
 from django.core.management.base import BaseCommand
 
 from customers.models import Customer
-from finance.accounting import RECEIVABLE, receivable_head
+from finance.accounting import receivable_head
 
 
 class Command(BaseCommand):
@@ -36,9 +36,9 @@ class Command(BaseCommand):
 
         if options['dry_run']:
             from finance.models import AccountHead
-            head = AccountHead.objects.filter(code=RECEIVABLE[0]).first()
+            head = AccountHead.objects.filter(system_role='receivable').first()
             target = (f'{head.code} {head.name}' if head
-                      else f'{RECEIVABLE[0]} {RECEIVABLE[1]} (not yet created)')
+                      else 'Accounts Receivable (not yet created)')
             self.stdout.write(self.style.WARNING(
                 f'DRY RUN: would link {count} customer(s) to {target}.'))
             return

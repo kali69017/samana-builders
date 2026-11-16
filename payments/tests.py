@@ -7,11 +7,13 @@ from .forms import PaymentForm
 from customers.models import Customer
 from properties.models import Project, Plot
 from bookings.models import Booking
+from finance.models import AccountHead
 
 
 class PaymentFormTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user('testuser', 'test@example.com', 'testpass123')
+        self.cash = AccountHead.objects.get(system_role='cash_default')
         self.customer = Customer.objects.create(
             first_name='Ahmed', last_name='Khan',
             phone='+92-300-1234567', cnic='35202-1234567-1',
@@ -30,6 +32,7 @@ class PaymentFormTest(TestCase):
     def test_valid_payment_form(self):
         form_data = {
             'booking': self.booking.pk,
+            'received_into': self.cash.pk,
             'amount': '100000',
             'payment_date': date.today().isoformat(),
             'payment_method': 'cash',
@@ -56,6 +59,7 @@ class PaymentViewTest(TestCase):
         self.client = Client()
         self.user = User.objects.create_user('testuser', 'test@example.com', 'testpass123', is_superuser=True)
         self.client.login(username='testuser', password='testpass123')
+        self.cash = AccountHead.objects.get(system_role='cash_default')
         self.customer = Customer.objects.create(
             first_name='Ahmed', last_name='Khan',
             phone='+92-300-1234567', cnic='35202-1234567-1',
@@ -83,6 +87,7 @@ class PaymentViewTest(TestCase):
     def test_payment_create_post(self):
         response = self.client.post('/payments/create/', {
             'booking': self.booking.pk,
+            'received_into': self.cash.pk,
             'amount': '100000',
             'payment_date': date.today().isoformat(),
             'payment_method': 'cash',

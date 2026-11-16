@@ -133,9 +133,10 @@
         </div>
 
         <!-- Charts JS (chart.js is already loaded by base.html) -->
+        {{ monthly_chart_data|json_script:"monthly-chart-data" }}
         <script>
         document.addEventListener('DOMContentLoaded', function() {
-            const chartData = {{ monthly_chart_data|safe }};
+            const chartData = JSON.parse(document.getElementById('monthly-chart-data').textContent);
             if (chartData.length > 0) {
                 const ctx = document.getElementById('revenue-chart');
                 if (ctx) {

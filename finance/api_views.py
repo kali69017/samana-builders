@@ -77,6 +77,21 @@ class ExpenseCategoryViewSet(viewsets.ModelViewSet):
     serializer_class = ExpenseCategorySerializer
     permission_classes = [IsFinanceOrAbove]
 
+    def destroy(self, request, *args, **kwargs):
+        category = self.get_object()
+        from .views import expense_category_usage
+        used = expense_category_usage(category)
+        if used:
+            return Response(
+                {'error': f'This category is used by {used} records. Deactivate it instead.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            category.delete()
+        except Exception as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class OfficeExpenseViewSet(viewsets.ModelViewSet):
     queryset = OfficeExpense.objects.select_related('office', 'category').all()
@@ -97,6 +112,15 @@ class OfficeExpenseViewSet(viewsets.ModelViewSet):
         expense = serializer.save(created_by=self.request.user)
         if expense.status == 'paid':
             expense.post_to_ledger()
+
+    def destroy(self, request, *args, **kwargs):
+        expense = self.get_object()
+        if Voucher.objects.filter(reference_type='OfficeExpense', reference_id=expense.pk).exists():
+            return Response(
+                {'error': 'An office expense with a posted voucher cannot be deleted.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
@@ -153,6 +177,15 @@ class ProjectCostViewSet(viewsets.ModelViewSet):
         cost = serializer.save(created_by=self.request.user)
         if cost.status == 'paid':
             cost.post_to_ledger()
+
+    def destroy(self, request, *args, **kwargs):
+        cost = self.get_object()
+        if Voucher.objects.filter(reference_type='ProjectCost', reference_id=cost.pk).exists():
+            return Response(
+                {'error': 'A project cost with a posted voucher cannot be deleted.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
@@ -229,14 +262,24 @@ class AccountHeadViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         head = self.get_object()
+        if head.parent_id is None:
+            return Response(
+                {'error': 'Level 1 root accounts cannot be deleted.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if head.children.exists():
             return Response(
                 {'error': 'Cannot delete an account head that has children.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if head.voucher_lines.filter(voucher__status='posted').exists():
+        if head.voucher_lines.exists():
             return Response(
-                {'error': 'Cannot delete an account head that has posted voucher lines.'},
+                {'error': 'Cannot delete an account head that has ledger entries.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if head.system_role:
+            return Response(
+                {'error': 'A system account cannot be deleted.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return super().destroy(request, *args, **kwargs)
@@ -274,18 +317,10 @@ class VoucherViewSet(viewsets.ModelViewSet):
         return super().update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
-        voucher = self.get_object()
-        if voucher.reference_id is not None:
-            return Response(
-                {'error': 'Auto-generated vouchers cannot be deleted.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if not voucher.is_editable:
-            return Response(
-                {'error': 'Posted and locked vouchers cannot be deleted.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        return super().destroy(request, *args, **kwargs)
+        return Response(
+            {'error': 'Vouchers cannot be deleted. Reverse them with a new voucher instead.'},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
 
     @action(detail=True, methods=['post'])
     def post(self, request, pk=None):

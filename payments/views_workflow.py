@@ -5,11 +5,13 @@ manage refunds) from the monolithic ``core/views.py``.
 """
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db import transaction
+from django.db import IntegrityError, transaction
+from django.views.decorators.cache import never_cache
 from django.db.models import Sum
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 import logging
+from datetime import timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -208,19 +210,58 @@ def refunds_view(request):
     return render(request, 'refunds.html', context)
 
 
+def _find_existing_refund(idempotency_key):
+    if not idempotency_key:
+        return None
+    return Refund.objects.filter(idempotency_key=idempotency_key).first()
+
+
 @login_required
 @finance_or_above
+@never_cache
 def refund_create_view(request):
+    from uuid import uuid4
     if request.method == 'POST':
         form = RefundForm(request.POST, request.FILES)
         if form.is_valid():
-            refund = form.save()
+            idem_key = form.cleaned_data.get('idempotency_key')
+            existing = _find_existing_refund(idem_key)
+            if existing:
+                messages.info(request, 'This refund was already saved.')
+                return redirect('refunds')
+            refund = form.save(commit=False)
+            recent_duplicate = Refund.objects.filter(
+                booking=refund.booking,
+                amount=refund.amount,
+                reason=refund.reason,
+                status='pending',
+                created_at__gte=timezone.now() - timedelta(seconds=60),
+            ).exists()
+            if recent_duplicate:
+                form.add_error(
+                    None,
+                    'A similar pending refund was created in the last 60 seconds. '
+                    'Check the refund list before creating another one.',
+                )
+                return render(request, 'refund_form.html', {
+                    'form': form, 'title': 'New Refund',
+                })
+            refund.idempotency_key = idem_key or None
+            try:
+                with transaction.atomic():
+                    refund.save()
+            except IntegrityError:
+                existing = _find_existing_refund(idem_key)
+                if existing:
+                    messages.info(request, 'This refund was already saved.')
+                    return redirect('refunds')
+                raise
             _log(request, 'create', 'Refund', refund.pk,
                  f'Created refund of {refund.amount} for booking {refund.booking.booking_id}')
             messages.success(request, 'Refund request created successfully!')
             return redirect('refunds')
     else:
-        form = RefundForm()
+        form = RefundForm(initial={'idempotency_key': uuid4().hex})
     return render(request, 'refund_form.html', {'form': form, 'title': 'New Refund'})
 
 

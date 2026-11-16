@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load form_errors %}
 
 {% block title %}{{ title }} - Samana Builders ERP{% endblock %}
 
@@ -22,6 +23,8 @@
                 <a href="{% url 'expenses' %}" class="btn btn-secondary btn-sm">← Back to Expenses</a>
             </div>
         </div>
+
+        {% form_error_summary form %}
 
         {% if form.non_field_errors %}
         <div class="alert alert-error animate-slide-right">
@@ -72,6 +75,33 @@
                         <label for="{{ form.expense_date.id_for_label }}">Expense Date <span style="color:var(--accent-red);">*</span></label>
                         {% if form.expense_date.errors %}
                         <div class="form-error">{% for error in form.expense_date.errors %}{{ error }}{% endfor %}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="floating-group">
+                        {{ form.expense_account }}
+                        <label for="{{ form.expense_account.id_for_label }}">Expense account <span style="color:var(--accent-red);">*</span></label>
+                        {% if form.expense_account.errors %}
+                        <div class="form-error">{% for error in form.expense_account.errors %}{{ error }}{% endfor %}</div>
+                        {% endif %}
+                    </div>
+                    <div class="floating-group">
+                        {{ form.paid_from }}
+                        <label for="{{ form.paid_from.id_for_label }}">Paid from cash or bank</label>
+                        {% if form.paid_from.errors %}
+                        <div class="form-error">{% for error in form.paid_from.errors %}{{ error }}{% endfor %}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="floating-group">
+                        {{ form.payment_method }}
+                        <label for="{{ form.payment_method.id_for_label }}">Payment Method <span style="color:var(--accent-red);">*</span></label>
+                        {% if form.payment_method.errors %}
+                        <div class="form-error">{% for error in form.payment_method.errors %}{{ error }}{% endfor %}</div>
                         {% endif %}
                     </div>
                 </div>

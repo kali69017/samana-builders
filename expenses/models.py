@@ -29,6 +29,16 @@ class Expense(models.Model):
         'properties.Project', on_delete=models.CASCADE,
         related_name='expenses', verbose_name='Project',
     )
+    expense_account = models.ForeignKey(
+        'finance.AccountHead', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='expenses_posted_to',
+        help_text='Expense account under the Expenses root.',
+    )
+    paid_from = models.ForeignKey(
+        'finance.AccountHead', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='expenses_paid_from',
+        help_text='Cash or bank account used to pay this expense.',
+    )
     description = models.TextField()
     amount = models.DecimalField(max_digits=15, decimal_places=2)
     expense_type = models.CharField(max_length=20, choices=EXPENSE_TYPES, default='internal')
@@ -65,6 +75,11 @@ class Expense(models.Model):
     )
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name='Approved At')
 
+    def delete(self, *args, **kwargs):
+        from finance.accounting import block_source_delete
+        block_source_delete(self, 'Expense')
+        return super().delete(*args, **kwargs)
+
     def __str__(self):
         return f"{self.expense_type.title()} · {self.amount} — {self.project.name}"
 
@@ -77,28 +92,9 @@ class Expense(models.Model):
         return self.status in ('approved', 'paid') and not self.status == 'rejected'
 
     def post_to_ledger(self, user=None):
-        """Post this expense to the ledger exactly once (idempotent).
-
-        Spec §3.16: posts a Cash/Bank Payment voucher against the Project Costs
-        head, resolving Cash vs Bank from ``payment_method``. Keyed on
-        ``reference_type='Expense'`` + ``reference_id=self.pk``.
-        """
-        from decimal import Decimal
-        from finance.accounting import (
-            cash_bank_head, post_source_voucher, project_cost_head, voucher_type_for,
-        )
-        return post_source_voucher(
-            reference_type='Expense', reference_id=self.pk,
-            voucher_type=voucher_type_for(self.payment_method, 'payment'),
-            date=self.expense_date,
-            narration=f"{self.project.name} - {self.get_expense_type_display()}: "
-                      f"{self.description or self.paid_to}",
-            lines=[
-                (project_cost_head(), self.amount, Decimal('0.00')),
-                (cash_bank_head(self.payment_method), Decimal('0.00'), self.amount),
-            ],
-            user=user or self.created_by,
-        )
+        """Post through the central finance posting service (idempotent)."""
+        from finance.accounting import post_expense
+        return post_expense(self)
 
     def is_posted_to_ledger(self):
         from finance.models import Voucher

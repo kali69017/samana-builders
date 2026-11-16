@@ -87,9 +87,20 @@ class Booking(models.Model):
     ]
     
     booking_id = models.CharField(max_length=20, unique=True, editable=False)
+    idempotency_key = models.CharField(max_length=64, unique=True, null=True, blank=True)
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='bookings')
     plot = models.ForeignKey(Plot, on_delete=models.CASCADE, related_name='bookings')
     group = models.ForeignKey(BookingGroup, on_delete=models.SET_NULL, null=True, blank=True, related_name='bookings')
+    receivable_account = models.ForeignKey(
+        'finance.AccountHead', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='bookings_receivable',
+        help_text='Accounts receivable control account for this booking.',
+    )
+    revenue_account = models.ForeignKey(
+        'finance.AccountHead', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='bookings_revenue',
+        help_text='Revenue account credited when the booking posts.',
+    )
     booking_date = models.DateField(auto_now_add=True)
     total_amount = models.DecimalField(max_digits=15, decimal_places=2)
     advance_paid = models.DecimalField(max_digits=15, decimal_places=2, default=0)
@@ -103,6 +114,11 @@ class Booking(models.Model):
     cancellation_fee = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     possession_date = models.DateField(null=True, blank=True)
     is_possession_taken = models.BooleanField(default=False)
+    delivery_date = models.DateField(null=True, blank=True)
+    delivered_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='bookings_delivered',
+    )
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -141,6 +157,76 @@ class Booking(models.Model):
         # not before.
         if self.status == 'confirmed' and (original is None or original.status != 'confirmed'):
             self.customer.link_account_head()
+
+    def post_to_ledger(self):
+        """Bookings do not post at creation. Delivery posts the liability release."""
+        return None
+
+    @property
+    def is_delivered(self):
+        return self.delivery_date is not None
+
+    @property
+    def customer_advances_held(self):
+        """Posted customer money held for this booking, net of posted refunds."""
+        if not self.pk:
+            return 0
+        from finance.accounting import booking_net_advances
+        return booking_net_advances(self, as_of=self.delivery_date)
+
+    def mark_delivered(self, user=None, delivery_date=None):
+        """Record delivery and release the booking's customer advances to revenue.
+
+        Only an active or completed booking can be delivered, and only once.
+        The status change and the ledger journal are one transaction.
+        """
+        from datetime import date
+        from django.core.exceptions import ValidationError
+        from django.db import transaction
+        from django.utils import timezone
+
+        delivery_date = delivery_date or timezone.localdate()
+        if isinstance(delivery_date, str):
+            delivery_date = date.fromisoformat(delivery_date)
+        if delivery_date > timezone.localdate():
+            raise ValidationError({'delivery_date': 'Delivery date cannot be in the future.'})
+
+        with transaction.atomic():
+            booking = Booking.objects.select_for_update().select_related(
+                'customer', 'plot'
+            ).get(pk=self.pk)
+            if booking.delivery_date is not None:
+                raise ValidationError('This booking has already been delivered.')
+            if booking.status not in ('active', 'completed'):
+                raise ValidationError(
+                    'Only an active or completed booking can be marked as delivered.'
+                )
+            booking.delivery_date = delivery_date
+            booking.delivered_by = user
+            booking.status = 'completed'
+            booking.save(update_fields=[
+                'delivery_date', 'delivered_by', 'status', 'updated_at',
+            ])
+            from finance.accounting import post_booking_delivery
+            post_booking_delivery(booking, user=user)
+        self.refresh_from_db()
+        return self
+
+    def delete(self, *args, **kwargs):
+        from django.core.exceptions import ValidationError
+        from finance.models import Voucher
+        if self.pk and Voucher.objects.filter(
+                reference_type='Booking', reference_id=self.pk).exists():
+            raise ValidationError('A booking with a posted voucher cannot be deleted.')
+        payment_ids = list(self.payments.values_list('pk', flat=True))
+        if payment_ids and Voucher.objects.filter(
+                reference_type='Payment', reference_id__in=payment_ids).exists():
+            raise ValidationError('A booking with posted payment vouchers cannot be deleted.')
+        refund_ids = list(self.refunds.values_list('pk', flat=True))
+        if refund_ids and Voucher.objects.filter(
+                reference_type='Refund', reference_id__in=refund_ids).exists():
+            raise ValidationError('A booking with posted refund vouchers cannot be deleted.')
+        return super().delete(*args, **kwargs)
     
     def __str__(self):
         return f"{self.booking_id} - {self.customer.full_name}"
@@ -436,6 +522,11 @@ class Installment(models.Model):
     ]
     
     plan = models.ForeignKey(InstallmentPlan, on_delete=models.CASCADE, related_name='installments')
+    receivable_account = models.ForeignKey(
+        'finance.AccountHead', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='installments_receivable',
+        help_text='Accounts receivable account linked to this installment.',
+    )
     installment_number = models.PositiveIntegerField()
     due_date = models.DateField()
     amount = models.DecimalField(max_digits=15, decimal_places=2)
@@ -447,6 +538,16 @@ class Installment(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
+    def save(self, *args, **kwargs):
+        if self.receivable_account_id is None and self.plan_id:
+            booking = self.plan.booking
+            if booking.receivable_account_id:
+                self.receivable_account = booking.receivable_account
+            else:
+                from finance.accounting import receivable_head
+                self.receivable_account = receivable_head()
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"Installment {self.installment_number} - {self.plan.booking.booking_id}"
     

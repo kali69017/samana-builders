@@ -15,8 +15,9 @@ Writers migrated (all money movements now post vouchers):
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
-from django.db import models, transaction
+from django.db import connection, models, transaction
 from django.db.models import Q, Sum
+from django.db.models.functions import Lower
 from django.utils import timezone
 from django.contrib.auth.models import User
 
@@ -130,6 +131,11 @@ class ExpenseCategory(models.Model):
     class Meta:
         ordering = ['category_type', 'name']
         verbose_name_plural = 'Expense Categories'
+        constraints = [
+            models.UniqueConstraint(
+                Lower('name'), name='uniq_expense_category_name_ci',
+            ),
+        ]
 
 
 class OfficeExpense(models.Model):
@@ -148,7 +154,20 @@ class OfficeExpense(models.Model):
     ]
 
     office = models.ForeignKey(Office, on_delete=models.CASCADE, related_name='expenses')
-    category = models.ForeignKey(ExpenseCategory, on_delete=models.SET_NULL, null=True, related_name='expenses')
+    category = models.ForeignKey(
+        ExpenseCategory, on_delete=models.PROTECT, null=True, blank=True,
+        related_name='expenses',
+    )
+    expense_account = models.ForeignKey(
+        'finance.AccountHead', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='office_expenses_posted_to',
+        help_text='Expense account under the Expenses root.',
+    )
+    paid_from = models.ForeignKey(
+        'finance.AccountHead', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='office_expenses_paid_from',
+        help_text='Cash or bank account used to pay this expense.',
+    )
     amount = models.DecimalField(max_digits=15, decimal_places=2)
     expense_date = models.DateField()
     paid_to = models.CharField(max_length=200, blank=True)
@@ -159,6 +178,11 @@ class OfficeExpense(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='office_expenses_created')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def delete(self, *args, **kwargs):
+        from .accounting import block_source_delete
+        block_source_delete(self, 'OfficeExpense')
+        return super().delete(*args, **kwargs)
 
     def __str__(self):
         return f"{self.office.name} - {self.category.name if self.category else 'Expense'} - {self.amount}"
@@ -189,28 +213,9 @@ class OfficeExpense(models.Model):
         return voucher.total_debit != self.amount
 
     def post_to_ledger(self):
-        """Idempotently post a Cash/Bank Payment voucher for this expense.
-
-        Replaces the legacy single-entry ``AccountTransaction`` write (spec
-        §3.7) — nothing is written to ``AccountTransaction`` any more. Keyed on
-        ``(reference_type, reference_id)`` so re-posting never duplicates.
-        """
-        from .accounting import (
-            cash_bank_head, office_expense_head, post_source_voucher,
-            voucher_type_for,
-        )
-        return post_source_voucher(
-            reference_type='OfficeExpense', reference_id=self.pk,
-            voucher_type=voucher_type_for(self.payment_method, 'payment'),
-            date=self.expense_date,
-            narration=f'Office expense - {self.office.name}'
-                      f"{f' - {self.category.name}' if self.category else ''}",
-            lines=[
-                (office_expense_head(), self.amount, Decimal('0.00')),
-                (cash_bank_head(self.payment_method), Decimal('0.00'), self.amount),
-            ],
-            user=self.created_by,
-        )
+        """Post through the central finance posting service (idempotent)."""
+        from .accounting import post_office_expense
+        return post_office_expense(self)
 
     class Meta:
         ordering = ['-expense_date', '-created_at']
@@ -278,6 +283,16 @@ class ProjectCost(models.Model):
 
     project = models.ForeignKey('properties.Project', on_delete=models.CASCADE, related_name='costs')
     cost_category = models.CharField(max_length=20, choices=COST_CATEGORY_CHOICES, default='other')
+    expense_account = models.ForeignKey(
+        'finance.AccountHead', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='project_costs_posted_to',
+        help_text='Expense account under the Expenses root.',
+    )
+    paid_from = models.ForeignKey(
+        'finance.AccountHead', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='project_costs_paid_from',
+        help_text='Cash or bank account used to pay this cost.',
+    )
     amount = models.DecimalField(max_digits=15, decimal_places=2)
     cost_date = models.DateField()
     vendor = models.CharField(max_length=200, blank=True)
@@ -291,6 +306,11 @@ class ProjectCost(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='project_costs_created')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def delete(self, *args, **kwargs):
+        from .accounting import block_source_delete
+        block_source_delete(self, 'ProjectCost')
+        return super().delete(*args, **kwargs)
 
     def __str__(self):
         return f"{self.project.name} - {self.get_cost_category_display()} - {self.amount}"
@@ -316,29 +336,9 @@ class ProjectCost(models.Model):
         return voucher.total_debit != self.amount
 
     def post_to_ledger(self):
-        """Post a Payment voucher, but only once the cost is Paid (spec §3.9).
-
-        Fires exactly at the Paid transition and nowhere else; idempotent via the
-        ``(reference_type, reference_id)`` key. No ``AccountTransaction`` write.
-        """
-        if self.status != 'paid':
-            return None
-        from .accounting import (
-            cash_bank_head, post_source_voucher, project_cost_head,
-            voucher_type_for,
-        )
-        method = self.payment_method
-        return post_source_voucher(
-            reference_type='ProjectCost', reference_id=self.pk,
-            voucher_type=voucher_type_for(method, 'payment'),
-            date=self.cost_date,
-            narration=f'{self.project.name} - {self.get_cost_category_display()}',
-            lines=[
-                (project_cost_head(), self.amount, Decimal('0.00')),
-                (cash_bank_head(method), Decimal('0.00'), self.amount),
-            ],
-            user=self.created_by,
-        )
+        """Post through the central finance posting service (idempotent)."""
+        from .accounting import post_project_cost
+        return post_project_cost(self)
 
     class Meta:
         ordering = ['-cost_date', '-created_at']
@@ -380,23 +380,64 @@ NATURE_CHOICES = [
     ('credit', 'Credit Normal'),
 ]
 
+ACCOUNT_KIND_CHOICES = [
+    ('normal', 'Normal'),
+    ('cash', 'Cash'),
+    ('bank', 'Bank'),
+]
+
+SYSTEM_ROLE_CHOICES = [
+    ('cash_default', 'Cash default'),
+    ('bank_default', 'Bank default'),
+    ('receivable', 'Accounts receivable'),
+    ('project_costs', 'Project costs'),
+    ('office_expenses', 'Office expenses'),
+    ('salaries', 'Salaries'),
+    ('customer_advances', 'Customer advances'),
+    ('revenue', 'Revenue'),
+    ('refunds', 'Refunds'),
+    ('payable', 'Accounts payable'),
+]
+
+ROOT_NATURES = {
+    '1': 'debit',
+    '2': 'credit',
+    '3': 'credit',
+    '4': 'credit',
+    '5': 'debit',
+}
+
 
 class AccountHead(models.Model):
     """Chart-of-accounts head. Tree up to 4 levels; only leaves are postable."""
 
-    code = models.CharField(max_length=20, unique=True)
+    code = models.CharField(max_length=20, unique=True, editable=False)
     name = models.CharField(max_length=150)
     parent = models.ForeignKey(
-        'self', on_delete=models.CASCADE, null=True, blank=True,
+        'self', on_delete=models.PROTECT, null=True, blank=True,
         related_name='children',
     )
     nature = models.CharField(max_length=10, choices=NATURE_CHOICES, default='debit')
+    account_kind = models.CharField(
+        max_length=10, choices=ACCOUNT_KIND_CHOICES, default='normal',
+    )
+    system_role = models.CharField(
+        max_length=30, choices=SYSTEM_ROLE_CHOICES, null=True, blank=True,
+        help_text='Stable role used by automated finance postings.',
+    )
     is_leaf = models.BooleanField(default=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['code']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['system_role'],
+                condition=Q(system_role__isnull=False),
+                name='uniq_account_system_role',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.code} - {self.name}'
@@ -411,6 +452,21 @@ class AccountHead(models.Model):
         return level
 
     @property
+    def root(self):
+        node = self
+        while node.parent_id:
+            node = node.parent
+        return node
+
+    @property
+    def is_root(self):
+        return self.parent_id is None
+
+    @property
+    def is_asset(self):
+        return self.root.code == '1'
+
+    @property
     def balance(self):
         """Signed balance respecting the account's nature (for ledger reports)."""
         dr = self.voucher_lines.aggregate(t=Sum('debit'))['t'] or 0
@@ -423,26 +479,128 @@ class AccountHead(models.Model):
             errors['parent'] = 'Chart of accounts supports only 4 levels.'
         if self.pk and self.parent_id == self.pk:
             errors['parent'] = 'An account cannot be its own parent.'
+        if self.parent_id and self.pk:
+            node = self.parent
+            while node is not None:
+                if node.pk == self.pk:
+                    errors['parent'] = 'Parent cannot be a descendant of this account.'
+                    break
+                node = node.parent
+        if self.account_kind != 'normal' and self.root.code != '1':
+            errors['account_kind'] = 'Cash and bank flags are only allowed under Assets.'
         if errors:
             raise ValidationError(errors)
 
+    def _next_child_code(self, parent):
+        prefix = f'{parent.code}.'
+        numbers = []
+        for code in AccountHead.objects.filter(parent=parent).values_list('code', flat=True):
+            if code.startswith(prefix):
+                suffix = code[len(prefix):]
+                if suffix.isdigit():
+                    numbers.append(int(suffix))
+        return f'{prefix}{max(numbers, default=0) + 1}'
+
+    def _subtree_height(self):
+        children = list(self.children.all())
+        if not children:
+            return 1
+        return 1 + max(child._subtree_height() for child in children)
+
+    def _refresh_descendant_codes(self):
+        for index, child in enumerate(self.children.order_by('code'), start=1):
+            child.code = f'{self.code}.{index}'
+            child.nature = self.nature
+            AccountHead.objects.filter(pk=child.pk).update(code=child.code, nature=child.nature)
+            child._refresh_descendant_codes()
+
+    def _root_guard(self, old, update_fields):
+        if old.parent_id is not None:
+            return
+        allowed = {'is_leaf'}
+        changed = {
+            field for field in ('code', 'name', 'parent', 'nature', 'account_kind',
+                                'system_role', 'is_active')
+            if getattr(self, field) != getattr(old, field)
+        }
+        if changed and not (changed <= allowed and set(update_fields or ()) <= allowed):
+            raise ValidationError('Level 1 root accounts cannot be edited or deactivated.')
+
     def save(self, *args, **kwargs):
-        with transaction.atomic():
-            if self.parent_id:
+        update_fields = kwargs.get('update_fields')
+        if self._state.adding:
+            if not self.parent_id:
+                if self.code not in ROOT_NATURES:
+                    raise ValidationError({'parent': 'A non-root account must have a parent.'})
+                self.nature = ROOT_NATURES[self.code]
+                super().save(*args, **kwargs)
+                return
+            with transaction.atomic():
                 parent = AccountHead.objects.select_for_update().get(pk=self.parent_id)
+                self.parent = parent
+                if not self.code:
+                    self.code = self._next_child_code(parent)
+                self.nature = parent.nature
+                self.full_clean()
+                super().save(*args, **kwargs)
                 if parent.is_leaf:
-                    parent.is_leaf = False
-                    parent.save(update_fields=['is_leaf'])
-            self.full_clean()
+                    AccountHead.objects.filter(pk=parent.pk).update(is_leaf=False)
+            return
+
+        old = AccountHead.objects.select_for_update().get(pk=self.pk)
+        self._root_guard(old, update_fields)
+        if old.parent_id is None:
+            self.nature = 'debit' if self.code == '1' else (
+                'debit' if self.code == '5' else 'credit'
+            )
             super().save(*args, **kwargs)
+            return
+
+        if old.parent_id != self.parent_id:
+            if self.voucher_lines.exists():
+                raise ValidationError(
+                    {'parent': 'The parent cannot be changed after ledger entries exist.'}
+                )
+            with transaction.atomic():
+                parent = AccountHead.objects.select_for_update().get(pk=self.parent_id)
+                if parent.level + self._subtree_height() > 4:
+                    raise ValidationError(
+                        {'parent': 'Chart of accounts supports only 4 levels.'}
+                    )
+                self.parent = parent
+                self.nature = parent.nature
+                self.code = self._next_child_code(parent)
+                self.full_clean()
+                super().save(*args, **kwargs)
+                self._refresh_descendant_codes()
+                if parent.is_leaf:
+                    AccountHead.objects.filter(pk=parent.pk).update(is_leaf=False)
+                if old.parent_id and not old.parent.children.exists():
+                    AccountHead.objects.filter(pk=old.parent_id).update(is_leaf=True)
+            return
+
+        self.nature = self.root.nature if self.parent_id else self.nature
+        super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
+        if self.parent_id is None:
+            raise ValidationError('Level 1 root accounts cannot be deleted.')
+        if self.children.exists():
+            raise ValidationError('An account with children cannot be deleted.')
+        if self.voucher_lines.exists():
+            raise ValidationError('An account with ledger entries cannot be deleted.')
+        if self.system_role:
+            raise ValidationError('A system account cannot be deleted.')
         parent = self.parent
         result = super().delete(*args, **kwargs)
         if parent and not parent.children.exists():
-            parent.is_leaf = True
-            parent.save(update_fields=['is_leaf'])
+            AccountHead.objects.filter(pk=parent.pk).update(is_leaf=True)
         return result
+
+
+class VoucherQuerySet(models.QuerySet):
+    def delete(self):
+        raise ValidationError('Vouchers cannot be deleted. Reverse them with a new voucher instead.')
 
 
 class Voucher(models.Model):
@@ -480,6 +638,11 @@ class Voucher(models.Model):
     date = models.DateField()
     narration = models.TextField(blank=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='draft')
+    cash_bank_account = models.ForeignKey(
+        'finance.AccountHead', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='vouchers_using_cash_bank',
+        help_text='Cash or bank account used by receipt and payment vouchers.',
+    )
 
     # Drafts are freely editable. Posting flips ``status`` to 'posted' and sets
     # ``is_locked``; unlock flips ``is_locked`` back without touching ``status``.
@@ -506,6 +669,8 @@ class Voucher(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = VoucherQuerySet.as_manager()
 
     class Meta:
         ordering = ['-date', '-created_at']
@@ -544,6 +709,11 @@ class Voucher(models.Model):
         if is_new:
             self._log_event('created', self.created_by)
 
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            'Vouchers cannot be deleted. Reverse them with a new voucher instead.'
+        )
+
     def _log_event(self, event, user=None, reason=''):
         """Append one row to this voucher's lifecycle history (see §3.10)."""
         VoucherAuditLog.objects.create(
@@ -554,6 +724,77 @@ class Voucher(models.Model):
     def is_editable(self):
         """Drafts are editable; posted vouchers only while unlocked."""
         return self.status == 'draft' or not self.is_locked
+
+    @property
+    def is_manual(self):
+        """True only for a voucher with no source record."""
+        return not self.reference_type and self.reference_id is None
+
+    def delete_manual_voucher(self, user, reason):
+        """Delete a manual voucher and write an immutable deletion snapshot.
+
+        This is the only deletion path. Source-generated vouchers are refused so
+        the source record remains the place to make a correction.
+        """
+        reason = (reason or '').strip()
+        if not self.is_manual:
+            raise ValidationError(
+                'Only manual vouchers can be deleted. Correct the source record instead.'
+            )
+        if len(reason) < 5:
+            raise ValidationError({'reason': 'A deletion reason of at least 5 characters is required.'})
+        with transaction.atomic():
+            voucher = Voucher.objects.select_for_update().get(pk=self.pk)
+            if not voucher.is_manual:
+                raise ValidationError(
+                    'Only manual vouchers can be deleted. Correct the source record instead.'
+                )
+            lines = [
+                {
+                    'account_code': line.account_head.code,
+                    'account_name': line.account_head.name,
+                    'debit': str(line.debit),
+                    'credit': str(line.credit),
+                    'narration': line.narration,
+                }
+                for line in voucher.lines.select_related('account_head').order_by('id')
+            ]
+            audit_logs = [
+                {
+                    'event': row.event,
+                    'actor': row.actor.username if row.actor else '',
+                    'reason': row.reason,
+                    'created_at': row.created_at.isoformat(),
+                }
+                for row in voucher.audit_logs.select_related('actor').order_by('id')
+            ]
+            log = VoucherDeletionLog.objects.create(
+                voucher_number=voucher.voucher_number,
+                voucher_type=voucher.voucher_type,
+                date=voucher.date,
+                narration=voucher.narration,
+                status=voucher.status,
+                total=voucher.total_debit,
+                lines=lines,
+                audit_logs=audit_logs,
+                created_by=voucher.created_by,
+                deleted_by=user,
+                reason=reason,
+            )
+            voucher.audit_logs.all().delete()
+            quote = connection.ops.quote_name
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f'DELETE FROM {quote(VoucherLine._meta.db_table)} '
+                    f'WHERE {quote("voucher_id")} = %s',
+                    [voucher.pk],
+                )
+                cursor.execute(
+                    f'DELETE FROM {quote(Voucher._meta.db_table)} '
+                    f'WHERE {quote("id")} = %s',
+                    [voucher.pk],
+                )
+        return log
 
     @property
     def is_posted_locked(self):
@@ -640,6 +881,11 @@ class Voucher(models.Model):
         return self
 
 
+class VoucherLineQuerySet(models.QuerySet):
+    def delete(self):
+        raise ValidationError('Voucher lines cannot be deleted. Edit the voucher instead.')
+
+
 class VoucherLine(models.Model):
     """One leg of a voucher. Exactly one of debit/credit is non-zero."""
 
@@ -650,6 +896,8 @@ class VoucherLine(models.Model):
     debit = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'))
     credit = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'))
     narration = models.CharField(max_length=255, blank=True)
+
+    objects = VoucherLineQuerySet.as_manager()
 
     def clean(self):
         errors = {}
@@ -683,8 +931,9 @@ class VoucherLine(models.Model):
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
-        self._assert_editable()
-        return super().delete(*args, **kwargs)
+        raise ValidationError(
+            'Voucher lines cannot be deleted. Edit the voucher instead.'
+        )
 
     class Meta:
         ordering = ['id']
@@ -733,3 +982,49 @@ class VoucherAuditLog(models.Model):
 
     def __str__(self):
         return f'{self.voucher.voucher_number} {self.event}'
+
+
+class VoucherDeletionLogQuerySet(models.QuerySet):
+    def delete(self):
+        raise ValidationError('Voucher deletion records cannot be deleted.')
+
+
+class VoucherDeletionLog(models.Model):
+    """Immutable snapshot of a deleted manual voucher and its audit history."""
+
+    voucher_number = models.CharField(max_length=30, db_index=True)
+    voucher_type = models.CharField(max_length=2, choices=Voucher.TYPE_CHOICES)
+    date = models.DateField()
+    narration = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=Voucher.STATUS_CHOICES)
+    total = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    lines = models.JSONField(default=list, blank=True)
+    audit_logs = models.JSONField(default=list, blank=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='vouchers_deleted_snapshots_created',
+    )
+    deleted_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='vouchers_deleted',
+    )
+    deleted_at = models.DateTimeField(auto_now_add=True)
+    reason = models.TextField()
+
+    objects = VoucherDeletionLogQuerySet.as_manager()
+
+    class Meta:
+        ordering = ['-deleted_at', '-id']
+        verbose_name = 'Deleted voucher'
+        verbose_name_plural = 'Deleted vouchers'
+
+    def __str__(self):
+        return f'{self.voucher_number} deleted by {self.deleted_by}'
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError('Voucher deletion records cannot be edited.')
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError('Voucher deletion records cannot be deleted.')

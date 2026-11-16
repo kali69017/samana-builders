@@ -264,28 +264,9 @@ class SalaryPayment(models.Model):
         return f"Payment for {self.slip.employee.full_name} - {self.amount}"
 
     def post_to_ledger(self):
-        """Idempotently post a Cash/Bank Payment voucher for this salary payment.
-
-        Spec §3.17: posts against the Salaries head (5200), keyed on
-        ``reference_type='SalaryPayment'`` + ``reference_id=self.pk``.
-        """
-        from decimal import Decimal
-        from finance.accounting import (
-            cash_bank_head, post_source_voucher, salaries_head, voucher_type_for,
-        )
-        employee = self.slip.employee
-        return post_source_voucher(
-            reference_type='SalaryPayment', reference_id=self.pk,
-            voucher_type=voucher_type_for(self.method, 'payment'),
-            date=self.payment_date,
-            narration=f'Salary payment for {employee.full_name} '
-                      f'({self.slip.run.period_label})',
-            lines=[
-                (salaries_head(), self.amount, Decimal('0.00')),
-                (cash_bank_head(self.method), Decimal('0.00'), self.amount),
-            ],
-            user=self.created_by,
-        )
+        """Post through the central finance posting service (idempotent)."""
+        from finance.accounting import post_salary_payment
+        return post_salary_payment(self)
 
     class Meta:
         ordering = ['-payment_date']

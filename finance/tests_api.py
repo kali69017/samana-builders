@@ -25,8 +25,8 @@ class AccountingApiBase(APITestCase):
         self.sales = User.objects.create_user('sal', 'x@example.com', 'pass12345')
         UserProfile.objects.create(user=self.sales, role='sales')
 
-        self.cash = AccountHead.objects.create(code='1000', name='Cash', nature='debit')
-        self.capital = AccountHead.objects.create(code='3000', name='Capital', nature='credit')
+        self.cash = AccountHead.objects.get(system_role='cash_default')
+        self.capital = AccountHead.objects.get(code='3.1')
 
     def as_user(self, user):
         self.client.force_authenticate(user=user)
@@ -92,12 +92,12 @@ class VoucherApiTests(AccountingApiBase):
         resp = self.client.patch(reverse('voucher-detail', args=[voucher.pk]), {'narration': 'nope'}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_delete_draft_voucher(self):
+    def test_delete_draft_voucher_is_blocked(self):
         voucher = self.make_voucher()
         self.as_user(self.finance)
         resp = self.client.delete(reverse('voucher-detail', args=[voucher.pk]))
-        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(Voucher.objects.filter(pk=voucher.pk).exists())
+        self.assertEqual(resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertTrue(Voucher.objects.filter(pk=voucher.pk).exists())
 
     # ── post ─────────────────────────────────────────────────────────────
     def test_post_balanced_voucher_locks_it(self):
@@ -201,7 +201,7 @@ class VoucherApiTests(AccountingApiBase):
         patch = self.client.patch(reverse('voucher-detail', args=[voucher.pk]), {'narration': 'x'}, format='json')
         self.assertEqual(patch.status_code, status.HTTP_400_BAD_REQUEST)
         delete = self.client.delete(reverse('voucher-detail', args=[voucher.pk]))
-        self.assertEqual(delete.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(delete.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
         # unlock remains available to a supervisor
         self.as_user(self.supervisor)
@@ -212,39 +212,44 @@ class VoucherApiTests(AccountingApiBase):
 
 class AccountHeadApiTests(AccountingApiBase):
     def test_finance_can_create_head(self):
+        parent = AccountHead.objects.get(code='1.1.4')
         self.as_user(self.finance)
         resp = self.client.post(reverse('accounthead-list'),
-                                {'code': '1100', 'name': 'Petty Cash', 'nature': 'debit'}, format='json')
+                                {'name': 'Petty Cash', 'parent': parent.pk}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
-        self.assertEqual(resp.data['level'], 1)
+        self.assertEqual(resp.data['level'], 4)
+        self.assertEqual(resp.data['code'], '1.1.4.1')
 
-    def test_create_child_sets_level_two(self):
+    def test_create_child_sets_level_three(self):
+        parent = AccountHead.objects.get(code='1.1')
         self.as_user(self.finance)
         resp = self.client.post(reverse('accounthead-list'),
-                                {'code': '1100', 'name': 'Petty Cash', 'parent': self.cash.pk}, format='json')
+                                {'name': 'Petty Cash', 'parent': parent.pk}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
-        self.assertEqual(resp.data['level'], 2)
+        self.assertEqual(resp.data['level'], 3)
 
     def test_parent_at_max_depth_rejected(self):
-        h2 = AccountHead.objects.create(code='A2', name='L2', parent=self.cash)
-        h3 = AccountHead.objects.create(code='A3', name='L3', parent=h2)
-        h4 = AccountHead.objects.create(code='A4', name='L4', parent=h3)
+        h1 = AccountHead.objects.get(code='1')
+        h2 = AccountHead.objects.create(name='L2', parent=h1)
+        h3 = AccountHead.objects.create(name='L3', parent=h2)
+        h4 = AccountHead.objects.create(name='L4', parent=h3)
         self.as_user(self.finance)
         resp = self.client.post(reverse('accounthead-list'),
-                                {'code': 'A5', 'name': 'L5', 'parent': h4.pk}, format='json')
+                                {'name': 'L5', 'parent': h4.pk}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_parent_cycle_rejected(self):
-        child = AccountHead.objects.create(code='1100', name='Petty Cash', parent=self.cash)
+        parent = AccountHead.objects.get(code='1.1')
+        child = AccountHead.objects.create(name='Petty Cash', parent=parent)
         self.as_user(self.finance)
-        resp = self.client.patch(reverse('accounthead-detail', args=[self.cash.pk]),
+        resp = self.client.patch(reverse('accounthead-detail', args=[parent.pk]),
                                  {'parent': child.pk}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_delete_head_with_children_blocked(self):
-        AccountHead.objects.create(code='1100', name='Petty Cash', parent=self.cash)
+        parent = AccountHead.objects.get(code='1.1.1')
         self.as_user(self.finance)
-        resp = self.client.delete(reverse('accounthead-detail', args=[self.cash.pk]))
+        resp = self.client.delete(reverse('accounthead-detail', args=[parent.pk]))
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_delete_head_with_posted_lines_blocked(self):
@@ -257,7 +262,8 @@ class AccountHeadApiTests(AccountingApiBase):
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_delete_unused_head(self):
-        head = AccountHead.objects.create(code='9000', name='Unused')
+        parent = AccountHead.objects.get(code='1.1.4')
+        head = AccountHead.objects.create(name='Unused', parent=parent)
         self.as_user(self.finance)
         resp = self.client.delete(reverse('accounthead-detail', args=[head.pk]))
         self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)

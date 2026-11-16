@@ -21,6 +21,9 @@
             <div class="page-actions">
                 <a href="{% url 'invoice_pdf' booking.pk %}" class="btn btn-primary btn-sm">📥 Download Invoice</a>
                 <a href="{% url 'booking_edit' booking.pk %}" class="btn btn-secondary btn-sm">✏️ Edit Booking</a>
+                {% if not booking.delivery_date and booking.status == 'active' or not booking.delivery_date and booking.status == 'completed' %}
+                <a href="{% url 'booking_deliver' booking.pk %}" class="btn btn-success btn-sm">Mark as Delivered</a>
+                {% endif %}
                 <a href="{% url 'bookings' %}" class="btn btn-secondary btn-sm">← Back to List</a>
             </div>
         </div>
@@ -104,6 +107,14 @@
                                 <div class="detail-item">
                                     <div class="detail-label">Remaining Balance</div>
                                     <div class="detail-value" style="color:var(--accent-amber);">Rs. {{ booking.remaining_balance|floatformat:0 }}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Customer Advances Held</div>
+                                    <div class="detail-value">Rs. {{ customer_advances_held|floatformat:2 }}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Delivery Date</div>
+                                    <div class="detail-value">{{ booking.delivery_date|date:"d M Y"|default:"Not delivered" }}</div>
                                 </div>
                 <div class="detail-item">
                     <div class="detail-label">Booking Date</div>

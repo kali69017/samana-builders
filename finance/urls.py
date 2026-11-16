@@ -2,6 +2,8 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path('', views.finance_home_view, name='finance_home'),
+
     # Ledger
     path('ledger/', views.ledger_view, name='finance_ledger'),
     path('ledger/export/excel/', views.ledger_export_excel_view, name='finance_ledger_export_excel'),
@@ -10,7 +12,9 @@ urlpatterns = [
     # Vouchers (double-entry)
     path('vouchers/', views.vouchers_view, name='finance_vouchers'),
     path('vouchers/create/', views.voucher_create_view, name='finance_voucher_create'),
+    path('vouchers/deleted/', views.deleted_vouchers_view, name='finance_deleted_vouchers'),
     path('vouchers/<int:pk>/', views.voucher_detail_view, name='finance_voucher_detail'),
+    path('vouchers/<int:pk>/delete/', views.voucher_delete_view, name='finance_voucher_delete'),
     path('vouchers/<int:pk>/post/', views.voucher_post_view, name='finance_voucher_post'),
     path('vouchers/<int:pk>/unlock/', views.voucher_unlock_view, name='finance_voucher_unlock'),
 
@@ -31,6 +35,7 @@ urlpatterns = [
     path('expense-categories/create/', views.expense_category_create_view, name='finance_expense_category_create'),
     path('expense-categories/<int:pk>/edit/', views.expense_category_edit_view, name='finance_expense_category_edit'),
     path('expense-categories/<int:pk>/delete/', views.expense_category_delete_view, name='finance_expense_category_delete'),
+    path('expense-categories/<int:pk>/toggle-active/', views.expense_category_toggle_active_view, name='finance_expense_category_toggle_active'),
 
     # Office expenses
     path('office-expenses/', views.office_expenses_view, name='finance_office_expenses'),

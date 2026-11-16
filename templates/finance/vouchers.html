@@ -10,8 +10,16 @@
     <main class="main-content">
         <div class="page-header">
             <h1>Vouchers</h1>
-            <div class="page-actions">
+            <div class="page-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
                 <a href="{% url 'finance_voucher_create' %}" class="btn btn-primary">+ New Voucher</a>
+                {% if can_delete_vouchers %}
+                <a href="{% url 'finance_deleted_vouchers' %}" class="btn btn-secondary">Deleted Vouchers</a>
+                {% endif %}
+                <a href="{% url 'finance_voucher_create' %}?type=CR" class="btn btn-secondary btn-sm">Cash Receipt</a>
+                <a href="{% url 'finance_voucher_create' %}?type=CP" class="btn btn-secondary btn-sm">Cash Payment</a>
+                <a href="{% url 'finance_voucher_create' %}?type=BR" class="btn btn-secondary btn-sm">Bank Receipt</a>
+                <a href="{% url 'finance_voucher_create' %}?type=BP" class="btn btn-secondary btn-sm">Bank Payment</a>
+                <a href="{% url 'finance_voucher_create' %}?type=JV" class="btn btn-secondary btn-sm">Journal</a>
             </div>
         </div>
 
@@ -61,6 +69,9 @@
                             <td>
                                 <div class="table-actions">
                                     <a href="{% url 'finance_voucher_detail' voucher.pk %}" class="btn btn-secondary btn-sm">View</a>
+                                    {% if can_delete_vouchers and voucher.is_manual %}
+                                    <a href="{% url 'finance_voucher_delete' voucher.pk %}" class="btn btn-danger btn-sm">Delete</a>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>

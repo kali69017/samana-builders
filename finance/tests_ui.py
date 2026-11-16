@@ -25,8 +25,8 @@ class AccountingUiBase(TestCase):
         self.sales = User.objects.create_user('uisal', 'x@example.com', 'pass12345')
         UserProfile.objects.create(user=self.sales, role='sales')
 
-        self.cash = AccountHead.objects.create(code='1000', name='Cash', nature='debit')
-        self.capital = AccountHead.objects.create(code='3000', name='Capital', nature='credit')
+        self.cash = AccountHead.objects.get(system_role='cash_default')
+        self.capital = AccountHead.objects.get(code='3.1')
 
     def login(self, user):
         self.client.force_login(user)
@@ -136,14 +136,16 @@ class VoucherUiTests(AccountingUiBase):
         self.login(self.finance)
         resp = self.client.post(reverse('finance_voucher_create'), {
             'voucher_type': 'JV', 'date': date.today().isoformat(), 'narration': 'opening',
-            'lines-TOTAL_FORMS': '1', 'lines-INITIAL_FORMS': '0', 'lines-MIN_NUM_FORMS': '0',
+            'lines-TOTAL_FORMS': '2', 'lines-INITIAL_FORMS': '0', 'lines-MIN_NUM_FORMS': '1',
             'lines-MAX_NUM_FORMS': '1000',
             'lines-0-account_head': self.cash.pk, 'lines-0-debit': '100', 'lines-0-credit': '0',
             'lines-0-narration': '',
+            'lines-1-account_head': self.capital.pk, 'lines-1-debit': '0', 'lines-1-credit': '100',
+            'lines-1-narration': '',
         })
         self.assertEqual(resp.status_code, 302)
         self.assertEqual(Voucher.objects.count(), 1)
-        self.assertEqual(Voucher.objects.first().lines.count(), 1)
+        self.assertEqual(Voucher.objects.first().lines.count(), 2)
 
     def test_supervisor_can_post_voucher_via_ui(self):
         voucher = Voucher.objects.create(voucher_type='JV', date=date.today(), created_by=self.finance)
@@ -191,18 +193,20 @@ class VoucherUiTests(AccountingUiBase):
 
 class AccountHeadUiTests(AccountingUiBase):
     def test_finance_can_view_tree(self):
-        AccountHead.objects.create(code='1100', name='Petty Cash', parent=self.cash)
+        parent = AccountHead.objects.get(code='1.1.1')
+        AccountHead.objects.create(name='Petty Cash', parent=parent)
         self.login(self.finance)
         resp = self.client.get(reverse('finance_account_heads'))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'Petty Cash')
 
     def test_create_head_via_ui(self):
+        parent = AccountHead.objects.get(code='4')
         self.login(self.finance)
         resp = self.client.post(reverse('finance_account_head_create'),
-                                {'code': '4000', 'name': 'Sales Revenue', 'nature': 'credit'})
+                                {'name': 'Sales Revenue', 'parent': parent.pk, 'account_kind': 'normal'})
         self.assertEqual(resp.status_code, 302)
-        self.assertTrue(AccountHead.objects.filter(code='4000').exists())
+        self.assertTrue(AccountHead.objects.filter(code='4.2', name='Sales Revenue').exists())
 
     def test_sales_denied_tree(self):
         self.login(self.sales)

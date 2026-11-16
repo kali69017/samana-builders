@@ -11,6 +11,8 @@ from properties.models import Plot
 
 
 class BookingForm(forms.ModelForm):
+    idempotency_key = forms.CharField(widget=forms.HiddenInput, required=False)
+
     class Meta:
         model = Booking
         fields = ['customer', 'plot', 'total_amount', 'advance_paid', 'source', 'agent', 'notes']

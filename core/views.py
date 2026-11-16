@@ -6,10 +6,12 @@ from django.contrib.auth.models import User
 from django.contrib import messages
 import re
 from django.db.models import Sum, Count, Q
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models.functions import TruncMonth, TruncWeek, TruncYear
 from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
+from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_POST
 from datetime import timedelta
 from decimal import Decimal
 from .models import UserProfile, AuditLog
@@ -611,7 +613,12 @@ def financial_reports_view(request):
 @management_or_above
 def customers_view(request):
     search = request.GET.get('search', '')
+    do_not_contact = request.GET.get('do_not_contact', '')
     customers = Customer.objects.all()
+    if do_not_contact == '1':
+        customers = customers.filter(do_not_contact=True)
+    elif do_not_contact == '0':
+        customers = customers.filter(do_not_contact=False)
     
     if search:
         customers = customers.filter(
@@ -625,6 +632,7 @@ def customers_view(request):
     context = {
         'customers': customers,
         'search': search,
+        'do_not_contact': do_not_contact,
         'total_count': Customer.objects.count(),
         'active_count': Customer.objects.filter(is_active=True).count(),
         'customers_with_bookings': Customer.objects.filter(bookings__isnull=False).distinct().count(),
@@ -633,16 +641,20 @@ def customers_view(request):
 
 
 @login_required
+@transaction.atomic
 def customer_create_view(request):
     from customers.forms import CustomerForm, CustomerNomineeForm
     
     if request.method == 'POST':
-        form = CustomerForm(request.POST, request.FILES)
+        form = CustomerForm(request.POST, request.FILES, user=request.user)
         nominee_form = CustomerNomineeForm(request.POST)
         if form.is_valid():
             with transaction.atomic():
                 customer = form.save(commit=False)
                 customer.created_by = request.user
+                if getattr(customer, 'do_not_contact', False):
+                    customer.do_not_contact_set_by = request.user
+                    customer.do_not_contact_at = timezone.now()
                 customer.save()
                 if nominee_form.is_valid() and nominee_form.cleaned_data.get('nominee_name'):
                     nominee = nominee_form.save(commit=False)
@@ -661,7 +673,7 @@ def customer_create_view(request):
             messages.success(request, f'Customer {customer.customer_id} created successfully!')
             return redirect('customers')
     else:
-        form = CustomerForm()
+        form = CustomerForm(user=request.user)
         nominee_form = CustomerNomineeForm()
     
     return render(request, 'customer_form.html', {
@@ -705,12 +717,22 @@ def customer_edit_view(request, pk):
     
     customer = get_object_or_404(Customer, pk=pk)
     nominee_instance = getattr(customer, 'nominee', None)
+    was_do_not_contact = customer.do_not_contact
     if request.method == 'POST':
-        form = CustomerForm(request.POST, request.FILES, instance=customer)
+        form = CustomerForm(request.POST, request.FILES, instance=customer, user=request.user)
         nominee_form = CustomerNomineeForm(request.POST, instance=nominee_instance)
         if form.is_valid():
             with transaction.atomic():
-                form.save()
+                updated = form.save()
+                if updated.do_not_contact != was_do_not_contact:
+                    updated.do_not_contact_set_by = request.user
+                    updated.do_not_contact_at = timezone.now()
+                    if not updated.do_not_contact:
+                        updated.do_not_contact_reason = ''
+                    updated.save(update_fields=[
+                        'do_not_contact_set_by', 'do_not_contact_at',
+                        'do_not_contact_reason',
+                    ])
                 if nominee_form.is_valid() and nominee_form.cleaned_data.get('nominee_name'):
                     nominee = nominee_form.save(commit=False)
                     nominee.customer = customer
@@ -725,7 +747,7 @@ def customer_edit_view(request, pk):
             messages.success(request, f'Customer {customer.customer_id} updated successfully!')
             return redirect('customers')
     else:
-        form = CustomerForm(instance=customer)
+        form = CustomerForm(instance=customer, user=request.user)
         # Pre-fill CNIC as plain digits (input field only accepts digits now)
         if form.initial.get('cnic'):
             form.initial['cnic'] = re.sub(r'\D', '', str(form.initial['cnic']))
@@ -837,12 +859,42 @@ def customer_detail_view(request, pk):
     return render(request, 'customer_detail.html', context)
 
 
+@login_required
+@management_or_above
+@require_POST
+def customer_do_not_contact_view(request, pk):
+    """Turn all messaging to a customer on or off, recording who and when."""
+    customer = get_object_or_404(Customer, pk=pk)
+    enabled = request.POST.get('do_not_contact') == 'on'
+    reason = (request.POST.get('do_not_contact_reason') or '').strip()[:200]
+    customer.do_not_contact = enabled
+    customer.do_not_contact_reason = reason if enabled else ''
+    customer.do_not_contact_set_by = request.user
+    customer.do_not_contact_at = timezone.now()
+    customer.save(update_fields=[
+        'do_not_contact', 'do_not_contact_reason',
+        'do_not_contact_set_by', 'do_not_contact_at', 'updated_at',
+    ])
+    AuditLog.objects.create(
+        user=request.user, action='update', model_name='Customer',
+        object_id=customer.customer_id,
+        description=(
+            'Enabled do not message' if enabled else 'Disabled do not message'
+        ) + f' for {customer.customer_id}',
+    )
+    messages.success(
+        request,
+        'Customer messaging stopped.' if enabled else 'Customer messaging allowed again.',
+    )
+    return redirect('customer_detail', pk=pk)
+
+
 # ─── PROPERTIES / PROJECTS / PLOTS ───────────────────────────────────────────────
 
 @login_required
 def properties_view(request):
-    projects = Project.objects.all()
-    plots = Plot.objects.select_related('project').all()
+    projects = Project.objects.prefetch_related('phases').all()
+    plots = Plot.objects.select_related('project', 'phase').all()
     
     project_filter = request.GET.get('project', '')
     status_filter = request.GET.get('status', '')
@@ -893,70 +945,95 @@ def plot_price_json_view(request, pk):
 @login_required
 @management_or_above
 def project_create_view(request):
-    from properties.forms import ProjectForm, ProjectPhaseFormSet
+    from properties.forms import (
+        ProjectForm, ProjectPhaseFormSet, get_project_phase_errors,
+        active_phase_forms, phase_total_plots,
+    )
 
     if request.method == 'POST':
         form = ProjectForm(request.POST)
-        # Only bind/validate the phase formset when phase rows were actually
-        # submitted, so a project without phases still saves (backward compatible).
         has_phase = any(k.startswith('phases-') for k in request.POST)
-        formset = ProjectPhaseFormSet(request.POST) if has_phase else None
-        if form.is_valid() and (formset is None or formset.is_valid()):
-            project = form.save()
-            if has_phase:
-                formset.instance = project
-                formset.save()
-            AuditLog.objects.create(
-                user=request.user, action='create', model_name='Project',
-                object_id=str(project.id),
-                description=f'Created project {project.name}'
+        formset = ProjectPhaseFormSet(request.POST) if has_phase else ProjectPhaseFormSet()
+        if form.is_valid() and (not formset.is_bound or formset.is_valid()):
+            phase_errors = get_project_phase_errors(
+                form.cleaned_data.get('status'),
+                form.cleaned_data.get('total_plots'),
+                formset.forms,
             )
-            messages.success(request, f'Project "{project.name}" created successfully!')
-            return redirect('properties')
-        elif has_phase:
-            formset = ProjectPhaseFormSet(request.POST)
-        else:
-            formset = ProjectPhaseFormSet()
+            if phase_errors:
+                for error in phase_errors:
+                    form.add_error(None, error)
+            else:
+                if formset.is_bound and active_phase_forms(formset.forms):
+                    form.instance.total_plots = phase_total_plots(formset.forms)
+                project = form.save()
+                if formset.is_bound:
+                    formset.instance = project
+                    formset.save()
+                AuditLog.objects.create(
+                    user=request.user, action='create', model_name='Project',
+                    object_id=str(project.id),
+                    description=f'Created project {project.name}'
+                )
+                messages.success(request, f'Project "{project.name}" created successfully!')
+                return redirect('properties')
     else:
         form = ProjectForm()
         formset = ProjectPhaseFormSet()
 
     return render(request, 'project_form.html', {
-        'form': form, 'formset': formset, 'title': 'Add New Project'
+        'form': form, 'formset': formset, 'title': 'Add New Project',
+        'plots_created': 0,
     })
 
 
 @login_required
 @management_or_above
 def project_edit_view(request, pk):
-    from properties.forms import ProjectForm, ProjectPhaseFormSet
+    from properties.forms import (
+        ProjectForm, ProjectPhaseFormSet, get_project_phase_errors,
+        active_phase_forms, phase_total_plots,
+    )
 
     project = get_object_or_404(Project, pk=pk)
     if request.method == 'POST':
         form = ProjectForm(request.POST, instance=project)
         has_phase = any(k.startswith('phases-') for k in request.POST)
-        formset = ProjectPhaseFormSet(request.POST, instance=project) if has_phase else None
-        if form.is_valid() and (formset is None or formset.is_valid()):
-            form.save()
-            if has_phase:
-                formset.save()
-            AuditLog.objects.create(
-                user=request.user, action='update', model_name='Project',
-                object_id=str(project.id),
-                description=f'Updated project {project.name}'
+        formset = (
+            ProjectPhaseFormSet(request.POST, instance=project)
+            if has_phase else ProjectPhaseFormSet(instance=project)
+        )
+        if form.is_valid() and (not formset.is_bound or formset.is_valid()):
+            phase_errors = get_project_phase_errors(
+                form.cleaned_data.get('status'),
+                form.cleaned_data.get('total_plots'),
+                formset.forms,
             )
-            messages.success(request, f'Project "{project.name}" updated successfully!')
-            return redirect('properties')
-        elif has_phase:
-            formset = ProjectPhaseFormSet(request.POST, instance=project)
-        else:
-            formset = ProjectPhaseFormSet(instance=project)
+            if phase_errors:
+                for error in phase_errors:
+                    form.add_error(None, error)
+            else:
+                if formset.is_bound and active_phase_forms(formset.forms):
+                    form.instance.total_plots = phase_total_plots(formset.forms)
+                elif formset.is_bound and project.phases.exists():
+                    form.instance.total_plots = 0
+                form.save()
+                if formset.is_bound:
+                    formset.save()
+                AuditLog.objects.create(
+                    user=request.user, action='update', model_name='Project',
+                    object_id=str(project.id),
+                    description=f'Updated project {project.name}'
+                )
+                messages.success(request, f'Project "{project.name}" updated successfully!')
+                return redirect('properties')
     else:
         form = ProjectForm(instance=project)
         formset = ProjectPhaseFormSet(instance=project)
-    
+
     return render(request, 'project_form.html', {
-        'form': form, 'formset': formset, 'title': f'Edit Project', 'project': project
+        'form': form, 'formset': formset, 'title': 'Edit Project', 'project': project,
+        'plots_created': project.plots.count(),
     })
 
 
@@ -996,7 +1073,16 @@ def plot_create_view(request):
     if request.method == 'POST':
         form = PlotForm(request.POST)
         if form.is_valid():
-            plot = form.save()
+            from django.db import IntegrityError
+            try:
+                plot = form.save()
+            except IntegrityError:
+                form.add_error(
+                    'plot_number',
+                    'A plot with this number already exists in this project and block. '
+                    'Plot numbers must be unique per project and block.'
+                )
+                return render(request, 'plot_form.html', {'form': form, 'title': 'Add New Plot'})
             AuditLog.objects.create(
                 user=request.user, action='create', model_name='Plot',
                 object_id=str(plot.id),
@@ -1022,7 +1108,16 @@ def plot_edit_view(request, pk):
     if request.method == 'POST':
         form = PlotForm(request.POST, instance=plot)
         if form.is_valid():
-            form.save()
+            from django.db import IntegrityError
+            try:
+                form.save()
+            except IntegrityError:
+                form.add_error(
+                    'plot_number',
+                    'A plot with this number already exists in this project and block. '
+                    'Plot numbers must be unique per project and block.'
+                )
+                return render(request, 'plot_form.html', {'form': form, 'title': f'Edit Plot', 'plot': plot})
             AuditLog.objects.create(
                 user=request.user, action='update', model_name='Plot',
                 object_id=str(plot.id),
@@ -1108,8 +1203,17 @@ def bookings_view(request):
     return render(request, 'bookings.html', context)
 
 
+def _find_existing_booking(idempotency_key):
+    if not idempotency_key:
+        return None
+    return Booking.objects.filter(idempotency_key=idempotency_key).first()
+
+
 @login_required
+@transaction.atomic
+@never_cache
 def booking_create_view(request):
+    from uuid import uuid4
     from bookings.forms import BookingForm
     from bookings.models import InstallmentPlanTemplate
     
@@ -1125,8 +1229,22 @@ def booking_create_view(request):
         form = BookingForm(request.POST)
         if form.is_valid():
             booking = form.save(commit=False)
+            idem_key = form.cleaned_data.get('idempotency_key')
+            existing = _find_existing_booking(idem_key)
+            if existing:
+                messages.info(request, f'This booking was already saved as {existing.booking_id}.')
+                return redirect('booking_detail', pk=existing.pk)
+            booking.idempotency_key = idem_key or None
             booking.created_by = request.user
-            booking.save()
+            try:
+                with transaction.atomic():
+                    booking.save()
+            except IntegrityError:
+                existing = _find_existing_booking(idem_key)
+                if existing:
+                    messages.info(request, f'This booking was already saved as {existing.booking_id}.')
+                    return redirect('booking_detail', pk=existing.pk)
+                raise
             
             # Update plot status
             plot = booking.plot
@@ -1202,7 +1320,7 @@ def booking_create_view(request):
             messages.success(request, f'Booking {booking.booking_id} created successfully!')
             return redirect('bookings')
     else:
-        form = BookingForm(initial=initial)
+        form = BookingForm(initial={**initial, 'idempotency_key': uuid4().hex})
     
     projects = Project.objects.exclude(status='inactive')
     templates = InstallmentPlanTemplate.objects.filter(project__in=projects, is_active=True).select_related('project')
@@ -1257,8 +1375,75 @@ def booking_detail_view(request, pk):
         'booking': booking,
         'installments': installments,
         'payments': payments,
+        'customer_advances_held': booking.customer_advances_held,
     }
     return render(request, 'booking_detail.html', context)
+
+
+@login_required
+@management_or_above
+def booking_deliver_view(request, pk):
+    """Mark a booking delivered and release its customer advances to revenue."""
+    from datetime import date
+    from django.core.exceptions import ValidationError
+    from django.utils import timezone
+    booking = get_object_or_404(
+        Booking.objects.select_related('customer', 'plot', 'plot__project'), pk=pk)
+    if booking.delivery_date:
+        messages.info(request, f'Booking {booking.booking_id} is already delivered.')
+        return redirect('booking_detail', pk=pk)
+    if booking.status not in ('active', 'completed'):
+        messages.error(
+            request,
+            'Only an active or completed booking can be marked as delivered.',
+        )
+        return redirect('booking_detail', pk=pk)
+
+    paid = booking.amount_paid
+    unpaid = max(booking.total_amount - paid, 0)
+    if request.method == 'POST':
+        raw_date = request.POST.get('delivery_date') or timezone.localdate().isoformat()
+        try:
+            delivery_date = date.fromisoformat(raw_date)
+        except ValueError:
+            messages.error(request, 'Enter a valid delivery date.')
+            return render(request, 'booking_deliver.html', {
+                'booking': booking, 'paid': paid, 'unpaid': unpaid,
+                'today': timezone.localdate().isoformat(),
+            })
+        if unpaid > 0 and request.POST.get('confirm_unpaid') != 'on':
+            messages.error(
+                request,
+                f'Confirm the unpaid balance of Rs. {unpaid:,.2f} before delivering.',
+            )
+            return render(request, 'booking_deliver.html', {
+                'booking': booking, 'paid': paid, 'unpaid': unpaid,
+                'today': timezone.localdate().isoformat(),
+            })
+        try:
+            booking.mark_delivered(request.user, delivery_date)
+        except ValidationError as exc:
+            messages.error(request, ' '.join(exc.messages))
+            return render(request, 'booking_deliver.html', {
+                'booking': booking, 'paid': paid, 'unpaid': unpaid,
+                'today': timezone.localdate().isoformat(),
+            })
+        AuditLog.objects.create(
+            user=request.user, action='update', model_name='Booking',
+            object_id=booking.booking_id,
+            description=f'Marked booking {booking.booking_id} delivered on {delivery_date}',
+        )
+        messages.success(
+            request,
+            f'Booking {booking.booking_id} marked delivered. Customer advances '
+            'were released to revenue.',
+        )
+        return redirect('booking_detail', pk=pk)
+
+    return render(request, 'booking_deliver.html', {
+        'booking': booking, 'paid': paid, 'unpaid': unpaid,
+        'today': timezone.localdate().isoformat(),
+    })
 
 
 @login_required
@@ -1331,10 +1516,12 @@ def booking_cancel_view(request, pk):
     from django.db.models import Sum
     verified_amount = booking.payments.filter(status='verified').aggregate(
         total=Sum('amount'))['total'] or 0
-    if verified_amount > 0:
+    refunded_amount = booking.refunds.exclude(status='rejected').aggregate(
+        total=Sum('amount'))['total'] or 0
+    if verified_amount > refunded_amount:
         messages.error(
             request,
-            'This booking has verified payments. Process a refund before cancelling it.'
+            'This booking has unrefunded verified payments. Process a refund before cancelling it.'
         )
         return redirect('booking_detail', pk=pk)
 
@@ -1406,6 +1593,7 @@ def booking_reopen_view(request, pk):
 
 @login_required
 @management_or_above
+@transaction.atomic
 def booking_confirm_view(request, pk):
     """Confirm a pending booking status"""
     booking = get_object_or_404(Booking, pk=pk)
@@ -1462,7 +1650,7 @@ def booking_confirm_view(request, pk):
             for ch in channels:
                 contact = customer.email if ch == 'email' else customer.phone
                 if contact:
-                    NotificationService.send_notification(
+                    NotificationService.queue_notification(
                         recipient_name=customer.full_name,
                         recipient_contact=contact,
                         channel=ch,
@@ -1627,9 +1815,18 @@ def payments_view(request):
     return render(request, 'payments.html', context)
 
 
+def _find_existing_payment(idempotency_key):
+    if not idempotency_key:
+        return None
+    return Payment.objects.filter(idempotency_key=idempotency_key).first()
+
+
 @login_required
 @payments_access
+@transaction.atomic
+@never_cache
 def payment_create_view(request):
+    from uuid import uuid4
     from payments.forms import PaymentForm
     from payments.models import Receipt, PaymentAttachment
     from django.db import transaction
@@ -1644,6 +1841,12 @@ def payment_create_view(request):
         form = PaymentForm(request.POST)
         if form.is_valid():
             payment = form.save(commit=False)
+            idem_key = form.cleaned_data.get('idempotency_key')
+            existing = _find_existing_payment(idem_key)
+            if existing:
+                messages.info(request, f'This payment was already saved as {existing.payment_id}.')
+                return redirect('payment_detail', pk=existing.pk)
+            payment.idempotency_key = idem_key or None
             payment.created_by = request.user
             payment.status = 'verified'
             payment.verified_by = request.user
@@ -1675,55 +1878,62 @@ def payment_create_view(request):
                 return redirect('payments')
 
             # ── ATOMIC TRANSACTION: all-or-nothing ──────────────────────────
-            with transaction.atomic():
-                payment.save()
+            try:
+                with transaction.atomic():
+                    payment.save()
 
-                # Update installment if linked
-                if payment.installment:
-                    installment = payment.installment
-                    installment_total = installment.amount + installment.late_fee
-                    remaining_before = installment_total - installment.paid_amount
+                    # Update installment if linked
+                    if payment.installment:
+                        installment = payment.installment
+                        installment_total = installment.amount + installment.late_fee
+                        remaining_before = installment_total - installment.paid_amount
                     
-                    # Track overpayment
-                    overpayment = 0
-                    if payment.amount > remaining_before:
-                        overpayment = payment.amount - remaining_before
-                        payment.unallocated_amount = overpayment
-                        payment.save(update_fields=['unallocated_amount'])
-                        installment.paid_amount = installment_total
-                    else:
-                        installment.paid_amount += payment.amount
+                        # Track overpayment
+                        overpayment = 0
+                        if payment.amount > remaining_before:
+                            overpayment = payment.amount - remaining_before
+                            payment.unallocated_amount = overpayment
+                            payment.save(update_fields=['unallocated_amount'])
+                            installment.paid_amount = installment_total
+                        else:
+                            installment.paid_amount += payment.amount
                     
-                    if installment.paid_amount >= installment_total:
-                        installment.status = 'paid'
-                        installment.paid_date = payment.payment_date
-                    elif installment.paid_amount > 0:
-                        installment.status = 'partial'
-                    installment.save()
+                        if installment.paid_amount >= installment_total:
+                            installment.status = 'paid'
+                            installment.paid_date = payment.payment_date
+                        elif installment.paid_amount > 0:
+                            installment.status = 'partial'
+                        installment.save()
 
-                # Update booking advance (capped at total_amount)
-                booking = payment.booking
-                new_advance = booking.advance_paid + payment.amount
-                if new_advance > booking.total_amount:
-                    new_advance = booking.total_amount
-                booking.advance_paid = new_advance
-                if booking.remaining_balance <= 0:
-                    booking.status = 'completed'
-                booking.save()
+                    # Update booking advance (capped at total_amount)
+                    booking = payment.booking
+                    new_advance = booking.advance_paid + payment.amount
+                    if new_advance > booking.total_amount:
+                        new_advance = booking.total_amount
+                    booking.advance_paid = new_advance
+                    if booking.remaining_balance <= 0:
+                        booking.status = 'completed'
+                    booking.save()
 
-                # Recalculate the installment plan so unpaid installments
-                # reflect the new remaining balance.
-                if hasattr(booking, 'installment_plan') and booking.installment_plan:
-                    booking.installment_plan.recalculate()
+                    # Recalculate the installment plan so unpaid installments
+                    # reflect the new remaining balance.
+                    if hasattr(booking, 'installment_plan') and booking.installment_plan:
+                        booking.installment_plan.recalculate()
 
-                # Auto-generate receipt
-                receipt = Receipt.objects.create(
-                    payment=payment,
-                    receipt_date=payment.payment_date,
-                    generated_by=request.user,
-                )
-                payment.receipt_generated = True
-                payment.save(update_fields=['receipt_generated'])
+                    # Auto-generate receipt
+                    receipt = Receipt.objects.create(
+                        payment=payment,
+                        receipt_date=payment.payment_date,
+                        generated_by=request.user,
+                    )
+                    payment.receipt_generated = True
+                    payment.save(update_fields=['receipt_generated'])
+            except IntegrityError:
+                existing = _find_existing_payment(idem_key)
+                if existing:
+                    messages.info(request, f'This payment was already saved as {existing.payment_id}.')
+                    return redirect('payment_detail', pk=existing.pk)
+                raise
             
             # Handle file attachments (outside transaction - non-critical)
             method_type_map = {
@@ -1763,7 +1973,7 @@ def payment_create_view(request):
             messages.success(request, f'Payment {payment.payment_id} recorded successfully! Receipt {receipt.receipt_number} generated.')
             return redirect('payments')
     else:
-        form = PaymentForm()
+        form = PaymentForm(initial={'idempotency_key': uuid4().hex})
         if pre_filled_booking:
             form.fields['booking'].initial = pre_filled_booking.id
             form.fields['booking'].widget.attrs['disabled'] = True

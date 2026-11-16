@@ -79,6 +79,9 @@ class FinanceAPITest(APITestCase):
         resp = self.client.post(reverse('officeexpense-list'), {
             'office': self.office.pk, 'category': self.category.pk, 'amount': '25000',
             'expense_date': date.today().isoformat(),
+            'expense_account': AccountHead.objects.get(system_role='office_expenses').pk,
+            'paid_from': AccountHead.objects.get(system_role='cash_default').pk,
+            'payment_method': 'cash',
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         oe_id = resp.data['id']
@@ -105,6 +108,9 @@ class FinanceAPITest(APITestCase):
         resp = self.client.post(reverse('projectcost-list'), {
             'project': self.project.pk, 'cost_category': 'material', 'amount': '50000',
             'cost_date': date.today().isoformat(),
+            'expense_account': AccountHead.objects.get(system_role='project_costs').pk,
+            'paid_from': AccountHead.objects.get(system_role='cash_default').pk,
+            'payment_method': 'cash',
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         pc = ProjectCost.objects.get(pk=resp.data['id'])
@@ -140,8 +146,8 @@ class AccountingModelTest(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_superuser('acct', 'acct@example.com', 'pass12345')
-        self.cash = AccountHead.objects.create(code='1000', name='Cash', nature='debit')
-        self.capital = AccountHead.objects.create(code='3000', name='Capital', nature='credit')
+        self.cash = AccountHead.objects.get(system_role='cash_default')
+        self.capital = AccountHead.objects.get(code='3.1')
 
     def _draft(self, voucher_type='JV', **kwargs):
         return Voucher.objects.create(
@@ -151,27 +157,29 @@ class AccountingModelTest(TestCase):
 
     # ── Chart of accounts ────────────────────────────────────────────────
     def test_creating_child_clears_parent_leaf_flag(self):
-        self.assertTrue(self.cash.is_leaf)
-        child = AccountHead.objects.create(code='1100', name='Petty Cash', parent=self.cash)
-        self.cash.refresh_from_db()
-        self.assertFalse(self.cash.is_leaf)
+        parent = AccountHead.objects.get(code='1.1.4')
+        self.assertTrue(parent.is_leaf)
+        child = AccountHead.objects.create(name='Petty Cash', parent=parent)
+        parent.refresh_from_db()
+        self.assertFalse(parent.is_leaf)
         self.assertTrue(child.is_leaf)
-        self.assertEqual(child.level, 2)
+        self.assertEqual(child.level, 4)
 
     def test_depth_capped_at_four_levels(self):
-        h1 = AccountHead.objects.create(code='A1', name='L1')
-        h2 = AccountHead.objects.create(code='A2', name='L2', parent=h1)
-        h3 = AccountHead.objects.create(code='A3', name='L3', parent=h2)
-        h4 = AccountHead.objects.create(code='A4', name='L4', parent=h3)
+        h1 = AccountHead.objects.get(code='1')
+        h2 = AccountHead.objects.create(name='L2', parent=h1)
+        h3 = AccountHead.objects.create(name='L3', parent=h2)
+        h4 = AccountHead.objects.create(name='L4', parent=h3)
         self.assertEqual(h4.level, 4)
         with self.assertRaises(ValidationError):
-            AccountHead.objects.create(code='A5', name='L5', parent=h4)
+            AccountHead.objects.create(name='L5', parent=h4)
 
     def test_posting_to_non_leaf_head_rejected(self):
-        AccountHead.objects.create(code='1100', name='Petty Cash', parent=self.cash)
-        self.cash.refresh_from_db()
+        parent = AccountHead.objects.get(code='1.1.1')
+        AccountHead.objects.create(name='Petty Cash', parent=parent)
+        parent.refresh_from_db()
         voucher = self._draft()
-        line = VoucherLine(voucher=voucher, account_head=self.cash, debit=Decimal('100'))
+        line = VoucherLine(voucher=voucher, account_head=parent, debit=Decimal('100'))
         with self.assertRaises(ValidationError):
             line.full_clean()
 

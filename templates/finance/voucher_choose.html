@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}New Voucher - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>New Voucher</h1>
+            <div class="page-actions">
+                <a href="{% url 'finance_vouchers' %}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>Choose voucher type</h3></div>
+            <div class="voucher-type-grid">
+                {% for value, label in voucher_types %}
+                <a class="voucher-type-card" href="{% url 'finance_voucher_create' %}?type={{ value }}">
+                    <strong>{{ label }}</strong>
+                    {% if value == 'JV' %}
+                    <span>Debit and credit journal lines</span>
+                    {% else %}
+                    <span>Cash or bank account plus contra lines</span>
+                    {% endif %}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </main>
+</div>
+<style>
+.voucher-type-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; padding:18px; }
+.voucher-type-card { display:block; border:1px solid var(--border); border-radius:10px; padding:18px; background:var(--bg); color:var(--text-primary); text-decoration:none; }
+.voucher-type-card:hover { border-color:var(--primary); }
+.voucher-type-card strong { display:block; font-size:15px; margin-bottom:6px; }
+.voucher-type-card span { color:var(--text-secondary); font-size:12px; }
+</style>
+{% endblock %}

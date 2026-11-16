@@ -86,6 +86,7 @@ class BookingSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(source='plot.project.name', read_only=True)
     remaining_balance = serializers.ReadOnlyField()
     payment_progress = serializers.ReadOnlyField()
+    customer_advances_held = serializers.ReadOnlyField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     source_display = serializers.CharField(source='get_source_display', read_only=True)
     
@@ -93,11 +94,14 @@ class BookingSerializer(serializers.ModelSerializer):
         model = Booking
         fields = ['id', 'booking_id', 'customer', 'customer_name', 'plot', 'plot_number',
                   'project_name', 'booking_date', 'total_amount', 'advance_paid',
-                  'remaining_balance', 'payment_progress', 'status', 'status_display',
+                  'remaining_balance', 'payment_progress', 'customer_advances_held',
+                  'status', 'status_display',
                   'source', 'source_display', 'possession_date', 'is_possession_taken',
+                  'delivery_date', 'delivered_by',
                   'notes', 'created_at', 'updated_at', 'created_by']
         read_only_fields = ['id', 'booking_id', 'booking_date', 'created_at',
-                           'updated_at', 'created_by', 'payment_progress']
+                           'updated_at', 'created_by', 'payment_progress',
+                           'customer_advances_held', 'delivery_date', 'delivered_by']
     
     def validate_total_amount(self, value):
         if value and value <= 0:
@@ -111,9 +115,22 @@ class BookingSerializer(serializers.ModelSerializer):
 
 
 class BookingCreateSerializer(serializers.ModelSerializer):
+    idempotency_key = serializers.CharField(
+        required=False, allow_null=True, allow_blank=True, validators=[])
+
     class Meta:
         model = Booking
-        fields = ['customer', 'plot', 'total_amount', 'advance_paid', 'source', 'agent', 'notes']
+        fields = ['customer', 'plot', 'total_amount', 'advance_paid', 'source', 'agent', 'notes', 'idempotency_key']
+
+    def validate_idempotency_key(self, value):
+        if value:
+            qs = Booking.objects.filter(idempotency_key=value)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    'This request was already processed. Refresh before creating another booking.')
+        return value
 
     def validate_total_amount(self, value):
         if value and value <= 0:
@@ -187,6 +204,7 @@ class BookingDetailSerializer(serializers.ModelSerializer):
     installment_plan = InstallmentPlanSerializer(read_only=True)
     remaining_balance = serializers.ReadOnlyField()
     payment_progress = serializers.ReadOnlyField()
+    customer_advances_held = serializers.ReadOnlyField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     source_display = serializers.CharField(source='get_source_display', read_only=True)
     
@@ -194,11 +212,14 @@ class BookingDetailSerializer(serializers.ModelSerializer):
         model = Booking
         fields = ['id', 'booking_id', 'customer', 'plot', 'plot_detail',
                   'booking_date', 'total_amount', 'advance_paid', 'remaining_balance',
-                  'payment_progress', 'status', 'status_display', 'source', 'source_display',
-                  'possession_date', 'is_possession_taken', 'notes',
+                  'payment_progress', 'customer_advances_held', 'status', 'status_display',
+                  'source', 'source_display',
+                  'possession_date', 'is_possession_taken', 'delivery_date',
+                  'delivered_by', 'notes',
                   'installment_plan', 'created_at', 'updated_at', 'created_by']
         read_only_fields = ['id', 'booking_id', 'booking_date', 'created_at',
-                           'updated_at', 'created_by', 'payment_progress']
+                           'updated_at', 'created_by', 'payment_progress',
+                           'customer_advances_held', 'delivery_date', 'delivered_by']
 
 
 # ─── TRANSFERS ───────────────────────────────────────────────────────────────────

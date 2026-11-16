@@ -40,8 +40,14 @@ class Payment(models.Model):
     ]
     
     payment_id = models.CharField(max_length=20, unique=True, editable=False)
+    idempotency_key = models.CharField(max_length=64, unique=True, null=True, blank=True)
     booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name='payments')
     installment = models.ForeignKey(Installment, on_delete=models.SET_NULL, null=True, blank=True, related_name='payments')
+    received_into = models.ForeignKey(
+        'finance.AccountHead', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='payments_received_into',
+        help_text='Cash or bank account that received this payment.',
+    )
     amount = models.DecimalField(max_digits=15, decimal_places=2)
     payment_date = models.DateField()
     payment_method = models.CharField(max_length=20, choices=METHOD_CHOICES, default='cash')
@@ -81,28 +87,15 @@ class Payment(models.Model):
         self.post_to_ledger()
 
     def post_to_ledger(self):
-        """Create the Cash/Bank Receipt voucher for this payment (idempotent).
-
-        Spec §3.7/§3.8: vouchers replace the ledger as the books of record, but
-        this does **not** touch ``Booking.advance_paid`` — headline revenue stays
-        ``advance_paid``-based, and voucher income is never summed into revenue.
-        Keyed on ``(reference_type, reference_id)`` so re-saves never duplicate.
-        """
-        from finance.accounting import (
-            cash_bank_head, post_source_voucher, receivable_head, voucher_type_for,
-        )
-        return post_source_voucher(
-            reference_type='Payment', reference_id=self.pk,
-            voucher_type=voucher_type_for(self.payment_method, 'receipt'),
-            date=self.payment_date,
-            narration=f'Payment {self.payment_id} - {self.get_payment_method_display()}',
-            lines=[
-                (cash_bank_head(self.payment_method), self.amount, Decimal('0.00')),
-                (receivable_head(), Decimal('0.00'), self.amount),
-            ],
-            user=self.created_by,
-        )
+        """Post through the central finance posting service (idempotent)."""
+        from finance.accounting import post_payment
+        return post_payment(self)
     
+    def delete(self, *args, **kwargs):
+        from finance.accounting import block_source_delete
+        block_source_delete(self, 'Payment')
+        return super().delete(*args, **kwargs)
+
     def __str__(self):
         return f"{self.payment_id} - {self.booking.booking_id}"
     
@@ -132,6 +125,7 @@ class PaymentAllocation(models.Model):
 
 
 class Refund(models.Model):
+    idempotency_key = models.CharField(max_length=64, unique=True, null=True, blank=True)
     REASON_CHOICES = [
         ('cancellation', 'Booking Cancellation'),
         ('overpayment', 'Overpayment'),
@@ -157,6 +151,11 @@ class Refund(models.Model):
 
     booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name='refunds')
     original_payment = models.ForeignKey(Payment, on_delete=models.SET_NULL, null=True, blank=True)
+    paid_from = models.ForeignKey(
+        'finance.AccountHead', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='refunds_paid_from',
+        help_text='Cash or bank account used to pay this refund.',
+    )
     amount = models.DecimalField(max_digits=15, decimal_places=2)
     reason = models.CharField(max_length=30, choices=REASON_CHOICES)
     refund_method = models.CharField(max_length=20, choices=METHOD_CHOICES, default='bank_transfer')
@@ -268,32 +267,9 @@ class Refund(models.Model):
         self.save(update_fields=['status', 'notes', 'updated_at'])
 
     def post_to_ledger(self):
-        """Idempotently post an independent payment voucher for this refund.
-
-        Spec §3.15: a refund never reverses or mutates the original receipt
-        voucher. It is a separate Cash/Bank Payment voucher — debit Accounts
-        Receivable, credit Cash/Bank (resolved from ``refund_method``) — keyed on
-        ``reference_type='Refund'`` + ``reference_id``.
-        """
-        from datetime import date
-        from finance.accounting import (
-            cash_bank_head, post_source_voucher, receivable_head, voucher_type_for,
-        )
-        post_date = self.refund_date
-        if not post_date:
-            post_date = self.processed_date.date() if self.processed_date else date.today()
-        return post_source_voucher(
-            reference_type='Refund', reference_id=self.pk,
-            voucher_type=voucher_type_for(self.refund_method, 'payment'),
-            date=post_date,
-            narration=f'Refund of Rs. {self.amount} for booking '
-                      f'{self.booking.booking_id} - {self.get_reason_display()}',
-            lines=[
-                (receivable_head(), self.amount, Decimal('0.00')),
-                (cash_bank_head(self.refund_method), Decimal('0.00'), self.amount),
-            ],
-            user=self.processed_by,
-        )
+        """Post through the central finance posting service (idempotent)."""
+        from finance.accounting import post_refund
+        return post_refund(self)
 
     def process(self, user=None):
         """Mark the approved refund as processed and post it to the ledger exactly once."""
@@ -320,6 +296,11 @@ class Refund(models.Model):
     def mark_processed(self, user=None):
         """Alias for :meth:`process`."""
         return self.process(user=user)
+
+    def delete(self, *args, **kwargs):
+        from finance.accounting import block_source_delete
+        block_source_delete(self, 'Refund')
+        return super().delete(*args, **kwargs)
 
     def __str__(self):
         return f"Refund for {self.booking.booking_id} - {self.get_status_display()}"

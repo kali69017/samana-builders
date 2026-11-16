@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.utils import timezone
-from django.db import models as db_models
+from django.db import IntegrityError, models as db_models
 from django.db import transaction
 from .models import Payment, Receipt, Refund, PaymentAllocation
 from bookings.models import Booking
@@ -51,15 +51,36 @@ class PaymentViewSet(viewsets.ModelViewSet):
         if self.action in ['retrieve', 'detail']:
             return PaymentDetailSerializer
         return PaymentSerializer
-    
+
+    def create(self, request, *args, **kwargs):
+        idem_key = request.data.get('idempotency_key')
+        try:
+            return super().create(request, *args, **kwargs)
+        except IntegrityError:
+            existing = Payment.objects.filter(idempotency_key=idem_key).first() if idem_key else None
+            if existing is None:
+                raise
+            return Response(self.get_serializer(existing).data, status=status.HTTP_200_OK)
+
     def perform_create(self, serializer):
-        payment = serializer.save(created_by=self.request.user)
-        from core.models import AuditLog
-        AuditLog.objects.create(
-            user=self.request.user, action='create', model_name='Payment',
-            object_id=payment.payment_id,
-            description=f'Created payment {payment.payment_id} for booking {payment.booking.booking_id} via API'
-        )
+        with transaction.atomic():
+            payment = serializer.save(created_by=self.request.user)
+            from core.models import AuditLog
+            AuditLog.objects.create(
+                user=self.request.user, action='create', model_name='Payment',
+                object_id=payment.payment_id,
+                description=f'Created payment {payment.payment_id} for booking {payment.booking.booking_id} via API'
+            )
+
+    def destroy(self, request, *args, **kwargs):
+        payment = self.get_object()
+        from finance.models import Voucher
+        if Voucher.objects.filter(reference_type='Payment', reference_id=payment.pk).exists():
+            return Response(
+                {'error': 'A payment with a posted voucher cannot be deleted.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
     
     def get_queryset(self):
         qs = super().get_queryset()
@@ -294,6 +315,16 @@ class RefundViewSet(viewsets.ModelViewSet):
     serializer_class = RefundSerializer
     permission_classes = [IsStaffReadAdminWrite]
 
+    def create(self, request, *args, **kwargs):
+        idem_key = request.data.get('idempotency_key')
+        try:
+            return super().create(request, *args, **kwargs)
+        except IntegrityError:
+            existing = Refund.objects.filter(idempotency_key=idem_key).first() if idem_key else None
+            if existing is None:
+                raise
+            return Response(self.get_serializer(existing).data, status=status.HTTP_200_OK)
+
     def _audit(self, request, action, refund, note=None):
         from core.models import AuditLog
         AuditLog.objects.create(
@@ -304,12 +335,23 @@ class RefundViewSet(viewsets.ModelViewSet):
         )
 
     def perform_create(self, serializer):
-        refund = serializer.save()
-        self._audit(self.request, 'create', refund)
+        with transaction.atomic():
+            refund = serializer.save()
+            self._audit(self.request, 'create', refund)
 
     def perform_update(self, serializer):
         refund = serializer.save()
         self._audit(self.request, 'update', refund)
+
+    def destroy(self, request, *args, **kwargs):
+        refund = self.get_object()
+        from finance.models import Voucher
+        if Voucher.objects.filter(reference_type='Refund', reference_id=refund.pk).exists():
+            return Response(
+                {'error': 'A refund with a posted voucher cannot be deleted.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):

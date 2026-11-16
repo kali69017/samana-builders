@@ -4,6 +4,7 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
+from django.db import IntegrityError
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db.models import Sum
@@ -62,7 +63,17 @@ class BookingViewSet(viewsets.ModelViewSet):
         if self.action in ['retrieve', 'detail']:
             return BookingDetailSerializer
         return BookingSerializer
-    
+
+    def create(self, request, *args, **kwargs):
+        idem_key = request.data.get('idempotency_key')
+        try:
+            return super().create(request, *args, **kwargs)
+        except IntegrityError:
+            existing = Booking.objects.filter(idempotency_key=idem_key).first() if idem_key else None
+            if existing is None:
+                raise
+            return Response(self.get_serializer(existing).data, status=status.HTTP_200_OK)
+
     def perform_create(self, serializer):
         from django.db import transaction
         with transaction.atomic():
@@ -104,21 +115,15 @@ class BookingViewSet(viewsets.ModelViewSet):
             Reservation.objects.filter(
                 customer=booking.customer, plot=plot, status='active'
             ).update(status='converted')
-        from core.models import AuditLog
-        AuditLog.objects.create(
-            user=self.request.user, action='create', model_name='Booking',
-            object_id=booking.booking_id,
-            description=f'Created booking {booking.booking_id} for {booking.customer.full_name} via API'
-        )
-        # Match the web flow: notify the customer about the new booking.
-        try:
+            from core.models import AuditLog
+            AuditLog.objects.create(
+                user=self.request.user, action='create', model_name='Booking',
+                object_id=booking.booking_id,
+                description=f'Created booking {booking.booking_id} for {booking.customer.full_name} via API'
+            )
+            # This only queues; provider calls happen after commit.
             from notifications.services import NotificationService
             NotificationService.send_booking_notification(booking)
-        except Exception:
-            # Notifications must never fail the booking creation.
-            import logging
-            logging.getLogger(__name__).warning(
-                'Booking notification failed for %s', booking.booking_id)
 
     def destroy(self, request, *args, **kwargs):
         """Delete a booking only when it has no payments.
@@ -168,9 +173,11 @@ class BookingViewSet(viewsets.ModelViewSet):
         # through this endpoint — it needs the refund workflow instead.
         verified_amount = booking.payments.filter(status='verified').aggregate(
             total=Sum('amount'))['total'] or 0
-        if verified_amount > 0:
+        refunded_amount = booking.refunds.exclude(status='rejected').aggregate(
+            total=Sum('amount'))['total'] or 0
+        if verified_amount > refunded_amount:
             return Response(
-                {'error': 'This booking has verified payments. Process a refund before cancelling.'},
+                {'error': 'This booking has unrefunded verified payments. Process a refund before cancelling.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -225,6 +232,41 @@ class BookingViewSet(viewsets.ModelViewSet):
 
         return Response(BookingSerializer(booking).data)
     
+    @action(detail=True, methods=['post'])
+    def deliver(self, request, pk=None):
+        from django.core.exceptions import ValidationError
+        from core.permissions import get_user_role
+        if get_user_role(request) not in ('super_admin', 'admin', 'management'):
+            return Response(
+                {'error': 'Only super_admin, admin or management can mark a booking delivered.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        booking = self.get_object()
+        paid = booking.amount_paid
+        unpaid = max(booking.total_amount - paid, 0)
+        if unpaid > 0 and str(request.data.get('confirm_unpaid', '')).lower() not in (
+                '1', 'true', 'yes', 'on'):
+            return Response(
+                {'error': f'Confirm the unpaid balance of Rs. {unpaid} before delivering.',
+                 'unpaid': str(unpaid)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            booking.mark_delivered(
+                request.user, request.data.get('delivery_date'))
+        except ValidationError as exc:
+            return Response(
+                {'error': ' '.join(exc.messages)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        from core.models import AuditLog
+        AuditLog.objects.create(
+            user=request.user, action='update', model_name='Booking',
+            object_id=booking.booking_id,
+            description=f'Marked booking {booking.booking_id} delivered via API',
+        )
+        return Response(self.get_serializer(booking).data)
+
     @action(detail=True, methods=['get'])
     def payment_summary(self, request, pk=None):
         booking = self.get_object()
@@ -267,6 +309,11 @@ class BookingViewSet(viewsets.ModelViewSet):
         final_price = property_price - discount
         total_paid = float(booking.advance_paid)
         outstanding = float(booking.remaining_balance)
+        verified_paid = booking.payments.filter(status='verified').aggregate(
+            total=Sum('amount'))['total'] or Decimal('0.00')
+        refunded = booking.refunds.exclude(status='rejected').aggregate(
+            total=Sum('amount'))['total'] or Decimal('0.00')
+        refundable = max(verified_paid - refunded, Decimal('0.00'))
         progress = booking.payment_progress
         
         return Response({
@@ -281,6 +328,7 @@ class BookingViewSet(viewsets.ModelViewSet):
             'total_installments': total_installments,
             'installment_amount': float(installment_amount),
             'outstanding': outstanding,
+            'refundable': float(refundable),
             'progress_percent': progress,
             'has_installment_plan': installment_plan is not None,
             'installment_plan': {

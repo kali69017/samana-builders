@@ -11,6 +11,9 @@
         <div class="page-header">
             <h1>{{ voucher.voucher_number }}</h1>
             <div class="page-actions">
+                {% if can_delete %}
+                <a href="{% url 'finance_voucher_delete' voucher.pk %}" class="btn btn-danger">Delete Manual Voucher</a>
+                {% endif %}
                 <a href="{% url 'finance_vouchers' %}" class="btn btn-secondary">Back to Vouchers</a>
             </div>
         </div>

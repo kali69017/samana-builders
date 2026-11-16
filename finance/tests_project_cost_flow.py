@@ -369,7 +369,7 @@ class DeletingAPaidSourceOrphansItsVoucherTest(TestCase):
         exp.post_to_ledger()
         return exp
 
-    def test_html_delete_of_a_paid_cost_orphans_its_voucher(self):
+    def test_html_delete_of_a_paid_cost_is_blocked(self):
         cost = self._paid_cost()
         voucher = cost.posted_voucher
         self.assertIsNotNone(voucher, 'paying a cost must post a voucher')
@@ -378,43 +378,30 @@ class DeletingAPaidSourceOrphansItsVoucherTest(TestCase):
         self.client.force_login(self.supervisor)
         resp = self.client.post(reverse('finance_project_cost_delete', args=[cost.pk]))
         self.assertEqual(resp.status_code, 302)
-        self.assertFalse(ProjectCost.objects.filter(pk=cost.pk).exists())
-        self.assertTrue(
-            Voucher.objects.filter(pk=voucher.pk).exists(),
-            'BUG: the paid cost was deleted but its posted voucher survives, '
-            'so the ledger still reports spend for a cost that no longer exists',
-        )
+        self.assertTrue(ProjectCost.objects.filter(pk=cost.pk).exists())
+        self.assertTrue(Voucher.objects.filter(pk=voucher.pk).exists())
 
-    def test_orphaned_voucher_cannot_be_deleted_through_the_api(self):
-        """The orphan is unreachable: no endpoint can remove it."""
+    def test_paid_cost_voucher_cannot_be_deleted_through_the_api(self):
         cost = self._paid_cost()
         voucher = cost.posted_voucher
         self.client.force_login(self.supervisor)
         self.client.post(reverse('finance_project_cost_delete', args=[cost.pk]))
 
         resp = self.client.delete(f'/api/vouchers/{voucher.pk}/')
-        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.status_code, 405)
         self.assertIn('cannot be deleted', resp.json()['error'].lower())
-        self.assertTrue(
-            Voucher.objects.filter(pk=voucher.pk).exists(),
-            'BUG: no correction path — the orphan survives every available endpoint',
-        )
+        self.assertTrue(Voucher.objects.filter(pk=voucher.pk).exists())
 
-    def test_api_delete_of_a_paid_expense_orphans_its_voucher(self):
-        """Same defect on the API path. ``OfficeExpense`` has no HTML delete
-        route at all, so the DRF ModelViewSet delete is the only entry point."""
+    def test_api_delete_of_a_paid_expense_is_blocked(self):
         exp = self._paid_expense()
         voucher = exp.posted_voucher
         self.assertIsNotNone(voucher, 'paying an expense must post a voucher')
 
         self.client.force_login(self.supervisor)
         resp = self.client.delete(f'/api/office-expenses/{exp.pk}/')
-        self.assertEqual(resp.status_code, 204)
-        self.assertFalse(OfficeExpense.objects.filter(pk=exp.pk).exists())
-        self.assertTrue(
-            Voucher.objects.filter(pk=voucher.pk).exists(),
-            'BUG: the paid expense was deleted but its posted voucher survives',
-        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertTrue(OfficeExpense.objects.filter(pk=exp.pk).exists())
+        self.assertTrue(Voucher.objects.filter(pk=voucher.pk).exists())
 
     def test_unpaid_source_deletes_cleanly(self):
         """A source that never reached the ledger must still be deletable —

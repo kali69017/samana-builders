@@ -12,8 +12,8 @@ from .reports import build_ledger_report
 class LedgerReportTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_superuser('rep', 'r@example.com', 'pass12345')
-        self.cash = AccountHead.objects.create(code='1000', name='Cash', nature='debit')
-        self.capital = AccountHead.objects.create(code='3000', name='Capital', nature='credit')
+        self.cash = AccountHead.objects.get(system_role='cash_default')
+        self.capital = AccountHead.objects.get(code='3.1')
 
     def _voucher(self, when, lines, vtype='JV', post=True):
         v = Voucher.objects.create(voucher_type=vtype, date=when, created_by=self.user)
@@ -49,13 +49,9 @@ class LedgerReportTest(TestCase):
         self.assertEqual(report['closing_balance'], Decimal('150'))
 
     def test_parent_head_rolls_up_descendant_leaves(self):
-        bank = AccountHead.objects.create(code='1010', name='Bank', parent=self.cash)
-        parent = AccountHead.objects.create(code='1500', name='Assets')
-        # move cash + bank under the parent to make a roll-up
-        self.cash.parent = parent
-        self.cash.save()
-        bank.parent = parent
-        bank.save()
+        bank = AccountHead.objects.get(system_role='bank_default')
+        parent = AccountHead.objects.get(code='1.1.1')
+        # Cash and bank are both leaves under Cash & Banks.
         self._voucher(date(2026, 1, 1), [(self.cash, '100', '0'), (self.capital, '0', '100')])
         self._voucher(date(2026, 1, 2), [(bank, '200', '0'), (self.capital, '0', '200')])
         report = build_ledger_report(head=parent)

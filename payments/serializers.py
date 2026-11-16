@@ -48,6 +48,8 @@ class PaymentAllocationSerializer(serializers.ModelSerializer):
 # ─── REFUNDS ─────────────────────────────────────────────────────────────────────
 
 class RefundSerializer(serializers.ModelSerializer):
+    idempotency_key = serializers.CharField(
+        required=False, allow_null=True, allow_blank=True, validators=[])
     booking_id_display = serializers.CharField(source='booking.booking_id', read_only=True)
     approved_by_name = serializers.CharField(source='approved_by.username', read_only=True, allow_null=True)
     processed_by_name = serializers.CharField(source='processed_by.username', read_only=True, allow_null=True)
@@ -64,14 +66,24 @@ class RefundSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Refund
-        fields = ['id', 'booking', 'booking_id_display', 'original_payment',
+        fields = ['id', 'booking', 'booking_id_display', 'original_payment', 'paid_from',
                   'amount', 'reason', 'reason_display', 'refund_method', 'refund_method_display',
                   'refund_date', 'supporting_document', 'supporting_document_url',
                   'status', 'status_display', 'approved_by', 'approved_by_name',
                   'processed_by', 'processed_by_name', 'processed_date',
                   'project', 'plot', 'total_paid', 'total_refunded',
-                  'refundable_amount', 'refund_percentage', 'notes', 'created_at']
+                  'refundable_amount', 'refund_percentage', 'notes', 'created_at', 'idempotency_key']
         read_only_fields = ['id', 'processed_by', 'processed_by_name', 'processed_date', 'created_at']
+
+    def validate_idempotency_key(self, value):
+        if value:
+            qs = Refund.objects.filter(idempotency_key=value)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    'This request was already processed. Refresh before creating another refund.')
+        return value
 
     def get_supporting_document_url(self, obj):
         request = self.context.get('request')
@@ -99,6 +111,15 @@ class RefundSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, data):
+        from finance.accounting import validate_cash_bank_account
+        account = data.get('paid_from', getattr(self.instance, 'paid_from', None))
+        if account is None:
+            raise serializers.ValidationError(
+                {'paid_from': 'Select the cash or bank account used for this refund.'})
+        try:
+            validate_cash_bank_account(account, data.get('refund_method') or 'bank_transfer')
+        except Exception as exc:
+            raise serializers.ValidationError({'paid_from': str(exc)})
         booking = data.get('booking')
         amount = data.get('amount')
         if booking and amount is not None:
@@ -130,7 +151,7 @@ class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
         fields = ['id', 'payment_id', 'booking', 'booking_id_display', 'customer_name',
-                  'installment', 'amount', 'payment_date', 'payment_method',
+                  'installment', 'received_into', 'amount', 'payment_date', 'payment_method',
                   'payment_method_display', 'payment_type', 'payment_type_display',
                   'reference_number', 'bank_name',
                   'cheque_number', 'cheque_date', 'status', 'status_display',
@@ -149,11 +170,25 @@ class PaymentSerializer(serializers.ModelSerializer):
 
 
 class PaymentCreateSerializer(serializers.ModelSerializer):
+    idempotency_key = serializers.CharField(
+        required=False, allow_null=True, allow_blank=True, validators=[])
+
     class Meta:
         model = Payment
-        fields = ['payment_id', 'booking', 'installment', 'amount', 'payment_date', 'payment_method', 'payment_type',
-                  'reference_number', 'bank_name', 'cheque_number', 'cheque_date', 'notes', 'method_data']
+        fields = ['payment_id', 'booking', 'installment', 'received_into', 'amount', 'payment_date',
+                  'payment_method', 'payment_type', 'reference_number', 'bank_name',
+                  'cheque_number', 'cheque_date', 'notes', 'method_data', 'idempotency_key']
         read_only_fields = ['payment_id']
+
+    def validate_idempotency_key(self, value):
+        if value:
+            qs = Payment.objects.filter(idempotency_key=value)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    'This request was already processed. Refresh before creating another payment.')
+        return value
 
     def validate_amount(self, value):
         if value is not None and value <= 0:
@@ -161,6 +196,15 @@ class PaymentCreateSerializer(serializers.ModelSerializer):
         return value
     
     def validate(self, data):
+        from finance.accounting import validate_cash_bank_account
+        account = data.get('received_into')
+        if account is None:
+            raise serializers.ValidationError(
+                {'received_into': 'Select the cash or bank account that received this payment.'})
+        try:
+            validate_cash_bank_account(account, data.get('payment_method') or 'cash')
+        except Exception as exc:
+            raise serializers.ValidationError({'received_into': str(exc)})
         if data.get('payment_method') == 'cheque':
             if not data.get('cheque_number'):
                 raise serializers.ValidationError({'cheque_number': 'Cheque number is required for cheque payments'})
@@ -194,7 +238,7 @@ class PaymentDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
         fields = ['id', 'payment_id', 'booking', 'booking_id_display', 'customer_name',
-                  'installment', 'amount', 'payment_date', 'payment_method',
+                  'installment', 'received_into', 'amount', 'payment_date', 'payment_method',
                   'payment_method_display', 'payment_type', 'payment_type_display',
                   'reference_number', 'bank_name',
                   'cheque_number', 'cheque_date', 'clearance_date',

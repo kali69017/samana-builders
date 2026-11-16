@@ -36,14 +36,13 @@ class CustomerLinkageTest(TestCase):
     def test_pending_booking_does_not_link(self):
         self.customer.refresh_from_db()
         self.assertIsNone(self.customer.account_head)
-        self.assertFalse(AccountHead.objects.filter(code='1100').exists())
 
     def test_confirmed_transition_links_to_control_head(self):
         self.booking.status = 'confirmed'
         self.booking.save()
         self.customer.refresh_from_db()
         self.assertIsNotNone(self.customer.account_head)
-        self.assertEqual(self.customer.account_head.code, '1100')
+        self.assertEqual(self.customer.account_head.system_role, 'receivable')
         self.assertEqual(self.customer.account_head.name, 'Accounts Receivable')
 
     def test_cancelled_booking_does_not_link(self):
@@ -71,7 +70,7 @@ class CustomerLinkageTest(TestCase):
         self.customer.refresh_from_db()
         second.refresh_from_db()
         self.assertEqual(self.customer.account_head_id, second.account_head_id)
-        self.assertEqual(AccountHead.objects.filter(code='1100').count(), 1)
+        self.assertEqual(AccountHead.objects.filter(system_role='receivable').count(), 1)
 
     def test_resave_does_not_duplicate_or_change_head(self):
         self.booking.status = 'confirmed'

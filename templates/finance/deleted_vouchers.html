@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+
+{% block title %}Deleted Vouchers - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Deleted Vouchers</h1>
+            <a href="{% url 'finance_vouchers' %}" class="btn btn-secondary">Back to Vouchers</a>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>Permanent deletion snapshots</h3><span class="badge badge-info">{{ deletions|length }} records</span></div>
+            <div class="table-container">
+                {% if deletions %}
+                <table>
+                    <thead><tr><th>Number</th><th>Type</th><th>Date</th><th>Total</th><th>Deleted by</th><th>Deleted at</th><th>Reason</th><th>Lines</th></tr></thead>
+                    <tbody>
+                        {% for row in deletions %}
+                        <tr>
+                            <td style="font-weight:600;">{{ row.voucher_number }}</td>
+                            <td>{{ row.get_voucher_type_display }}</td>
+                            <td>{{ row.date|date:"d M Y" }}</td>
+                            <td>Rs. {{ row.total|floatformat:2 }}</td>
+                            <td>{{ row.deleted_by.username|default:"-" }}</td>
+                            <td>{{ row.deleted_at|date:"d M Y H:i" }}</td>
+                            <td>{{ row.reason }}</td>
+                            <td>{{ row.lines|length }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state"><div class="empty-icon">🗂️</div><h3>No deleted vouchers</h3><p>Deleted manual vouchers appear here with their full snapshot.</p></div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

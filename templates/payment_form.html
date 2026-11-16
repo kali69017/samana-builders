@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load form_errors %}
 
 {% block title %}{{ title }} - Samana Builders ERP{% endblock %}
 
@@ -30,8 +31,10 @@
         </div>
         {% endif %}
 
+        {% form_error_summary form %}
         <form method="post" novalidate enctype="multipart/form-data" id="paymentForm">
             {% csrf_token %}
+            {{ form.idempotency_key }}
             {{ form.method_data }}
 
             <!-- SECTION 1: Booking Selection -->
@@ -116,12 +119,14 @@
                             <div class="summary-card"><div class="summary-label">Property Price</div><div class="summary-value" id="summaryPrice">—</div></div>
                             <div class="summary-card"><div class="summary-label">Down Payment</div><div class="summary-value" id="summaryDown">—</div></div>
                             <div class="summary-card accent"><div class="summary-label">Amount Paid</div><div class="summary-value" id="summaryPaid">—</div></div>
+                            <div class="summary-card"><div class="summary-label">Refundable</div><div class="summary-value" id="summaryRefundable">—</div></div>
                             <div class="summary-card"><div class="summary-label">Discount</div><div class="summary-value" id="summaryDiscount">—</div></div>
                             <div class="summary-card highlight"><div class="summary-label">Remaining Balance</div><div class="summary-value" id="summaryRemaining">—</div></div>
                         </div>
                         <div id="planInfo" style="display:none; margin-top:12px; padding:10px 14px; background:var(--primary-bg); border-radius:var(--radius-sm); font-size:13px; color:var(--text-secondary);"></div>
                     </div>
                     <div id="noBookingMsg" style="text-align:center; padding:20px; color:var(--text-secondary); font-size:14px;">Select a booking to view pricing summary</div>
+                    <div id="paymentSummaryError" class="form-error" style="display:none; margin-top:10px;"></div>
                 </div>
             </div>
 
@@ -223,6 +228,11 @@
                                 <option value="raast">Raast Transfer</option>
                                 <option value="online">Online Payment</option>
                             </select>
+                        </div>
+                        <div class="form-group">
+                            <label style="display:block; font-size:13px; font-weight:600; color:var(--text-primary); margin-bottom:6px;">Received into <span style="color:var(--accent-red);">*</span></label>
+                            {{ form.received_into }}
+                            {% if form.received_into.errors %}<div class="form-error">{{ form.received_into.errors }}</div>{% endif %}
                         </div>
                     </div>
 
@@ -417,6 +427,13 @@ function filterBookings() {
   if (bookingSelect.value) loadBookingSummary(bookingSelect.value);
 }
 
+function showPaymentSummaryError() {
+  var el = document.getElementById('paymentSummaryError');
+  if (el) { el.textContent = 'Could not load the payment summary. Refresh the page or try again.'; el.style.display = ''; }
+  var planInfo = document.getElementById('planInfo');
+  if (planInfo) planInfo.style.display = 'none';
+}
+
 function loadBookingSummary(bookingId) {
   const bk = bookingsData.find(b => String(b.id) === String(bookingId));
   const infoDiv = document.getElementById('bookingInfo');
@@ -450,9 +467,11 @@ function loadBookingSummary(bookingId) {
   document.getElementById('summaryRemaining').textContent = 'Rs. ' + Number(remaining).toLocaleString();
 
   // Check plan via API
-  fetch('/api/bookings/' + bookingId + '/payment-summary/')
-    .then(r => r.json())
+  fetch('/api/bookings/' + bookingId + '/payment_summary/')
+    .then(r => { if (!r.ok) throw new Error('summary request failed'); return r.json(); })
     .then(data => {
+      var refundEl = document.getElementById('summaryRefundable');
+      if (refundEl && data.refundable !== undefined) refundEl.textContent = 'Rs. ' + Number(data.refundable).toLocaleString();
       if (data.down_payment > 0) {
         document.getElementById('summaryDown').textContent = 'Rs. ' + Number(data.down_payment).toLocaleString();
       }
@@ -471,7 +490,7 @@ function loadBookingSummary(bookingId) {
       }
       calcInstallment();
     })
-    .catch(() => {});
+    .catch(showPaymentSummaryError);
 }
 
 function selectPlan(plan) {
@@ -642,9 +661,11 @@ toggleMethodFields();
   document.getElementById('summaryPaid').textContent = 'Rs. ' + Number(bk.advance).toLocaleString();
   document.getElementById('summaryRemaining').textContent = 'Rs. ' + Number(remaining).toLocaleString();
 
-  fetch('/api/bookings/' + bk.id + '/payment-summary/')
-    .then(r => r.json())
+  fetch('/api/bookings/' + bk.id + '/payment_summary/')
+    .then(r => { if (!r.ok) throw new Error('summary request failed'); return r.json(); })
     .then(data => {
+      var refundEl = document.getElementById('summaryRefundable');
+      if (refundEl && data.refundable !== undefined) refundEl.textContent = 'Rs. ' + Number(data.refundable).toLocaleString();
       if (data.down_payment > 0) {
         document.getElementById('summaryDown').textContent = 'Rs. ' + Number(data.down_payment).toLocaleString();
       }
@@ -660,8 +681,23 @@ toggleMethodFields();
         document.getElementById('summaryRemaining').textContent = 'Rs. ' + Number(data.outstanding).toLocaleString();
       }
     })
-    .catch(function(){});
+    .catch(showPaymentSummaryError);
 })();
 {% endif %}
+(function () {
+  var form = document.getElementById('paymentForm');
+  if (!form) return;
+  form.addEventListener('submit', function () {
+    var btn = form.querySelector('button[type="submit"]');
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    var text = btn.querySelector('.btn-text');
+    if (text) { text.textContent = 'Saving'; } else { btn.textContent = 'Saving'; }
+  });
+  window.addEventListener('pageshow', function () {
+    var btn = form.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = false;
+  });
+})();
 </script>
 {% endblock %}

@@ -1,5 +1,6 @@
 """Finance ERP views: office expenses, project costs/budget/investment, ledger."""
 from datetime import date
+from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -9,19 +10,24 @@ from django.db.models import Sum
 from django.http import HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils.dateparse import parse_date
+from django.views.decorators.http import require_POST
 
 from core.models import AuditLog
-from core.permissions import finance_or_above, management_or_above, MANAGEMENT_ROLES
+from core.permissions import (
+    admin_or_above, finance_or_above, management_or_above, MANAGEMENT_ROLES,
+)
 from properties.models import Project
 from bookings.models import Booking
 from .models import (
     AccountHead, Office, ExpenseCategory, OfficeExpense,
     ProjectBudget, ProjectCost, ProjectInvestment, Voucher,
+    VoucherDeletionLog,
 )
 from .forms import (
     OfficeForm, ExpenseCategoryForm, OfficeExpenseForm, ProjectCostForm,
     ProjectBudgetForm, ProjectInvestmentForm, AccountHeadForm, VoucherForm,
-    VoucherLineFormSet,
+    VoucherLineFormSet, CashBankVoucherForm, ContraLineFormSet,
+    CASH_BANK_VOUCHER_KINDS,
 )
 from .reports import build_ledger_report
 
@@ -115,10 +121,25 @@ def office_delete_view(request, pk):
 
 
 # ─── EXPENSE CATEGORIES ──────────────────────────────────────────────────────
+def expense_category_usage(category):
+    """Count every record that references this category through any FK."""
+    total = 0
+    for relation in category._meta.related_objects:
+        accessor = relation.get_accessor_name()
+        if not accessor:
+            continue
+        manager = getattr(category, accessor, None)
+        if manager is not None and hasattr(manager, 'count'):
+            total += manager.count()
+    return total
+
+
 @login_required
 @finance_or_above
 def expense_categories_view(request):
-    categories = ExpenseCategory.objects.all()
+    categories = list(ExpenseCategory.objects.all())
+    for category in categories:
+        category.used_count = expense_category_usage(category)
     return render(request, 'finance/expense_categories.html', {'categories': categories})
 
 
@@ -154,15 +175,43 @@ def expense_category_edit_view(request, pk):
 
 
 @login_required
-@management_or_above
+@finance_or_above
 def expense_category_delete_view(request, pk):
     cat = get_object_or_404(ExpenseCategory, pk=pk)
     if request.method == 'POST':
-        cat.delete()
+        used = expense_category_usage(cat)
+        if used:
+            messages.error(
+                request,
+                f'This category is used by {used} records. Deactivate it instead.',
+            )
+            return redirect('finance_expense_categories')
+        try:
+            cat.delete()
+        except Exception as exc:
+            messages.error(request, str(exc))
+            return redirect('finance_expense_categories')
         _log(request, 'delete', 'ExpenseCategory', pk, f'Deleted category {cat.name}')
         messages.success(request, 'Category deleted successfully!')
         return redirect('finance_expense_categories')
-    return render(request, 'confirm_delete.html', {'object': cat, 'title': 'Delete Category', 'cancel_url': 'finance_expense_categories'})
+    return render(request, 'confirm_delete.html', {
+        'object': cat, 'title': 'Delete Category',
+        'cancel_url': 'finance_expense_categories',
+    })
+
+
+@login_required
+@finance_or_above
+@require_POST
+def expense_category_toggle_active_view(request, pk):
+    cat = get_object_or_404(ExpenseCategory, pk=pk)
+    cat.is_active = not cat.is_active
+    cat.save(update_fields=['is_active'])
+    action = 'activated' if cat.is_active else 'deactivated'
+    _log(request, 'update', 'ExpenseCategory', pk,
+         f'{action.title()} category {cat.name}')
+    messages.success(request, f'Category {action} successfully.')
+    return redirect('finance_expense_categories')
 
 
 # ─── OFFICE EXPENSES ─────────────────────────────────────────────────────────
@@ -379,7 +428,11 @@ def project_cost_pay_view(request, pk):
 def project_cost_delete_view(request, pk):
     cost = get_object_or_404(ProjectCost, pk=pk)
     if request.method == 'POST':
-        cost.delete()
+        try:
+            cost.delete()
+        except ValidationError as exc:
+            messages.error(request, ' '.join(_validation_messages(exc)))
+            return redirect('finance_project_costs')
         _log(request, 'delete', 'ProjectCost', pk, f'Deleted project cost of {cost.amount}')
         messages.success(request, 'Project cost deleted successfully!')
         return redirect('finance_project_costs')
@@ -461,6 +514,12 @@ def _ledger_from_request(request):
         'date_from': date_from,
         'date_to': date_to,
     }
+
+
+@login_required
+@finance_or_above
+def finance_home_view(request):
+    return redirect('finance_ledger')
 
 
 @login_required
@@ -577,8 +636,17 @@ def vouchers_view(request):
         'status_filter': status_filter,
         'voucher_types': Voucher.TYPE_CHOICES,
         'voucher_statuses': Voucher.STATUS_CHOICES,
+        'can_delete_vouchers': _can_delete_vouchers(request),
     }
     return render(request, 'finance/vouchers.html', context)
+
+
+def _can_delete_vouchers(request):
+    if request.user.is_superuser:
+        return True
+    return getattr(getattr(request.user, 'profile', None), 'role', None) in (
+        'super_admin', 'admin',
+    )
 
 
 @login_required
@@ -594,30 +662,187 @@ def voucher_detail_view(request, pk):
         'voucher': voucher,
         'can_post': _is_supervisor(request),
         'can_unlock': _is_supervisor(request),
+        'can_delete': _can_delete_vouchers(request) and voucher.is_manual,
     })
+
+
+@login_required
+@admin_or_above
+def voucher_delete_view(request, pk):
+    """Delete a manual voucher after a reason and immutable snapshot."""
+    voucher = get_object_or_404(Voucher, pk=pk)
+    if not voucher.is_manual:
+        messages.error(
+            request,
+            'Only manual vouchers can be deleted. Correct the source record instead.',
+        )
+        return redirect('finance_voucher_detail', pk=pk)
+    if request.method == 'POST':
+        reason = (request.POST.get('reason') or '').strip()
+        try:
+            log = voucher.delete_manual_voucher(request.user, reason)
+        except ValidationError as exc:
+            messages.error(request, ' '.join(_validation_messages(exc)))
+            return render(request, 'finance/voucher_delete.html', {
+                'voucher': voucher, 'reason': reason,
+            })
+        _log(request, 'delete', 'Voucher', log.voucher_number,
+             f'Deleted manual voucher {log.voucher_number}: {reason}')
+        messages.success(
+            request,
+            f'Voucher {log.voucher_number} deleted. The number is retired and will not be reused.',
+        )
+        return redirect('finance_vouchers')
+    return render(request, 'finance/voucher_delete.html', {'voucher': voucher})
+
+
+@login_required
+@admin_or_above
+def deleted_vouchers_view(request):
+    return render(request, 'finance/deleted_vouchers.html', {
+        'deletions': VoucherDeletionLog.objects.select_related(
+            'deleted_by', 'created_by').all(),
+    })
+
+
+def _contra_errors(form, formset, cash_account):
+    errors = []
+    total = Decimal('0.00')
+    for line_form in formset.forms:
+        cleaned = getattr(line_form, 'cleaned_data', None)
+        if not cleaned:
+            continue
+        account = cleaned.get('account_head')
+        amount = cleaned.get('amount')
+        if account is None or amount is None:
+            continue
+        if account.pk == cash_account.pk:
+            errors.append('A contra account cannot be the cash or bank account.')
+        total += amount
+    if total <= 0:
+        errors.append('Enter at least one contra line with an amount greater than zero.')
+    return errors, total
+
+
+def _cash_voucher_lines(voucher_type, cash_account, formset):
+    entries = []
+    total = Decimal('0.00')
+    for line_form in formset.forms:
+        cleaned = line_form.cleaned_data
+        if not cleaned:
+            continue
+        account = cleaned['account_head']
+        amount = cleaned['amount']
+        narration = cleaned.get('narration', '')
+        if amount <= 0:
+            continue
+        total += amount
+        entries.append((account, amount, narration))
+    if not entries:
+        return []
+    if voucher_type in ('CR', 'BR'):
+        lines = [(cash_account, total, Decimal('0.00'), '')]
+        lines.extend((account, Decimal('0.00'), amount, narration)
+                     for account, amount, narration in entries)
+    else:
+        lines = []
+        lines.extend((account, amount, Decimal('0.00'), narration)
+                     for account, amount, narration in entries)
+        lines.append((cash_account, Decimal('0.00'), total, ''))
+    return lines
 
 
 @login_required
 @finance_or_above
 def voucher_create_view(request):
+    requested_type = request.POST.get('voucher_type') if request.method == 'POST' else request.GET.get('type', '')
+    if request.method == 'GET' and not requested_type:
+        return render(request, 'finance/voucher_choose.html', {
+            'title': 'New Voucher',
+            'voucher_types': [
+                ('CR', 'Cash Receipt'), ('CP', 'Cash Payment'),
+                ('BR', 'Bank Receipt'), ('BP', 'Bank Payment'),
+                ('JV', 'Journal Voucher'),
+            ],
+        })
+    is_cash_bank = requested_type in CASH_BANK_VOUCHER_KINDS
+    formset = None
+
     if request.method == 'POST':
-        form = VoucherForm(request.POST)
-        formset = VoucherLineFormSet(request.POST, prefix='lines')
-        if form.is_valid() and formset.is_valid():
-            voucher = form.save(commit=False)
-            voucher.created_by = request.user
-            voucher.save()
-            formset.instance = voucher
-            formset.save()
-            _log(request, 'create', 'Voucher', voucher.pk,
-                 f'Created voucher {voucher.voucher_number}')
-            messages.success(request, f'Voucher {voucher.voucher_number} created as a draft.')
-            return redirect('finance_voucher_detail', pk=voucher.pk)
+        if is_cash_bank:
+            form = CashBankVoucherForm(request.POST)
+            if any(key.endswith('-debit') or key.endswith('-credit')
+                   for key in request.POST):
+                form.add_error(None, 'Debit and credit fields are not valid for a cash or bank voucher.')
+            formset = ContraLineFormSet(request.POST, prefix='lines')
+            if form.is_valid() and formset.is_valid():
+                errors, _total = _contra_errors(
+                    form, formset, form.cleaned_data['cash_bank_account'],
+                )
+                for error in errors:
+                    form.add_error(None, error)
+                if not errors:
+                    with transaction.atomic():
+                        voucher = form.save(commit=False)
+                        voucher.created_by = request.user
+                        voucher.save()
+                        for head, debit, credit, narration in _cash_voucher_lines(
+                            voucher.voucher_type, voucher.cash_bank_account, formset,
+                        ):
+                            from .models import VoucherLine
+                            VoucherLine.objects.create(
+                                voucher=voucher, account_head=head,
+                                debit=debit, credit=credit, narration=narration,
+                            )
+                    _log(request, 'create', 'Voucher', voucher.pk,
+                         f'Created voucher {voucher.voucher_number}')
+                    messages.success(request, f'Voucher {voucher.voucher_number} created as a draft.')
+                    return redirect('finance_voucher_detail', pk=voucher.pk)
+        else:
+            form = VoucherForm(request.POST)
+            if 'cash_bank_account' in request.POST:
+                form.add_error(None, 'Cash or bank account is not valid for a journal voucher.')
+            formset = VoucherLineFormSet(request.POST, prefix='lines')
+            if form.is_valid() and formset.is_valid():
+                lines = [
+                    line_form.cleaned_data for line_form in formset.forms
+                    if line_form.cleaned_data and not line_form.cleaned_data.get('DELETE')
+                ]
+                debit = sum((line['debit'] or Decimal('0.00') for line in lines), Decimal('0.00'))
+                credit = sum((line['credit'] or Decimal('0.00') for line in lines), Decimal('0.00'))
+                if not lines:
+                    form.add_error(None, 'Enter at least one journal line.')
+                elif debit != credit:
+                    form.add_error(
+                        None,
+                        f'Journal is not balanced: debit {debit} does not equal credit {credit}.',
+                    )
+                else:
+                    with transaction.atomic():
+                        voucher = form.save(commit=False)
+                        voucher.created_by = request.user
+                        voucher.save()
+                        formset.instance = voucher
+                        formset.save()
+                    _log(request, 'create', 'Voucher', voucher.pk,
+                         f'Created voucher {voucher.voucher_number}')
+                    messages.success(request, f'Voucher {voucher.voucher_number} created as a draft.')
+                    return redirect('finance_voucher_detail', pk=voucher.pk)
     else:
-        form = VoucherForm()
-        formset = VoucherLineFormSet(prefix='lines')
+        if is_cash_bank:
+            form = CashBankVoucherForm(initial={'voucher_type': requested_type})
+            formset = ContraLineFormSet(prefix='lines')
+        else:
+            form = VoucherForm(initial={'voucher_type': requested_type} if requested_type else None)
+            formset = VoucherLineFormSet(prefix='lines')
+
+    account_kinds = {
+        str(head.pk): head.account_kind
+        for head in AccountHead.objects.filter(account_kind__in=['cash', 'bank'])
+    }
     return render(request, 'finance/voucher_form.html', {
         'form': form, 'formset': formset, 'title': 'New Voucher',
+        'is_cash_bank': is_cash_bank, 'account_kinds': account_kinds,
     })
 
 
@@ -676,7 +901,21 @@ def _flatten_heads():
 @login_required
 @finance_or_above
 def account_heads_view(request):
-    return render(request, 'finance/account_heads.html', {'heads': _flatten_heads()})
+    heads = _flatten_heads()
+    for head, _depth in heads:
+        if head.parent_id is None:
+            head.can_delete = False
+            head.delete_blocked_reason = 'Level 1 root accounts are fixed and cannot be deleted.'
+        elif head.children.exists():
+            head.can_delete = False
+            head.delete_blocked_reason = 'This account has children and cannot be deleted.'
+        elif head.voucher_lines.exists():
+            head.can_delete = False
+            head.delete_blocked_reason = 'This account has ledger entries and cannot be deleted.'
+        else:
+            head.can_delete = True
+            head.delete_blocked_reason = ''
+    return render(request, 'finance/account_heads.html', {'heads': heads})
 
 
 @login_required
@@ -701,6 +940,9 @@ def account_head_create_view(request):
 @finance_or_above
 def account_head_edit_view(request, pk):
     head = get_object_or_404(AccountHead, pk=pk)
+    if head.parent_id is None:
+        messages.error(request, 'Level 1 root accounts are fixed and cannot be edited.')
+        return redirect('finance_account_heads')
     if request.method == 'POST':
         form = AccountHeadForm(request.POST, instance=head)
         if form.is_valid():
@@ -721,15 +963,13 @@ def account_head_edit_view(request, pk):
 def account_head_delete_view(request, pk):
     head = get_object_or_404(AccountHead, pk=pk)
     if request.method == 'POST':
-        if head.children.exists():
-            messages.error(request, 'Cannot delete an account head that has children.')
-            return redirect('finance_account_heads')
-        if head.voucher_lines.filter(voucher__status='posted').exists():
-            messages.error(request, 'Cannot delete an account head with posted voucher lines.')
+        try:
+            head.delete()
+        except ValidationError as exc:
+            messages.error(request, ' '.join(_validation_messages(exc)))
             return redirect('finance_account_heads')
         _log(request, 'delete', 'AccountHead', pk,
              f'Deleted account head {head.code} {head.name}')
-        head.delete()
         messages.success(request, 'Account head deleted successfully!')
         return redirect('finance_account_heads')
     return render(request, 'confirm_delete.html', {

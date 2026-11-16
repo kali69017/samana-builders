@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load form_errors %}
 
 {% block title %}{{ title }} - Samana Builders ERP{% endblock %}
 
@@ -16,15 +17,22 @@
         </div>
 
         <div class="card animate-fade-up">
+            {% form_error_summary form %}
             <form method="post">
                 {% csrf_token %}
                 {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
                 <div class="form-grid">
-                    <div class="form-group"><label>Code</label>{{ form.code }}{{ form.code.errors }}</div>
+                    {% if head %}
+                    <div class="form-group"><label>Code</label><input class="form-control" value="{{ head.code }}" readonly></div>
+                    <div class="form-group"><label>Nature</label><input class="form-control" value="{{ head.get_nature_display }}" readonly></div>
+                    {% endif %}
                     <div class="form-group"><label>Name</label>{{ form.name }}{{ form.name.errors }}</div>
                     <div class="form-group"><label>Parent account</label>{{ form.parent }}{{ form.parent.errors }}</div>
-                    <div class="form-group"><label>Nature</label>{{ form.nature }}{{ form.nature.errors }}</div>
+                    <div class="form-group"><label>Account kind</label>{{ form.account_kind }}{{ form.account_kind.errors }}</div>
                     <div class="form-group"><label>Active</label>{{ form.is_active }}{{ form.is_active.errors }}</div>
+                </div>
+                <div class="form-hint" style="margin-top:10px;">
+                    Code and nature are generated from the parent account. Cash and bank kinds are only valid under Assets.
                 </div>
                 <div style="margin-top:16px; display:flex; gap:10px;">
                     <button type="submit" class="btn btn-primary">Save</button>

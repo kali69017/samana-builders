@@ -21,7 +21,7 @@
                 {% if heads %}
                 <table class="sortable">
                     <thead>
-                        <tr><th>Code</th><th>Name</th><th>Nature</th><th>Level</th><th>Leaf</th><th>Active</th><th>Balance</th><th class="no-sort">Actions</th></tr>
+                        <tr><th>Code</th><th>Name</th><th>Nature</th><th>Kind</th><th>Level</th><th>Leaf</th><th>Active</th><th>Balance</th><th class="no-sort">Actions</th></tr>
                     </thead>
                     <tbody>
                         {% for head, depth in heads %}
@@ -29,14 +29,21 @@
                             <td style="font-weight:600;">{{ head.code }}</td>
                             <td style="padding-left:{% widthratio depth 1 22 %}px;">{% if depth %}↳ {% endif %}{{ head.name }}</td>
                             <td>{{ head.get_nature_display }}</td>
+                            <td>{{ head.get_account_kind_display }}</td>
                             <td>{{ head.level }}</td>
                             <td>{% if head.is_leaf %}<span class="badge badge-success">Leaf</span>{% else %}<span class="badge badge-info">Group</span>{% endif %}</td>
                             <td>{% if head.is_active %}<span class="badge badge-success">Active</span>{% else %}<span class="badge badge-warning">Inactive</span>{% endif %}</td>
                             <td>Rs. {{ head.balance|floatformat:2 }}</td>
                             <td>
                                 <div class="table-actions">
+                                    {% if head.parent %}
                                     <a href="{% url 'finance_account_head_edit' head.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                                    {% endif %}
+                                    {% if head.can_delete %}
                                     <a href="{% url 'finance_account_head_delete' head.pk %}" class="btn btn-danger btn-sm">Delete</a>
+                                    {% else %}
+                                    <button type="button" class="btn btn-danger btn-sm" disabled title="{{ head.delete_blocked_reason }}">Delete</button>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>

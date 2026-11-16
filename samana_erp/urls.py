@@ -30,6 +30,7 @@ urlpatterns = [
     path('customers/<int:pk>/', core_views.customer_detail_view, name='customer_detail'),
     path('customers/<int:pk>/edit/', core_views.customer_edit_view, name='customer_edit'),
     path('customers/<int:pk>/nominee/', core_views.customer_nominee_manage_view, name='customer_nominee_manage'),
+    path('customers/<int:pk>/do-not-contact/', core_views.customer_do_not_contact_view, name='customer_do_not_contact'),
     path('customers/<int:pk>/delete/', core_views.customer_delete_view, name='customer_delete'),
     
     # Properties
@@ -50,6 +51,7 @@ urlpatterns = [
     path('bookings/<int:pk>/', core_views.booking_detail_view, name='booking_detail'),
     path('bookings/<int:pk>/edit/', core_views.booking_edit_view, name='booking_edit'),
     path('bookings/<int:pk>/confirm/', core_views.booking_confirm_view, name='booking_confirm'),
+    path('bookings/<int:pk>/deliver/', core_views.booking_deliver_view, name='booking_deliver'),
     path('bookings/<int:pk>/delete/', core_views.booking_delete_view, name='booking_delete'),
     path('bookings/<int:pk>/cancel/', core_views.booking_cancel_view, name='booking_cancel'),
     path('bookings/<int:pk>/reopen/', core_views.booking_reopen_view, name='booking_reopen'),

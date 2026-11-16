@@ -58,10 +58,10 @@ class CloseoutWriterTest(TestCase):
         self.assertEqual(voucher.voucher_type, 'CP')
         self._assert_balanced(voucher)
 
-        ar = AccountHead.objects.get(code='1100')
-        cash = AccountHead.objects.get(code='1000')
+        advances = AccountHead.objects.get(system_role='customer_advances')
+        cash = AccountHead.objects.get(system_role='cash_default')
         self.assertTrue(any(
-            l.account_head_id == ar.pk and l.debit == Decimal('5000')
+            l.account_head_id == advances.pk and l.debit == Decimal('5000')
             for l in voucher.lines.all()))
         self.assertTrue(any(
             l.account_head_id == cash.pk and l.credit == Decimal('5000')
@@ -77,7 +77,7 @@ class CloseoutWriterTest(TestCase):
         refund.process(self.user)
         voucher = self._voucher('Refund', refund.pk)
         self.assertEqual(voucher.voucher_type, 'BP')
-        bank = AccountHead.objects.get(code='1010')
+        bank = AccountHead.objects.get(system_role='bank_default')
         self.assertTrue(any(
             l.account_head_id == bank.pk and l.credit == Decimal('7000')
             for l in voucher.lines.all()))
@@ -123,8 +123,8 @@ class CloseoutWriterTest(TestCase):
         self.assertEqual(voucher.voucher_type, 'CP')
         self._assert_balanced(voucher)
 
-        cost_head = AccountHead.objects.get(code='5100')
-        cash = AccountHead.objects.get(code='1000')
+        cost_head = AccountHead.objects.get(system_role='project_costs')
+        cash = AccountHead.objects.get(system_role='cash_default')
         self.assertTrue(any(
             l.account_head_id == cost_head.pk and l.debit == Decimal('12000')
             for l in voucher.lines.all()))
@@ -144,7 +144,7 @@ class CloseoutWriterTest(TestCase):
         expense.post_to_ledger()
         voucher = self._voucher('Expense', expense.pk)
         self.assertEqual(voucher.voucher_type, 'BP')
-        bank = AccountHead.objects.get(code='1010')
+        bank = AccountHead.objects.get(system_role='bank_default')
         self.assertTrue(any(
             l.account_head_id == bank.pk and l.credit == Decimal('12000')
             for l in voucher.lines.all()))
@@ -169,7 +169,7 @@ class CloseoutWriterTest(TestCase):
         cost.post_to_ledger()
         voucher = self._voucher('ProjectCost', cost.pk)
         self.assertEqual(voucher.voucher_type, 'BP')
-        bank = AccountHead.objects.get(code='1010')
+        bank = AccountHead.objects.get(system_role='bank_default')
         self.assertTrue(any(
             l.account_head_id == bank.pk and l.credit == Decimal('40000')
             for l in voucher.lines.all()))
@@ -197,10 +197,10 @@ class CloseoutWriterTest(TestCase):
         self.assertEqual(voucher.voucher_type, 'CP')
         self._assert_balanced(voucher)
 
-        salaries = AccountHead.objects.get(code='5200')
+        salaries = AccountHead.objects.get(system_role='salaries')
         self.assertEqual(salaries.name, 'Salaries')
         self.assertTrue(salaries.is_leaf)
-        cash = AccountHead.objects.get(code='1000')
+        cash = AccountHead.objects.get(system_role='cash_default')
         self.assertTrue(any(
             l.account_head_id == salaries.pk and l.debit == Decimal('50000')
             for l in voucher.lines.all()))
@@ -215,7 +215,7 @@ class CloseoutWriterTest(TestCase):
         payment.post_to_ledger()
         voucher = self._voucher('SalaryPayment', payment.pk)
         self.assertEqual(voucher.voucher_type, 'BP')
-        bank = AccountHead.objects.get(code='1010')
+        bank = AccountHead.objects.get(system_role='bank_default')
         self.assertTrue(any(
             l.account_head_id == bank.pk and l.credit == Decimal('50000')
             for l in voucher.lines.all()))
@@ -224,8 +224,8 @@ class CloseoutWriterTest(TestCase):
 class HardGuardTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_superuser('guard', 'g@example.com', 'pass12345')
-        self.cash = AccountHead.objects.create(code='1000', name='Cash', nature='debit')
-        self.capital = AccountHead.objects.create(code='3000', name='Capital', nature='credit')
+        self.cash = AccountHead.objects.get(system_role='cash_default')
+        self.capital = AccountHead.objects.get(code='3.1')
         self.voucher = Voucher.objects.create(
             voucher_type='JV', date=date.today(), created_by=self.user)
         VoucherLine.objects.create(voucher=self.voucher, account_head=self.cash, debit=Decimal('100'))

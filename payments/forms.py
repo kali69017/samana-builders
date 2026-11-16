@@ -5,6 +5,7 @@ from bookings.models import Booking, Installment
 
 
 class PaymentForm(forms.ModelForm):
+    idempotency_key = forms.CharField(widget=forms.HiddenInput, required=False)
     payment_type = forms.ChoiceField(
         choices=[('', 'Select type...'), ('down_payment', 'Down Payment'), ('installment', 'Installment'),
                  ('advance', 'Advance'), ('final_payment', 'Final Payment'), ('late_fee', 'Late Fee'),
@@ -14,11 +15,13 @@ class PaymentForm(forms.ModelForm):
 
     class Meta:
         model = Payment
-        fields = ['booking', 'installment', 'amount', 'payment_date', 'payment_method', 'payment_type',
-                  'reference_number', 'bank_name', 'cheque_number', 'cheque_date', 'notes', 'method_data']
+        fields = ['booking', 'installment', 'received_into', 'amount', 'payment_date', 'payment_method',
+                  'payment_type', 'reference_number', 'bank_name', 'cheque_number', 'cheque_date',
+                  'notes', 'method_data']
         widgets = {
             'booking': forms.Select(attrs={'class': 'form-control', 'id': 'id_booking'}),
             'installment': forms.Select(attrs={'class': 'form-control'}),
+            'received_into': forms.Select(attrs={'class': 'form-control'}),
             'amount': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': ' ', 'step': '0.01', 'id': 'id_amount'}),
             'payment_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date', 'id': 'id_payment_date'}),
             'payment_method': forms.Select(attrs={'class': 'form-control', 'id': 'id_payment_method'}),
@@ -32,8 +35,13 @@ class PaymentForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        from finance.models import AccountHead
         self.fields['booking'].queryset = Booking.objects.filter(status__in=['pending', 'confirmed', 'active'])
         self.fields['installment'].queryset = Installment.objects.filter(status__in=['pending', 'overdue', 'partial'])
+        self.fields['received_into'].queryset = AccountHead.objects.filter(
+            is_leaf=True, is_active=True, account_kind__in=['cash', 'bank'],
+        )
+        self.fields['received_into'].required = True
         self.fields['installment'].required = False
         self.fields['reference_number'].required = False
         self.fields['notes'].required = False
@@ -51,6 +59,13 @@ class PaymentForm(forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
         method = cleaned.get('payment_method')
+        account = cleaned.get('received_into')
+        if account:
+            from finance.accounting import validate_cash_bank_account
+            try:
+                validate_cash_bank_account(account, method)
+            except forms.ValidationError as exc:
+                self.add_error('received_into', exc)
         if method == 'cheque':
             if not cleaned.get('cheque_number'):
                 raise forms.ValidationError('Cheque number is required for cheque payments')
@@ -74,12 +89,15 @@ class PaymentForm(forms.ModelForm):
 
 
 class RefundForm(forms.ModelForm):
+    idempotency_key = forms.CharField(widget=forms.HiddenInput, required=False)
+
     class Meta:
         model = Refund
-        fields = ['booking', 'amount', 'reason', 'refund_method', 'refund_date',
+        fields = ['booking', 'paid_from', 'amount', 'reason', 'refund_method', 'refund_date',
                   'supporting_document', 'notes']
         widgets = {
             'booking': forms.Select(attrs={'class': 'form-control'}),
+            'paid_from': forms.Select(attrs={'class': 'form-control'}),
             'amount': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': ' '}),
             'reason': forms.Select(attrs={'class': 'form-control'}),
             'refund_method': forms.Select(attrs={'class': 'form-control'}),
@@ -90,7 +108,12 @@ class RefundForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        from finance.models import AccountHead
         self.fields['booking'].queryset = Booking.objects.select_related('customer').all()
+        self.fields['paid_from'].queryset = AccountHead.objects.filter(
+            is_leaf=True, is_active=True, account_kind__in=['cash', 'bank'],
+        )
+        self.fields['paid_from'].required = True
         self.fields['notes'].required = False
         self.fields['refund_date'].required = False
         self.fields['supporting_document'].required = False
@@ -103,6 +126,13 @@ class RefundForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
+        account = cleaned.get('paid_from')
+        if account:
+            from finance.accounting import validate_cash_bank_account
+            try:
+                validate_cash_bank_account(account, cleaned.get('refund_method'))
+            except forms.ValidationError as exc:
+                self.add_error('paid_from', exc)
         amount = cleaned.get('amount')
         booking = cleaned.get('booking')
         if amount and booking:

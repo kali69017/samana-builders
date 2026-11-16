@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load form_errors %}
 
 {% block title %}{{ title }} - Samana Builders ERP{% endblock %}
 
@@ -15,7 +16,9 @@
             </div>
         </div>
 
+        {{ account_kinds|json_script:"account-kinds" }}
         <div class="card animate-fade-up">
+            {% form_error_summary form %}
             <form method="post">
                 {% csrf_token %}
                 {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
@@ -27,30 +30,95 @@
                     <div class="form-group">
                         <label>Date</label>{{ form.date }}{{ form.date.errors }}
                     </div>
+                    {% if is_cash_bank %}
+                    <div class="form-group">
+                        <label>Cash or bank account</label>
+                        {{ form.cash_bank_account }}{{ form.cash_bank_account.errors }}
+                        <div class="form-hint">Only accounts flagged cash or bank for the selected voucher type are shown.</div>
+                    </div>
+                    {% endif %}
                     <div class="form-group" style="grid-column:1 / -1;">
                         <label>Narration</label>{{ form.narration }}{{ form.narration.errors }}
                     </div>
                 </div>
 
-                <h3 style="margin:20px 0 10px;">Lines</h3>
                 {{ formset.management_form }}
                 {% if formset.non_form_errors %}<div class="alert alert-danger">{{ formset.non_form_errors }}</div>{% endif %}
                 <div class="table-container">
                     <table>
-                        <thead><tr><th>Account Head</th><th>Debit</th><th>Credit</th><th>Narration</th><th>Delete</th></tr></thead>
+                        <thead>
+                            <tr>
+                                <th>Account Head</th>
+                                {% if is_cash_bank %}<th>Amount</th>{% else %}<th>Debit</th><th>Credit</th>{% endif %}
+                                <th>Narration</th>
+                            </tr>
+                        </thead>
                         <tbody>
                             {% for line_form in formset %}
                             <tr>
                                 <td>{{ line_form.id }}{{ line_form.account_head }}{{ line_form.account_head.errors }}</td>
+                                {% if is_cash_bank %}
+                                <td>{{ line_form.amount }}{{ line_form.amount.errors }}</td>
+                                {% else %}
                                 <td>{{ line_form.debit }}{{ line_form.debit.errors }}</td>
                                 <td>{{ line_form.credit }}{{ line_form.credit.errors }}</td>
+                                {% endif %}
                                 <td>{{ line_form.narration }}{{ line_form.narration.errors }}</td>
-                                <td>{{ line_form.DELETE }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
+                {% if is_cash_bank %}
+                <div class="form-hint" style="margin-top:10px;">
+                    The server posts the cash or bank side automatically. Enter only the contra account, amount and narration.
+                </div>
+                {% else %}
+                <div class="alert alert-danger journal-errors" id="journal-errors"{% if not form.non_field_errors and not formset.non_form_errors %} style="display:none;"{% endif %}>
+                    {% if form.non_field_errors %}{{ form.non_field_errors }}{% endif %}
+                    {% if formset.non_form_errors %}{{ formset.non_form_errors }}{% endif %}
+                </div>
+                <div class="journal-totals" id="journal-totals">
+                    <span>Debit total: <strong id="journal-debit-total">0.00</strong></span>
+                    <span>Credit total: <strong id="journal-credit-total">0.00</strong></span>
+                    <span>Difference: <strong id="journal-difference">0.00</strong></span>
+                </div>
+                <div class="form-hint" style="margin-top:10px;">Total debit must equal total credit before the voucher can be saved.</div>
+                <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    function totalFor(suffix) {
+                        var total = 0;
+                        document.querySelectorAll('input[name$="-' + suffix + '"]').forEach(function (input) {
+                            var value = parseFloat(input.value || '0');
+                            if (!isNaN(value)) total += value;
+                        });
+                        return total;
+                    }
+                    function updateTotals() {
+                        var debit = totalFor('debit');
+                        var credit = totalFor('credit');
+                        var diff = debit - credit;
+                        var debitEl = document.getElementById('journal-debit-total');
+                        var creditEl = document.getElementById('journal-credit-total');
+                        var diffEl = document.getElementById('journal-difference');
+                        if (!debitEl || !creditEl || !diffEl) return;
+                        debitEl.textContent = debit.toFixed(2);
+                        creditEl.textContent = credit.toFixed(2);
+                        diffEl.textContent = diff.toFixed(2);
+                        diffEl.style.color = Math.abs(diff) < 0.005 ? 'var(--accent-green)' : 'var(--accent-red)';
+                    }
+                    document.querySelectorAll('input[name$="-debit"], input[name$="-credit"]').forEach(function (input) {
+                        input.addEventListener('input', updateTotals);
+                    });
+                    updateTotals();
+                });
+                </script>
+                <style>
+                .journal-errors ul { margin: 6px 0 0 18px; }
+                .journal-totals { display:flex; gap:22px; flex-wrap:wrap; margin-top:12px; font-size:13px; color:var(--text-secondary); }
+                .journal-totals strong { color:var(--text-primary); }
+                </style>
+                {% endif %}
 
                 <div style="margin-top:16px; display:flex; gap:10px;">
                     <button type="submit" class="btn btn-primary">Save Draft</button>
@@ -60,4 +128,25 @@
         </div>
     </main>
 </div>
+{% if is_cash_bank %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var kinds = JSON.parse(document.getElementById('account-kinds').textContent || '{}');
+    var typeSelect = document.getElementById('id_voucher_type');
+    var accountSelect = document.getElementById('id_cash_bank_account');
+    if (!typeSelect || !accountSelect) return;
+    function filterAccounts() {
+        var expected = (typeSelect.value === 'CR' || typeSelect.value === 'CP') ? 'cash' : 'bank';
+        Array.prototype.forEach.call(accountSelect.options, function (option) {
+            if (!option.value) return;
+            option.hidden = kinds[option.value] !== expected;
+        });
+        var selected = accountSelect.options[accountSelect.selectedIndex];
+        if (selected && selected.hidden) accountSelect.value = '';
+    }
+    typeSelect.addEventListener('change', filterAccounts);
+    filterAccounts();
+});
+</script>
+{% endif %}
 {% endblock %}

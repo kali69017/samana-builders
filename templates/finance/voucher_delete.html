@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+{% block title %}Delete {{ voucher.voucher_number }} - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Delete Manual Voucher</h1>
+            <a href="{% url 'finance_voucher_detail' voucher.pk %}" class="btn btn-secondary btn-sm">Cancel</a>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>{{ voucher.voucher_number }}</h3><span class="badge badge-danger">Permanent deletion</span></div>
+            <div class="detail-grid">
+                <div class="detail-item"><div class="detail-label">Type</div><div class="detail-value">{{ voucher.get_voucher_type_display }}</div></div>
+                <div class="detail-item"><div class="detail-label">Date</div><div class="detail-value">{{ voucher.date|date:"d M Y" }}</div></div>
+                <div class="detail-item"><div class="detail-label">Status</div><div class="detail-value">{{ voucher.get_status_display }}</div></div>
+                <div class="detail-item"><div class="detail-label">Total debit</div><div class="detail-value">Rs. {{ voucher.total_debit|floatformat:2 }}</div></div>
+                <div class="detail-item"><div class="detail-label">Total credit</div><div class="detail-value">Rs. {{ voucher.total_credit|floatformat:2 }}</div></div>
+                <div class="detail-item"><div class="detail-label">Narration</div><div class="detail-value">{{ voucher.narration|default:"-" }}</div></div>
+            </div>
+
+            <div class="alert alert-warning" style="margin-top:18px; padding:14px 18px; border-radius:8px; background:#fff7e6; border:1px solid #f0c36d;">
+                This removes the voucher and its audit history from the ledger. A permanent snapshot is kept in Deleted Vouchers. Voucher numbers are not reused.
+            </div>
+
+            <div class="table-container" style="margin-top:18px;">
+                <table>
+                    <thead><tr><th>Account</th><th>Debit</th><th>Credit</th><th>Narration</th></tr></thead>
+                    <tbody>
+                        {% for line in voucher.lines.all %}
+                        <tr>
+                            <td>{{ line.account_head.code }} - {{ line.account_head.name }}</td>
+                            <td>Rs. {{ line.debit|floatformat:2 }}</td>
+                            <td>Rs. {{ line.credit|floatformat:2 }}</td>
+                            <td>{{ line.narration|default:"-" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <form method="post" style="margin-top:20px;">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="reason">Reason for deletion (minimum 5 characters)</label>
+                    <textarea id="reason" name="reason" class="form-control" rows="3" minlength="5" required>{{ reason|default:"" }}</textarea>
+                </div>
+                <div style="display:flex; gap:10px; margin-top:18px;">
+                    <button type="submit" class="btn btn-danger">Delete Voucher Permanently</button>
+                    <a href="{% url 'finance_voucher_detail' voucher.pk %}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </main>
+</div>
+{% endblock %}

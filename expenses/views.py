@@ -199,7 +199,11 @@ def expense_delete_view(request, pk):
     if request.method == 'POST':
         amt = expense.amount
         project = expense.project.name
-        expense.delete()
+        try:
+            expense.delete()
+        except Exception as exc:
+            messages.error(request, str(exc))
+            return redirect('expense_detail', pk=expense.pk)
         AuditLog.objects.create(
             user=request.user, action='delete', model_name='Expense',
             object_id=str(pk),

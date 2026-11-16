@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+
+{% block title %}Mark {{ booking.booking_id }} Delivered - Samana Builders ERP{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    {% include 'includes/sidebar.html' %}
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Mark Booking Delivered</h1>
+            <a href="{% url 'booking_detail' booking.pk %}" class="btn btn-secondary btn-sm">Back to Booking</a>
+        </div>
+
+        <div class="card animate-fade-up">
+            <div class="card-header"><h3>{{ booking.booking_id }} - {{ booking.customer.full_name }}</h3></div>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <div class="detail-label">Plot</div>
+                    <div class="detail-value">{{ booking.plot.plot_number }} - {{ booking.plot.project.name }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Booking Total</div>
+                    <div class="detail-value">Rs. {{ booking.total_amount|floatformat:2 }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Paid</div>
+                    <div class="detail-value">Rs. {{ paid|floatformat:2 }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Unpaid</div>
+                    <div class="detail-value">Rs. {{ unpaid|floatformat:2 }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Customer Advances Held</div>
+                    <div class="detail-value">Rs. {{ booking.customer_advances_held|floatformat:2 }}</div>
+                </div>
+            </div>
+
+            {% if unpaid > 0 %}
+            <div class="alert alert-warning" style="margin-top:20px; padding:14px 18px; border-radius:8px; background:#fff7e6; border:1px solid #f0c36d;">
+                <strong>Unpaid balance: Rs. {{ unpaid|floatformat:2 }}</strong>
+                <p style="margin:6px 0 0;">Delivery is allowed, but the unpaid balance will still be owed by the customer.</p>
+            </div>
+            {% endif %}
+
+            <form method="post" style="margin-top:20px;">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="delivery_date">Delivery date</label>
+                    <input type="date" id="delivery_date" name="delivery_date" class="form-control"
+                           value="{{ today }}" max="{{ today }}" required>
+                </div>
+                {% if unpaid > 0 %}
+                <label style="display:flex; gap:10px; align-items:flex-start; margin:16px 0;">
+                    <input type="checkbox" name="confirm_unpaid" required>
+                    <span>I confirm delivery with an unpaid balance of Rs. {{ unpaid|floatformat:2 }}.</span>
+                </label>
+                {% endif %}
+                <div style="display:flex; gap:10px; margin-top:18px;">
+                    <button type="submit" class="btn btn-primary">Mark as Delivered</button>
+                    <a href="{% url 'booking_detail' booking.pk %}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </main>
+</div>
+{% endblock %}
