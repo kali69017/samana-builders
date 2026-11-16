@@ -145,6 +145,6 @@
   "not_a_template": {
     "notification_type": "general",
     "sent_via": "free-form text (WhatsAppService.send)",
-    "notes": "The staff manual-send view composes arbitrary text, so it cannot use a template. Meta only allows free-form text within 24h of the customer's last message; outside that window it fails with 131047. The UI warns about this."
+    "notes": "This fallback composes free-form text, so it cannot use a template. Meta only allows free-form text within 24h of the customer's last message; outside that window it fails with 131047. Automatic triggers prefer approved templates."
   }
 }

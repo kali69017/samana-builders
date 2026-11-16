@@ -257,25 +257,28 @@ class LeadViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Phone number is required to convert a lead into a customer.'},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        customer = Customer.objects.create(
-            first_name=first_name or lead.name or 'Lead',
-            last_name=last_name,
-            email=request.data.get('email') or lead.email or None,
-            phone=phone,
-            cnic=cnic,
-            city=request.data.get('city', ''),
-            created_by=request.user,
-        )
-        lead.status = 'converted'
-        lead.converted_customer = customer
-        lead.save()
-        from notifications.services import NotificationService
-        NotificationService.send_customer_welcome(customer, user=request.user)
+        from django.db import transaction
+        with transaction.atomic():
+            customer = Customer.objects.create(
+                first_name=first_name or lead.name or 'Lead',
+                last_name=last_name,
+                email=request.data.get('email') or lead.email or None,
+                phone=phone,
+                cnic=cnic,
+                city=request.data.get('city', ''),
+                created_by=request.user,
+            )
+            lead.status = 'converted'
+            lead.converted_customer = customer
+            lead.save()
+            from notifications.services import NotificationService
+            NotificationService.send_customer_welcome(customer, user=request.user)
 
-        AuditLog.objects.create(
-            user=request.user, action='update', model_name='Lead',
-            object_id=str(lead.pk), description=f'Converted lead {lead.display_name} to {customer.customer_id}'
-        )
+            AuditLog.objects.create(
+                user=request.user, action='update', model_name='Lead',
+                object_id=str(lead.pk),
+                description=f'Converted lead {lead.display_name} to {customer.customer_id}',
+            )
         return Response({
             'lead': LeadSerializer(lead).data,
             'customer_id': customer.customer_id,

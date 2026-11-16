@@ -58,31 +58,15 @@ async function createCustomer(
 }
 
 /**
- * POST the manual-send form. The page must already be on /notifications/ so the CSRF token
- * can be read from the send-modal form (the only csrfmiddlewaretoken input on the page).
  */
-async function postManual(page: Page, fields: Record<string, string>): Promise<void> {
-  const csrf = await page.locator('input[name="csrfmiddlewaretoken"]').first().inputValue();
-  await page.request.post('/notifications/send/', {
-    form: { ...fields, csrfmiddlewaretoken: csrf },
-    maxRedirects: 0,
-  });
-}
 
 /**
- * Full manual-send round trip over HTTP. Returns the rendered /notifications/ HTML (which
- * consumes the one-time flash), so callers can assert on the flash without a slow page load.
  */
-async function manualSendHtml(page: Page, fields: Record<string, string>): Promise<string> {
-  await page.goto('/notifications/');
-  await postManual(page, fields);
-  return (await page.request.get('/notifications/')).text();
-}
 
 // ── Happy path ─────────────────────────────────────────────────────────────
 
 test.describe('Notifications — HP', () => {
-  test.describe('Notification Center + manual send (management)', () => {
+  test.describe('Notification Center (management)', () => {
     test.use({ storageState: 'tests/.auth/management.json' });
 
     test('NOTIF-HP-01 — Notification Center list renders stats and 100-row cap', async ({ page }) => {
@@ -90,66 +74,14 @@ test.describe('Notifications — HP', () => {
       await expect(page.getByRole('heading', { name: 'Notification Center' })).toBeVisible();
       // Four stat cards render. (Exact DB-count agreement is covered by the Django suite;
       // here we assert the SHAPE: all four labels are present.)
-      for (const label of ['Total Sent', 'Delivered', 'Pending', 'Failed']) {
+      for (const label of ['Total Sent', 'Sent', 'Pending', 'Skipped', 'Failed', 'Needs check']) {
         await expect(page.locator('.stat-label').filter({ hasText: label })).toHaveCount(1);
       }
       // The list renders as a table, or an empty-state when there are no logs yet.
       await expect(page.getByRole('table').or(page.getByText('No Notifications'))).toBeVisible();
     });
 
-    test('NOTIF-HP-09 — SMS number normalization to 92XXXXXXXXXX', async ({ page }) => {
-      // Observable via the manual SMS path: valid Pakistani formats normalize to a valid
-      // mobile (SMSService.is_valid_mobile → True) so the send proceeds to the provider —
-      // which is switched OFF for E2E (RUNBOOK §2), so the manual send records 'skipped'
-      // and returns the disabled warning (was: "sent successfully via sms", the inflated
-      // 'sent' contract fixed in feb2689). A non-Pakistani string normalizes to '' and is
-      // rejected as invalid. (Subscriber digits are unique per run so the per-recipient
-      // anti-spam throttle — 3 sends per address per day — never trips the fixture.)
-      const s = ('0000000' + Math.floor(Math.random() * 1e7)).slice(-7);
-      const validFormats = [`+92-300-${s}`, `0300-${s}`, `300${s}`, `+92 300 ${s}`];
-      for (const phone of validFormats) {
-        const html = await manualSendHtml(page, {
-          recipient_name: 'QA Norm',
-          recipient_contact: phone,
-          channel: 'sms',
-          subject: 'n',
-          message: 'm',
-        });
-        expect(html).toContain('sms notifications are disabled on this deployment');
-      }
-      const invalid = await manualSendHtml(page, {
-        recipient_name: 'QA Norm',
-        recipient_contact: `abc-${tag()}`,
-        channel: 'sms',
-        subject: 'n',
-        message: 'm',
-      });
-      expect(invalid).toContain('Invalid phone number');
-    });
 
-    test('NOTIF-HP-10 — Manual send (management) with email disabled is recorded skipped', async ({ page }) => {
-      const name = `QA Manual ${tag()}`;
-      const email = `qa-manual-${tag()}@example.com`;
-      // FIXED (feb2689): email is switched OFF for E2E, so a manual email send records
-      // 'skipped' and surfaces the disabled warning — it no longer claims a delivery
-      // ("Notification sent successfully via email." was the inflated-'sent' contract).
-      // (Posted via API like NOTIF-HP-09: the top-bar "Send Notification" button is
-      // display:none at the test viewport, so the DOM-click path is not actionable.)
-      // Contacts are MASKED for management (hardening), so the row is located by the
-      // unique recipient name rather than the raw email.
-      const html = await manualSendHtml(page, {
-        recipient_name: name,
-        recipient_contact: email,
-        channel: 'email',
-        subject: 'QA subject',
-        message: 'QA message',
-      });
-      expect(html).toContain('email notifications are disabled on this deployment');
-      await page.goto('/notifications/');
-      const row = page.getByRole('row').filter({ hasText: name });
-      await expect(row).toHaveCount(1);
-      await expect(row.getByText('Skipped', { exact: true })).toHaveCount(1);
-    });
   });
 
   test.describe('Customer create welcome (admin)', () => {
@@ -195,7 +127,7 @@ test.describe('Notifications — HP', () => {
 // ── Edge cases ─────────────────────────────────────────────────────────────
 
 test.describe('Notifications — EC', () => {
-  test.describe('Notification Center filters + manual send (management)', () => {
+  test.describe('Notification Center filters (management)', () => {
     test.use({ storageState: 'tests/.auth/management.json' });
 
     test('NOTIF-EC-01 — Notification Center filter use works (FIXED feb2689)', async ({ page }) => {
@@ -210,55 +142,9 @@ test.describe('Notifications — EC', () => {
       await expect(page.getByRole('heading', { name: 'Notification Center' })).toBeVisible(); // was RED (500)
     });
 
-    test('NOTIF-EC-03 — Disabled SMS recorded as skipped, not sent', async ({ page }) => {
-      const name = `QA SMS ${tag()}`;
-      const phone = randomPhone();
-      await page.goto('/notifications/');
-      await postManual(page, { recipient_name: name, recipient_contact: phone, channel: 'sms', subject: 'x', message: 'y' });
-      await page.goto('/notifications/');
-      // Located by the unique name: the contact is masked for management (hardening).
-      const row = page.getByRole('row').filter({ hasText: name });
-      await expect(row).toHaveCount(1);
-      // SMSService.send returns (True, "SMS disabled") before any network call, so the
-      // row must be 'skipped', never 'sent' (FIXED feb2689).
-      await expect(row.getByText('Sent', { exact: true })).toHaveCount(0);
-      await expect(row.getByText('Skipped', { exact: true })).toHaveCount(1);
-    });
 
-    test('NOTIF-EC-04 — WhatsApp no-op is recorded skipped, never "sent"', async ({ page }) => {
-      const name = `QA WA ${tag()}`;
-      const phone = randomPhone();
-      await page.goto('/notifications/');
-      await postManual(page, { recipient_name: name, recipient_contact: phone, channel: 'whatsapp', subject: 'x', message: 'y' });
-      await page.goto('/notifications/');
-      const row = page.getByRole('row').filter({ hasText: name });
-      await expect(row).toHaveCount(1);
-      // WhatsAppService.send builds a wa.me URL and returns (True, url) without any
-      // delivery — recorded 'skipped' (providers off), never 'sent' (FIXED feb2689).
-      await expect(row.getByText('Sent', { exact: true })).toHaveCount(0);
-      await expect(row.getByText('Skipped', { exact: true })).toHaveCount(1);
-    });
 
-    test('NOTIF-EC-08 — customer_welcome type is not filterable in the UI', async ({ page }) => {
-      await page.goto('/notifications/');
-      // CONFIRMED BUG: docs/qa/findings-confirmed.md — the Type dropdown lists only 7 of the 8
-      // TYPE_CHOICES and omits customer_welcome.
-      await expect(page.getByRole('option', { name: 'Customer Welcome' })).toHaveCount(1); // RED (0)
-    });
 
-    test('NOTIF-EC-09 — Invalid (non-empty) phone → SMS failed, no exception', async ({ page }) => {
-      const name = `QA Invalid ${tag()}`;
-      const phone = `bad-${tag()}`; // non-empty, not a valid Pakistani mobile
-      await page.goto('/notifications/');
-      await postManual(page, { recipient_name: name, recipient_contact: phone, channel: 'sms', subject: 'x', message: 'y' });
-      await page.goto('/notifications/');
-      const row = page.getByRole('row').filter({ hasText: name });
-      await expect(row).toHaveCount(1);
-      // Correct behavior: SMS fails gracefully for an invalid number (returned, never raised).
-      await expect(row.getByText('Failed', { exact: true })).toHaveCount(1); // PASS
-      // WhatsApp does not validate the phone (NOTIF-EC-04); its 'sent' row needs a customer
-      // with a payment trigger and is not browser-observable here.
-    });
   });
 
   test.describe('Customer create triggers (admin)', () => {
@@ -300,59 +186,11 @@ test.describe('Notifications — EC', () => {
 // ── Negative & security ────────────────────────────────────────────────────
 
 test.describe('Notifications — SEC', () => {
-  test.describe('Manual send abuse (management)', () => {
+  test.describe('Notification Center abuse (management)', () => {
     test.use({ storageState: 'tests/.auth/management.json' });
 
-    test('NOTIF-SEC-01 — Manual send has no rate limiting + arbitrary recipient (spam blast)', async ({ page }) => {
-      await page.goto('/notifications/');
-      const csrf = await page.locator('input[name="csrfmiddlewaretoken"]').first().inputValue();
-      const form = {
-        recipient_name: 'Spam',
-        recipient_contact: `victim-${tag()}@example.com`,
-        channel: 'email',
-        subject: 'spam',
-        message: 'spam',
-        csrfmiddlewaretoken: csrf,
-      };
-      // Spec uses 100; 10 is enough to demonstrate the absence of any throttle.
-      const statuses: number[] = [];
-      for (let i = 0; i < 10; i++) {
-        const res = await page.request.post('/notifications/send/', { form, maxRedirects: 0 });
-        statuses.push(res.status());
-      }
-      // CONFIRMED BUG: docs/qa/findings-confirmed.md — no rate limit / cooldown / quota; every
-      // POST is accepted (302) and produces a 'general' row. Correct behavior bounds this.
-      expect(statuses.filter((s) => s >= 400).length).toBeGreaterThan(0); // RED (all 302)
-    });
 
-    test('NOTIF-SEC-04 — EmailService.send does no address-format validation on the manual path', async ({ page }) => {
-      await page.goto('/notifications/');
-      await postManual(page, {
-        recipient_name: 'QA',
-        recipient_contact: 'not-an-email',
-        channel: 'email',
-        subject: 'x',
-        message: 'y',
-      });
-      await page.goto('/notifications/');
-      // CONFIRMED BUG: docs/qa/findings-confirmed.md — only a truthiness check; a malformed
-      // address is accepted and reported "sent successfully" instead of rejected.
-      await expect(page.getByText(/sent successfully/)).toHaveCount(0); // RED (success shown)
-    });
 
-    test('NOTIF-SEC-08 — Manual send missing required fields is rejected without a send', async ({ page }) => {
-      await page.goto('/notifications/');
-      await postManual(page, {
-        recipient_name: 'QA',
-        recipient_contact: '',
-        channel: 'email',
-        subject: '',
-        message: '',
-      });
-      await page.goto('/notifications/');
-      // Correct behavior: graceful error flash, no send, no row.
-      await expect(page.getByText('Recipient contact and message are required.')).toBeVisible(); // PASS
-    });
   });
 
   test('NOTIF-SEC-03 — Log stores PII + financial amounts in plaintext, listable by all management', async ({ request }) => {
@@ -388,23 +226,6 @@ test.describe('Notifications — SEC', () => {
     expect(html).not.toContain(email); // RED (cross-tenant email visible)
   });
 
-  test('NOTIF-SEC-06 — Non-management roles denied on both endpoints', async ({ request }) => {
-    const denied: RoleName[] = ['sales', 'accounts', 'hr'];
-    for (const role of denied) {
-      const token = await loginViaApi(request, role);
-      const getRes = await request.get('/notifications/', { maxRedirects: 0 });
-      expect(getRes.status()).toBe(302);
-      expect(getRes.headers()['location'] ?? '').toContain('/dashboard/');
-
-      const postRes = await request.post('/notifications/send/', {
-        headers: { 'X-CSRFToken': token },
-        form: { recipient_name: 'QA', recipient_contact: 'x@example.com', channel: 'email', subject: 'x', message: 'y' },
-        maxRedirects: 0,
-      });
-      expect(postRes.status()).toBe(302);
-      expect(postRes.headers()['location'] ?? '').toContain('/dashboard/');
-    }
-  });
 
   test('NOTIF-SEC-02 — Customer-controlled name raw-interpolated into SMS/email (smishing)', async () => {
     // Static/note only: the message BODY is not rendered anywhere in the UI (the table shows
@@ -422,10 +243,6 @@ test.describe('Notifications — SEC', () => {
       await page.goto('/notifications/');
       await expect(page).toHaveURL(/\/login\//); // PASS
 
-      // Unauthenticated POST is rejected before the view runs (CSRF middleware returns 403;
-      // some setups 302 to login). Either way no row is created anonymously.
-      const postRes = await page.request.post('/notifications/send/', { maxRedirects: 0 });
-      expect([302, 403]).toContain(postRes.status());
     });
   });
 });

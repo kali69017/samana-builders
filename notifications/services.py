@@ -1,14 +1,33 @@
 import json
 import logging
 import re
+import threading
+import time
+from dataclasses import dataclass
+from datetime import timedelta
+
 import requests
 from django.conf import settings
 from django.core.mail import send_mail
+from django.db import OperationalError, connection, transaction
 from django.utils import timezone
 from . import wa_templates
 from .models import NotificationLog
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class DeliveryResult:
+    success: bool
+    detail: str = ''
+    retryable: bool = False
+    permanent: bool = False
+
+    def __iter__(self):
+        # Backward-compatible unpacking: success, detail = result
+        yield self.success
+        yield self.detail
 
 # channel -> the settings flag that says whether that provider is switched on.
 CHANNEL_ENABLED_SETTING = {
@@ -21,18 +40,28 @@ CHANNEL_ENABLED_SETTING = {
 class EmailService:
     @staticmethod
     def send(to_email, subject, message, from_email=None):
+        import smtplib
         if not to_email:
-            return False, "No email address provided"
+            return DeliveryResult(False, "No email address provided", permanent=True)
         if not getattr(settings, 'EMAIL_ENABLED', False):
             logger.info(f"[Email disabled] to {to_email}: {subject}")
-            return True, "Email disabled"
+            return DeliveryResult(True, "Email disabled")
         try:
             from_email = from_email or getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@samanabuilders.com')
             send_mail(subject, message, from_email, [to_email], fail_silently=False)
-            return True, "Email sent successfully"
-        except Exception as e:
+            return DeliveryResult(True, "Email sent successfully")
+        except (smtplib.SMTPAuthenticationError, smtplib.SMTPRecipientsRefused,
+                smtplib.SMTPConnectError, ConnectionRefusedError) as e:
             logger.error(f"Email send failed: {e}")
-            return False, str(e)
+            return DeliveryResult(False, str(e), retryable=True)
+        except (smtplib.SMTPDataError, smtplib.SMTPServerDisconnected,
+                TimeoutError, OSError) as e:
+            # The server may have accepted DATA before the failure.
+            logger.error(f"Email outcome unknown: {e}")
+            return DeliveryResult(False, str(e), retryable=False)
+        except Exception as e:
+            logger.error(f"Email outcome unknown: {e}")
+            return DeliveryResult(False, str(e), retryable=False)
 
 
 class SMSService:
@@ -87,21 +116,20 @@ class SMSService:
         """
         mobile = SMSService.normalize_phone(to_phone)
         if not mobile:
-            return False, "Invalid phone number"
+            return DeliveryResult(False, "Invalid phone number", permanent=True)
         if not getattr(settings, 'SENDPK_ENABLED', False):
-            return True, "SMS disabled"
+            return DeliveryResult(True, "SMS disabled")
 
         setting_name, template_id, expected = SMSService.template_for(notification_type)
         if not template_id:
-            if setting_name is None:
-                return False, (
-                    f"No SMS template configured for '{notification_type}'. "
-                    "Set SENDPK_TEMPLATE_* in .env."
-                )
-            return False, (
+            detail = (
+                f"No SMS template configured for '{notification_type}'. "
+                "Set SENDPK_TEMPLATE_* in .env."
+            ) if setting_name is None else (
                 f"{setting_name} is not set for '{notification_type}', so there is no "
                 "approved template id to send. Set it in .env."
             )
+            return DeliveryResult(False, detail, permanent=True)
 
         var_map = SMSService.TEMPLATES[notification_type][1]
         provided = {k: v for k, v in (params or {}).items() if v not in (None, '')}
@@ -113,10 +141,10 @@ class SMSService:
         # #placeholder# in it.
         missing = sorted(expected - set(provided) - set(optional))
         if missing:
-            return False, (
+            return DeliveryResult(False, (
                 f"SMS template '{template_id}' missing required variable(s): "
                 f"{', '.join(missing)}. Refusing to send an incomplete template."
-            )
+            ), permanent=True)
 
         # Build the JSON message from the caller's params using the template var names.
         message_vars = {}
@@ -145,9 +173,19 @@ class SMSService:
             )
             resp.raise_for_status()
             return SMSService._interpret(resp)
+        except requests.exceptions.ConnectTimeout as e:
+            return DeliveryResult(False, str(e), retryable=True)
+        except requests.exceptions.ConnectionError as e:
+            return DeliveryResult(False, str(e), retryable=False)
+        except requests.exceptions.HTTPError as e:
+            status_code = getattr(getattr(e, 'response', None), 'status_code', 0)
+            return DeliveryResult(False, str(e), retryable=status_code >= 500,
+                                  permanent=400 <= status_code < 500)
+        except requests.exceptions.ReadTimeout as e:
+            return DeliveryResult(False, str(e), retryable=False)
         except Exception as e:
-            logger.error(f"SMS send failed: {e}")
-            return False, str(e)
+            logger.error(f"SMS outcome unknown: {e}")
+            return DeliveryResult(False, str(e), retryable=False)
 
     @staticmethod
     def _interpret(resp):
@@ -162,12 +200,12 @@ class SMSService:
             first = results[0] if results and isinstance(results[0], dict) else {}
             if (str(data.get('success', '')).lower() == 'true'
                     and str(first.get('status', '')).upper() == 'OK'):
-                return True, f"OK ID:{first.get('messageid', '')}"
-            return False, text or json.dumps(data)
+                return DeliveryResult(True, f"OK ID:{first.get('messageid', '')}")
+            return DeliveryResult(False, text or json.dumps(data), permanent=True)
         # format=json was not honoured (or absent): SendPK answers "OK ID:<uuid>".
         if text.upper().startswith('OK'):
-            return True, text
-        return False, text
+            return DeliveryResult(True, text)
+        return DeliveryResult(False, text, permanent=True)
 
     @staticmethod
     def normalize_phone(phone):
@@ -196,15 +234,15 @@ class SMSService:
     @staticmethod
     def send(to_phone, message):
         if not to_phone:
-            return False, "No phone number provided"
+            return DeliveryResult(False, "No phone number provided", permanent=True)
 
         mobile = SMSService.normalize_phone(to_phone)
         if not SMSService.is_valid_mobile(to_phone):
-            return False, "Invalid phone number"
+            return DeliveryResult(False, "Invalid phone number", permanent=True)
 
         if not getattr(settings, 'SENDPK_ENABLED', False):
             logger.info(f"[SMS disabled] to {to_phone}: {message}")
-            return True, "SMS disabled"
+            return DeliveryResult(True, "SMS disabled")
 
         try:
             payload = {
@@ -226,12 +264,22 @@ class SMSService:
                 results = data.get('results', [])
                 if results and results[0].get('status') == 'OK':
                     msg_id = results[0].get('messageid', '')
-                    return True, f"OK ID:{msg_id}"
-                return False, str(data)
-            return False, str(data)
+                    return DeliveryResult(True, f"OK ID:{msg_id}")
+                return DeliveryResult(False, str(data), permanent=True)
+            return DeliveryResult(False, str(data), permanent=True)
+        except requests.exceptions.ConnectTimeout as e:
+            return DeliveryResult(False, str(e), retryable=True)
+        except requests.exceptions.ConnectionError as e:
+            return DeliveryResult(False, str(e), retryable=False)
+        except requests.exceptions.HTTPError as e:
+            status_code = getattr(getattr(e, 'response', None), 'status_code', 0)
+            return DeliveryResult(False, str(e), retryable=status_code >= 500,
+                                  permanent=400 <= status_code < 500)
+        except requests.exceptions.ReadTimeout as e:
+            return DeliveryResult(False, str(e), retryable=False)
         except Exception as e:
-            logger.error(f"SMS send failed: {e}")
-            return False, str(e)
+            logger.error(f"SMS outcome unknown: {e}")
+            return DeliveryResult(False, str(e), retryable=False)
 
     @staticmethod
     def extract_message_id(detail):
@@ -364,10 +412,10 @@ class WhatsAppService:
 
     @staticmethod
     def _graph(url, json_body=None, params=None, get=False):
-        """One Graph round trip. Returns (ok, data, detail); never raises.
+        """One Graph round trip. Returns (ok, data, detail, outcome). Never raises.
 
-        Shared by the send path and template management so a network blip or a
-        non-JSON body is described identically wherever it happens.
+        outcome is retryable, unknown, permanent or empty. Shared by the send
+        path and template management so failures are classified consistently.
         """
         token = getattr(settings, 'WHATSAPP_API_TOKEN', '')
         headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
@@ -376,20 +424,31 @@ class WhatsAppService:
                 resp = requests.get(url, headers=headers, params=params, timeout=15)
             else:
                 resp = requests.post(url, headers=headers, params=params, json=json_body, timeout=15)
+        except requests.exceptions.ConnectTimeout as e:
+            logger.error(f"WhatsApp connect timeout: {e}")
+            return False, None, WhatsAppService._describe_error(0, None, exc=e), 'retryable'
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"WhatsApp connection outcome unknown: {e}")
+            return False, None, WhatsAppService._describe_error(0, None, exc=e), 'unknown'
+        except requests.exceptions.ReadTimeout as e:
+            logger.error(f"WhatsApp read timeout: {e}")
+            return False, None, WhatsAppService._describe_error(0, None, exc=e), 'unknown'
         except Exception as e:
-            logger.error(f"WhatsApp request failed: {e}")
-            return False, None, WhatsAppService._describe_error(0, None, exc=e)
+            logger.error(f"WhatsApp outcome unknown: {e}")
+            return False, None, WhatsAppService._describe_error(0, None, exc=e), 'unknown'
 
         try:
             data = resp.json()
         except ValueError as e:
             logger.error(f"WhatsApp response was not JSON: {e}")
-            return False, None, WhatsAppService._describe_error(resp.status_code, None, exc=e)
+            outcome = 'permanent' if 400 <= resp.status_code < 500 else 'unknown'
+            return False, None, WhatsAppService._describe_error(resp.status_code, None, exc=e), outcome
 
         if resp.status_code >= 400 or (isinstance(data, dict) and data.get('error')):
-            return False, None, WhatsAppService._describe_error(resp.status_code, data)
+            outcome = 'permanent' if 400 <= resp.status_code < 500 else 'retryable'
+            return False, None, WhatsAppService._describe_error(resp.status_code, data), outcome
 
-        return True, data, ''
+        return True, data, '', ''
 
     @staticmethod
     def _post(payload):
@@ -398,13 +457,16 @@ class WhatsAppService:
         number_id = getattr(settings, 'WHATSAPP_PHONE_NUMBER_ID', '')
         url = f"https://graph.facebook.com/{version}/{number_id}/messages"
 
-        ok, data, detail = WhatsAppService._graph(url, json_body=payload)
+        ok, data, detail, outcome = WhatsAppService._graph(url, json_body=payload)
         if not ok:
-            return False, detail
+            return DeliveryResult(
+                False, detail, retryable=outcome == 'retryable',
+                permanent=outcome == 'permanent',
+            )
 
         messages = data.get('messages') if isinstance(data, dict) else None
         msg_id = messages[0].get('id', '') if messages else ''
-        return True, f"OK ID:{msg_id}"
+        return DeliveryResult(True, f"OK ID:{msg_id}")
 
     @staticmethod
     def _templates_url():
@@ -441,7 +503,7 @@ class WhatsAppService:
                 "(App Dashboard > WhatsApp > API Setup)."
             )
         url = WhatsAppService._templates_url()
-        ok, data, detail = WhatsAppService._graph(url, json_body=payload)
+        ok, data, detail, _outcome = WhatsAppService._graph(url, json_body=payload)
         return ok, data, detail
 
     @staticmethod
@@ -453,7 +515,7 @@ class WhatsAppService:
                 "(App Dashboard > WhatsApp > API Setup)."
             )
         url = WhatsAppService._templates_url()
-        ok, data, detail = WhatsAppService._graph(
+        ok, data, detail, _outcome = WhatsAppService._graph(
             url, params={'fields': WhatsAppService.TEMPLATE_AUDIT_FIELDS}, get=True)
         if not ok:
             return False, [], detail
@@ -462,22 +524,22 @@ class WhatsAppService:
 
     @staticmethod
     def send(to_phone, message):
-        """Free-form text send. Only valid inside the 24h customer service window;
-        used by the manual-send view, where staff compose arbitrary text."""
+        """Free-form text send. Only valid inside the 24h customer service window.
+        Automatic triggers prefer approved templates."""
         if not to_phone:
-            return False, "No phone number provided"
+            return DeliveryResult(False, "No phone number provided", permanent=True)
 
         phone = WhatsAppService.normalize_phone(to_phone)
         if not phone:
-            return False, "Invalid phone number"
+            return DeliveryResult(False, "Invalid phone number", permanent=True)
 
         if not getattr(settings, 'WHATSAPP_ENABLED', False):
             wa_url = WhatsAppService.get_click_to_chat_url(phone, message)
             logger.info(f"[WhatsApp disabled] fallback link for {phone}")
-            return True, wa_url
+            return DeliveryResult(True, wa_url)
 
         if not getattr(settings, 'WHATSAPP_API_TOKEN', '') or not getattr(settings, 'WHATSAPP_PHONE_NUMBER_ID', ''):
-            return False, "WhatsApp not configured. Set WHATSAPP_API_TOKEN and WHATSAPP_PHONE_NUMBER_ID."
+            return DeliveryResult(False, "WhatsApp not configured. Set WHATSAPP_API_TOKEN and WHATSAPP_PHONE_NUMBER_ID.", permanent=True)
 
         return WhatsAppService._post({
             'messaging_product': 'whatsapp',
@@ -494,27 +556,27 @@ class WhatsAppService:
         where free-form text is rejected with 131047 - only a template works.
         """
         if not to_phone:
-            return False, "No phone number provided"
+            return DeliveryResult(False, "No phone number provided", permanent=True)
 
         phone = WhatsAppService.normalize_phone(to_phone)
         if not phone:
-            return False, "Invalid phone number"
+            return DeliveryResult(False, "Invalid phone number", permanent=True)
 
         if not getattr(settings, 'WHATSAPP_ENABLED', False):
             wa_url = WhatsAppService.get_click_to_chat_url(phone)
             logger.info(f"[WhatsApp disabled] fallback link for {phone}")
-            return True, wa_url
+            return DeliveryResult(True, wa_url)
 
         if not getattr(settings, 'WHATSAPP_API_TOKEN', '') or not getattr(settings, 'WHATSAPP_PHONE_NUMBER_ID', ''):
-            return False, "WhatsApp not configured. Set WHATSAPP_API_TOKEN and WHATSAPP_PHONE_NUMBER_ID."
+            return DeliveryResult(False, "WhatsApp not configured. Set WHATSAPP_API_TOKEN and WHATSAPP_PHONE_NUMBER_ID.", permanent=True)
 
         template_name = WhatsAppService.template_name_for(notification_type)
         if not template_name:
             setting = WhatsAppService.TEMPLATE_SETTING_BY_TYPE.get(notification_type)
-            return False, (
+            return DeliveryResult(False, (
                 f"No WhatsApp template configured for '{notification_type}'. "
                 f"Set {setting or 'the matching WHATSAPP_TEMPLATE_* setting'} in .env."
-            )
+            ), permanent=True)
 
         # Templates are POSITIONAL (NAMED-with-variables is not creatable via the
         # Graph API), so the order of the parameters list decides which value lands
@@ -526,10 +588,10 @@ class WhatsAppService:
         if order:
             unexpected = set(supplied) - set(order)
             if unexpected:
-                return False, (
+                return DeliveryResult(False, (
                     f"Unknown WhatsApp template parameter(s) for '{notification_type}': "
                     f"{', '.join(sorted(unexpected))}. Expected {', '.join(order)}."
-                )
+                ), permanent=True)
             ordered = [supplied[k] for k in order if k in supplied]
         else:
             # No spec entry (custom template) — fall back to the caller's order.
@@ -559,14 +621,160 @@ class WhatsAppService:
         return f"https://wa.me/{phone}?text={requests.utils.quote(message)}" if phone else ''
 
 
+CHANNEL_PREF_FIELD = {
+    'email': 'email_enabled',
+    'sms': 'sms_enabled',
+    'whatsapp': 'whatsapp_enabled',
+}
+
+# One mapping for event level preferences. Types not listed are always allowed.
+EVENT_PREF_FIELD = {
+    'installment_reminder': 'installment_reminders',
+    'overdue_payment': 'overdue_payments',
+    'payment_confirmation': 'payment_confirmations',
+    'receipt_notification': 'payment_confirmations',
+    'booking_notification': 'booking_notifications',
+    'booking_approval': 'booking_notifications',
+}
+
+
 class NotificationService:
+    @staticmethod
+    def _resolve_customer(customer_id, recipient_contact):
+        from customers.models import Customer
+        customer = None
+        if customer_id:
+            customer = Customer.objects.filter(customer_id=customer_id).first()
+        if customer is None:
+            contact = (recipient_contact or '').strip()
+            if '@' in contact:
+                customer = Customer.objects.filter(email__iexact=contact).first()
+            else:
+                digits = SMSService.normalize_phone(contact)
+                if digits:
+                    customer = Customer.objects.filter(
+                        phone__contains=digits[-10:],
+                    ).first()
+        return customer
+
+    @staticmethod
+    def preference_reason(customer, channel, notification_type=''):
+        if customer is None:
+            return ''
+        if getattr(customer, 'do_not_contact', False):
+            return 'Skipped: customer opted out of all messages'
+        user = getattr(customer, 'user', None)
+        prefs = getattr(user, 'notification_prefs', None) if user else None
+        if prefs is None:
+            return ''
+        field = CHANNEL_PREF_FIELD.get(channel)
+        if field and not getattr(prefs, field, True):
+            return (f'Skipped: {channel} notifications disabled for customer '
+                    f'{customer.customer_id}.')
+        event_field = EVENT_PREF_FIELD.get(notification_type)
+        if event_field and not getattr(prefs, event_field, True):
+            return (f'Skipped: {notification_type} notifications disabled for customer '
+                    f'{customer.customer_id}.')
+        return ''
+
+    @staticmethod
+    def preference_reason_for_log(log):
+        customer = NotificationService._resolve_customer(
+            log.related_customer_id, log.recipient_contact)
+        return NotificationService.preference_reason(
+            customer, log.channel, log.notification_type)
+
+    @staticmethod
+    def _save_with_lock_retry(log, update_fields=None):
+        for attempt in range(3):
+            try:
+                log.save(update_fields=update_fields)
+                return
+            except OperationalError as exc:
+                if 'locked' not in str(exc).lower() or attempt == 2:
+                    raise
+                time.sleep(0.1 * (attempt + 1))
+
+    @staticmethod
+    def _deliver(log):
+        customer = NotificationService._resolve_customer(
+            log.related_customer_id, log.recipient_contact)
+        reason = NotificationService.preference_reason(
+            customer, log.channel, log.notification_type)
+        if reason:
+            log.status = 'skipped'
+            log.error_message = reason
+            log.sent_at = None
+            NotificationService._save_with_lock_retry(log)
+            return log
+
+        template_params = log.template_params or None
+        if log.channel == 'email':
+            result = EmailService.send(
+                log.recipient_contact, log.subject, log.message)
+        elif log.channel == 'sms':
+            if template_params is not None:
+                result = SMSService.send_typed(
+                    log.recipient_contact, log.notification_type, template_params)
+            else:
+                result = SMSService.send(log.recipient_contact, log.message)
+            if not isinstance(result, DeliveryResult):
+                success, detail = result
+                result = DeliveryResult(success, detail, retryable=not success)
+            if result.success:
+                log.provider_message_id = SMSService.extract_message_id(result.detail)
+        elif log.channel == 'whatsapp':
+            if template_params is not None:
+                result = WhatsAppService.send_typed(
+                    log.recipient_contact, log.notification_type, template_params)
+            else:
+                result = WhatsAppService.send(
+                    log.recipient_contact, log.message)
+            if not isinstance(result, DeliveryResult):
+                success, detail = result
+                result = DeliveryResult(success, detail, retryable=not success)
+            if result.success:
+                log.provider_message_id = WhatsAppService.extract_message_id(result.detail)
+        else:
+            result = DeliveryResult(False, f'Unknown channel: {log.channel}', permanent=True)
+
+        if not isinstance(result, DeliveryResult):
+            success, detail = result
+            result = DeliveryResult(success, detail, retryable=not success)
+
+        provider_setting = CHANNEL_ENABLED_SETTING.get(log.channel)
+        provider_off = (provider_setting is not None
+                        and not getattr(settings, provider_setting, False))
+
+        if result.success and provider_off:
+            log.status = 'skipped'
+            log.error_message = result.detail or f'{log.channel} is disabled'
+            log.sent_at = None
+        elif result.success:
+            log.status = 'sent'
+            log.error_message = ''
+            log.sent_at = timezone.now()
+        elif result.permanent:
+            log.status = 'failed'
+            log.attempts = 3
+            log.error_message = result.detail
+            log.sent_at = None
+        elif result.retryable:
+            log.status = 'failed'
+            log.error_message = result.detail
+            log.sent_at = None
+        else:
+            log.status = 'unknown'
+            log.error_message = result.detail
+            log.sent_at = None
+        NotificationService._save_with_lock_retry(log)
+        return log
+
     @staticmethod
     def send_notification(recipient_name, recipient_contact, channel, notification_type,
                          message, subject='', customer_id='', booking_id='', user=None,
                          sms_message=None, template_params=None):
-        # SMS uses a shorter message when one is supplied; email/whatsapp use the full text.
         effective_message = (sms_message or message) if channel == 'sms' else message
-
         log = NotificationLog.objects.create(
             recipient_name=recipient_name,
             recipient_contact=recipient_contact,
@@ -574,58 +782,102 @@ class NotificationService:
             notification_type=notification_type,
             subject=subject,
             message=effective_message,
+            attempts=1,
+            template_params=template_params or {},
             related_customer_id=customer_id,
             related_booking_id=booking_id,
             created_by=user,
         )
+        return NotificationService._deliver(log)
 
-        success = False
-        detail = ''
-
-        if channel == 'email':
-            success, detail = EmailService.send(recipient_contact, subject, message)
-        elif channel == 'sms':
-            # Automated transactional sends go via an approved fixed-sms template
-            # (this account rejects free text). template_params present = templated;
-            # absent = free text (e.g. a one-off staff message).
-            if template_params is not None:
-                success, detail = SMSService.send_typed(
-                    recipient_contact, notification_type, template_params)
-            else:
-                success, detail = SMSService.send(recipient_contact, effective_message)
-            if success:
-                log.provider_message_id = SMSService.extract_message_id(detail)
-        elif channel == 'whatsapp':
-            # template_params present = an automated transactional notification, which
-            # must go out as an approved template. Absent = staff free-form text from
-            # the manual-send view, which only works inside the 24h window.
-            if template_params is not None:
-                success, detail = WhatsAppService.send_typed(
-                    recipient_contact, notification_type, template_params)
-            else:
-                success, detail = WhatsAppService.send(recipient_contact, message)
-            if success:
-                log.provider_message_id = WhatsAppService.extract_message_id(detail)
-
-        # Every provider returns (True, "... disabled") when it is switched off so
-        # that no caller ever breaks. But nothing was transmitted, so recording it
-        # as `sent` inflates the Notification Center's Delivered figure with
-        # messages that never left the building (docs/qa finding #2).
-        provider_setting = CHANNEL_ENABLED_SETTING.get(channel)
-        provider_off = (provider_setting is not None
-                        and not getattr(settings, provider_setting, False))
-
-        if success and provider_off:
-            log.status = 'skipped'
-            log.error_message = detail or f'{channel} is disabled'
-            log.sent_at = None
-        else:
-            log.status = 'sent' if success else 'failed'
-            log.error_message = '' if success else detail
-            log.sent_at = timezone.now() if success else None
-        log.save()
-
+    @staticmethod
+    def queue_notification(recipient_name, recipient_contact, channel, notification_type,
+                           message, subject='', customer_id='', booking_id='', user=None,
+                           sms_message=None, template_params=None):
+        effective_message = (sms_message or message) if channel == 'sms' else message
+        customer = NotificationService._resolve_customer(customer_id, recipient_contact)
+        reason = NotificationService.preference_reason(
+            customer, channel, notification_type)
+        log = NotificationLog.objects.create(
+            recipient_name=recipient_name,
+            recipient_contact=recipient_contact,
+            channel=channel,
+            notification_type=notification_type,
+            subject=subject,
+            message=effective_message,
+            status='skipped' if reason else 'queued',
+            error_message=reason,
+            attempts=0,
+            template_params=template_params or {},
+            related_customer_id=customer.customer_id if customer else customer_id,
+            related_booking_id=booking_id,
+            created_by=user,
+        )
+        if not reason:
+            transaction.on_commit(
+                lambda log_id=log.pk: NotificationService._schedule(log_id))
         return log
+
+    @staticmethod
+    def _schedule(log_id):
+        if not getattr(settings, 'NOTIFICATIONS_SEND_IN_THREAD', True):
+            return
+
+        def runner():
+            try:
+                NotificationService.process_notification_id(log_id)
+            except Exception as exc:
+                logger.error(f"Notification thread failed for {log_id}: {exc}")
+                NotificationLog.objects.filter(pk=log_id, status='sending').update(
+                    status='unknown',
+                    error_message=f'Worker exception, check provider: {exc}',
+                    sending_at=None,
+                )
+            finally:
+                connection.close()
+
+        threading.Thread(target=runner, daemon=True).start()
+
+    @staticmethod
+    def _claim(log_id):
+        for attempt in range(3):
+            try:
+                updated = NotificationLog.objects.filter(
+                    pk=log_id, status='queued',
+                ).update(status='sending', sending_at=timezone.now())
+                return bool(updated)
+            except OperationalError:
+                time.sleep(0.1 * (attempt + 1))
+        return False
+
+    @staticmethod
+    def process_notification_id(log_id):
+        if not NotificationService._claim(log_id):
+            return None
+        log = NotificationLog.objects.get(pk=log_id)
+        log.attempts += 1
+        log.save(update_fields=['attempts'])
+        return NotificationService._deliver(log)
+
+    @staticmethod
+    def mark_stale_sending(minutes=10):
+        cutoff = timezone.now() - timedelta(minutes=minutes)
+        return NotificationLog.objects.filter(
+            status='sending', sending_at__lt=cutoff,
+        ).update(
+            status='unknown',
+            error_message='Worker did not finish. Check the provider dashboard before retrying.',
+            sending_at=None,
+        )
+
+    @staticmethod
+    def retry_log(log):
+        if log.status != 'failed' or log.attempts >= 3:
+            return log
+        log.attempts += 1
+        log.error_message = ''
+        log.save(update_fields=['attempts', 'error_message'])
+        return NotificationService._deliver(log)
 
     @staticmethod
     def send_payment_confirmation(payment):
@@ -689,7 +941,7 @@ class NotificationService:
         for ch in channels:
             contact = customer.email if ch == 'email' else customer.phone
             if contact:
-                NotificationService.send_notification(
+                NotificationService.queue_notification(
                     recipient_name=customer.full_name,
                     recipient_contact=contact,
                     channel=ch,
@@ -728,7 +980,7 @@ class NotificationService:
         for ch in channels:
             contact = customer.email if ch == 'email' else customer.phone
             if contact:
-                NotificationService.send_notification(
+                NotificationService.queue_notification(
                     recipient_name=customer.full_name,
                     recipient_contact=contact,
                     channel=ch,
@@ -779,7 +1031,7 @@ class NotificationService:
             last = None
             for ch in channels:
                 contact = phone if ch == 'sms' else email
-                last = NotificationService.send_notification(
+                last = NotificationService.queue_notification(
                     recipient_name=customer.full_name,
                     recipient_contact=contact,
                     channel=ch,
@@ -832,7 +1084,7 @@ class NotificationService:
         for ch in channels:
             contact = customer.email if ch == 'email' else customer.phone
             if contact:
-                NotificationService.send_notification(
+                NotificationService.queue_notification(
                     recipient_name=customer.full_name,
                     recipient_contact=contact,
                     channel=ch,
@@ -877,7 +1129,7 @@ class NotificationService:
         for ch in channels:
             contact = customer.email if ch == 'email' else customer.phone
             if contact:
-                NotificationService.send_notification(
+                NotificationService.queue_notification(
                     recipient_name=customer.full_name,
                     recipient_contact=contact,
                     channel=ch,
@@ -918,7 +1170,7 @@ class NotificationService:
         for ch in channels:
             contact = customer.email if ch == 'email' else customer.phone
             if contact:
-                NotificationService.send_notification(
+                NotificationService.queue_notification(
                     recipient_name=customer.full_name,
                     recipient_contact=contact,
                     channel=ch,

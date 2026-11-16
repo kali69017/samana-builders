@@ -22,44 +22,6 @@ class NotificationSecurityBase(TestCase):
         self.mgmt2 = User.objects.create_user('mgmt2', 'mgmt2@example.com', 'pass123456')
         UserProfile.objects.create(user=self.mgmt2, role='management')
 
-    def manual_send(self, user, contact, channel='email'):
-        """POST to the manual-send endpoint as ``user``; returns the response."""
-        self.client.force_login(user)
-        return self.client.post(reverse('send_notification'), {
-            'recipient_name': 'QA',
-            'recipient_contact': contact,
-            'channel': channel,
-            'subject': 't',
-            'message': 'm',
-        })
-
-
-class ManualSendRateLimitTest(NotificationSecurityBase):
-    def test_same_recipient_beyond_cap_is_refused(self):
-        # First three to the same address are fine.
-        for _ in range(3):
-            resp = self.manual_send(self.mgmt1, 'victim@example.com')
-            self.assertEqual(resp.status_code, 302)
-        # The fourth must be throttled.
-        resp = self.manual_send(self.mgmt1, 'victim@example.com')
-        self.assertEqual(resp.status_code, 429)
-        self.assertEqual(
-            NotificationLog.objects.filter(recipient_contact='victim@example.com').count(), 3,
-        )
-
-    def test_distinct_recipients_are_not_limited(self):
-        for i in range(5):
-            resp = self.manual_send(self.mgmt1, f'user{i}@example.com')
-            self.assertEqual(resp.status_code, 302)
-        self.assertEqual(NotificationLog.objects.filter(recipient_contact__startswith='user').count(), 5)
-
-    def test_limit_is_per_recipient_not_global(self):
-        for i in range(4):
-            self.assertEqual(self.manual_send(self.mgmt1, f'a{i}@example.com').status_code, 302)
-        # A fresh recipient still goes through.
-        self.assertEqual(self.manual_send(self.mgmt1, 'fresh@example.com').status_code, 302)
-
-
 class NotificationCenterMaskingTest(NotificationSecurityBase):
     def test_management_sees_masked_contact(self):
         email = 'sensitive@example.com'
@@ -86,6 +48,30 @@ class NotificationCenterMaskingTest(NotificationSecurityBase):
         self.client.force_login(self.admin)
         resp = self.client.get(reverse('notifications'))
         self.assertIn(email, resp.content.decode())
+
+
+class NotificationCenterVisibilityTests(NotificationSecurityBase):
+    def test_read_only_log_shows_error_related_ids_and_filters(self):
+        NotificationLog.objects.create(
+            recipient_name='Visible', recipient_contact='visible@example.com',
+            channel='email', notification_type='customer_welcome',
+            subject='x', message='y', status='failed', error_message='provider exploded',
+            related_customer_id='CUS-00001', related_booking_id='BKG-00001',
+            created_by=self.admin,
+        )
+        self.client.force_login(self.admin)
+        html = self.client.get(reverse('notifications')).content.decode()
+        for text in ('Sent', 'Failed', 'Customer Welcome', 'Error', 'Customer',
+                     'Booking', 'provider exploded', 'CUS-00001', 'BKG-00001'):
+            self.assertIn(text, html)
+        self.assertNotIn('Send Notification', html)
+
+
+class ManualSendRemovedTest(NotificationSecurityBase):
+    def test_old_manual_send_url_returns_404(self):
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.post('/notifications/send/').status_code, 404)
+        self.assertEqual(self.client.get('/notifications/send/').status_code, 404)
 
 
 class NotificationCenterScopingTest(NotificationSecurityBase):

@@ -47,15 +47,17 @@ class CustomerViewSet(viewsets.ModelViewSet):
         return CustomerSerializer
     
     def perform_create(self, serializer):
-        customer = serializer.save(created_by=self.request.user)
+        from django.db import transaction
         from notifications.services import NotificationService
-        NotificationService.send_customer_welcome(customer, user=self.request.user)
         from core.models import AuditLog
-        AuditLog.objects.create(
-            user=self.request.user, action='create', model_name='Customer',
-            object_id=customer.customer_id,
-            description=f'Created customer {customer.full_name} via API'
-        )
+        with transaction.atomic():
+            customer = serializer.save(created_by=self.request.user)
+            NotificationService.send_customer_welcome(customer, user=self.request.user)
+            AuditLog.objects.create(
+                user=self.request.user, action='create', model_name='Customer',
+                object_id=customer.customer_id,
+                description=f'Created customer {customer.full_name} via API'
+            )
     
     def perform_update(self, serializer):
         customer = serializer.save()

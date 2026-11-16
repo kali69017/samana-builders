@@ -44,6 +44,9 @@
                             {% if customer.is_active %}Active{% else %}Inactive{% endif %}
                         </span>
                         <span class="badge badge-info" style="font-size:12px;">{{ customer.total_bookings }} Booking{{ customer.total_bookings|pluralize }}</span>
+                        {% if customer.do_not_contact %}
+                        <span class="badge badge-danger" style="font-size:12px;">Do not message</span>
+                        {% endif %}
                     </div>
                 </div>
                 {% if customer.document %}
@@ -69,6 +72,35 @@
                 {% endif %}
                 {% endif %}
             </div>
+        </div>
+
+        <div class="card animate-fade-up stagger-1" style="padding:18px 20px;">
+            <div class="card-header" style="padding:0 0 12px 0;">
+                <h3>Message Settings</h3>
+                {% if customer.do_not_contact %}
+                <span class="badge badge-danger">Do not message</span>
+                {% else %}
+                <span class="badge badge-success">Messaging allowed</span>
+                {% endif %}
+            </div>
+            <form method="post" action="{% url 'customer_do_not_contact' customer.pk %}" style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
+                {% csrf_token %}
+                <label style="display:flex; gap:8px; align-items:center; min-width:200px;">
+                    <input type="checkbox" name="do_not_contact" {% if customer.do_not_contact %}checked{% endif %}>
+                    <span>Do not message this customer</span>
+                </label>
+                <div style="flex:1; min-width:240px;">
+                    <input type="text" name="do_not_contact_reason" class="form-control" maxlength="200"
+                           value="{{ customer.do_not_contact_reason }}" placeholder="Optional reason">
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm">Save message setting</button>
+            </form>
+            {% if customer.do_not_contact_at %}
+            <p style="margin:10px 0 0; font-size:12px; color:var(--text-secondary);">
+                Last changed {{ customer.do_not_contact_at|date:"d M Y H:i" }}
+                {% if customer.do_not_contact_set_by %}by {{ customer.do_not_contact_set_by.username }}{% endif %}
+            </p>
+            {% endif %}
         </div>
 
         <!-- Info Grid -->

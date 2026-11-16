@@ -1,4 +1,4 @@
-{% extends 'base.html' %}
+﻿{% extends 'base.html' %}
 {% load static %}
 {% load notif_filters %}
 
@@ -15,48 +15,60 @@
             <h1>Notification Center</h1>
             <div class="page-actions">
                 <span class="badge badge-info">{{ total_count }} total</span>
-                <button class="btn btn-primary btn-sm" onclick="document.getElementById('sendModal').style.display='flex'">Send Notification</button>
             </div>
         </div>
 
         <!-- Stats Cards -->
         <div class="stats-grid animate-fade-up">
             <div class="stat-card">
-                <div class="stat-icon" style="background: var(--primary-bg); color: var(--primary);">🔔</div>
+                <div class="stat-icon" style="background: var(--primary-bg); color: var(--primary);">ðŸ””</div>
                 <div class="stat-info">
                     <div class="stat-value">{{ total_count }}</div>
                     <div class="stat-label">Total Sent</div>
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon" style="background: #dcfce7; color: #16a34a;">✓</div>
+                <div class="stat-icon" style="background: #dcfce7; color: #16a34a;">âœ“</div>
                 <div class="stat-info">
                     <div class="stat-value">{{ sent_count }}</div>
-                    <div class="stat-label">Delivered</div>
+                    <div class="stat-label">Sent</div>
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon" style="background: #fef3c7; color: #d97706;">⏳</div>
+                <div class="stat-icon" style="background: #fef3c7; color: #d97706;">â³</div>
                 <div class="stat-info">
                     <div class="stat-value">{{ pending_count }}</div>
                     <div class="stat-label">Pending</div>
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon" style="background: #e0e7ff; color: #4f46e5;">⏭</div>
+                <div class="stat-icon" style="background: #e0e7ff; color: #4f46e5;">â­</div>
                 <div class="stat-info">
                     <div class="stat-value">{{ skipped_count }}</div>
                     <div class="stat-label">Skipped</div>
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon" style="background: #fee2e2; color: #dc2626;">✕</div>
+                <div class="stat-icon" style="background: #fee2e2; color: #dc2626;">âœ•</div>
                 <div class="stat-info">
                     <div class="stat-value">{{ failed_count }}</div>
                     <div class="stat-label">Failed</div>
                 </div>
             </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background: #fef3c7; color: #b45309;">?</div>
+                <div class="stat-info">
+                    <div class="stat-value">{{ unknown_count }}</div>
+                    <div class="stat-label">Needs check</div>
+                </div>
+            </div>
         </div>
+
+        {% if unknown_count %}
+        <div class="alert alert-warning animate-fade-up">
+            <span>Unknown delivery outcomes: the provider may have accepted the message. Check the provider dashboard before any resend.</span>
+        </div>
+        {% endif %}
 
         <!-- Filters -->
         <div class="card animate-fade-up stagger-1">
@@ -76,6 +88,7 @@
                         <option value="receipt_notification" {% if type_filter == 'receipt_notification' %}selected{% endif %}>Receipt Notification</option>
                         <option value="booking_notification" {% if type_filter == 'booking_notification' %}selected{% endif %}>Booking Notification</option>
                         <option value="booking_approval" {% if type_filter == 'booking_approval' %}selected{% endif %}>Booking Approval</option>
+                        <option value="customer_welcome" {% if type_filter == 'customer_welcome' %}selected{% endif %}>Customer Welcome</option>
                         <option value="general" {% if type_filter == 'general' %}selected{% endif %}>General</option>
                     </select>
                     <select name="status" style="min-width:140px; height:42px; padding:0 36px 0 14px; border:2px solid var(--border); border-radius:var(--radius-sm); font-size:14px; font-family:'Inter',sans-serif; background:var(--bg-input); color:var(--text-primary); appearance:none; background-image:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E&quot;); background-repeat:no-repeat; background-position:right 12px center; cursor:pointer; outline:none;">
@@ -84,6 +97,7 @@
                         <option value="sent" {% if status_filter == 'sent' %}selected{% endif %}>Sent</option>
                         <option value="skipped" {% if status_filter == 'skipped' %}selected{% endif %}>Skipped</option>
                         <option value="failed" {% if status_filter == 'failed' %}selected{% endif %}>Failed</option>
+                        <option value="unknown" {% if status_filter == 'unknown' %}selected{% endif %}>Needs check</option>
                     </select>
                     <button type="submit" class="btn btn-primary btn-sm" style="height:42px; padding:0 20px; white-space:nowrap;">Filter</button>
                     {% if channel_filter or type_filter or status_filter %}
@@ -103,9 +117,12 @@
                             <th>Channel</th>
                             <th>Recipient</th>
                             <th>Contact</th>
+                            <th>Customer</th>
+                            <th>Booking</th>
                             <th>Type</th>
                             <th>Subject</th>
                             <th>Status</th>
+                            <th>Error</th>
                             <th>Sent At</th>
                             <th>Created</th>
                         </tr>
@@ -115,17 +132,22 @@
                         <tr>
                             <td>
                                 <span class="badge badge-{% if log.channel == 'email' %}info{% elif log.channel == 'sms' %}warning{% else %}success{% endif %}">
-                                    {% if log.channel == 'email' %}📧{% elif log.channel == 'sms' %}📱{% else %}💬{% endif %} {{ log.get_channel_display }}
+                                    {% if log.channel == 'email' %}ðŸ“§{% elif log.channel == 'sms' %}ðŸ“±{% else %}ðŸ’¬{% endif %} {{ log.get_channel_display }}
                                 </span>
                             </td>
                             <td><strong>{{ log.recipient_name }}</strong></td>
                             <td style="font-size:12px;">{% if can_view_full %}{{ log.recipient_contact }}{% else %}{{ log.recipient_contact|mask_contact }}{% endif %}</td>
+                            <td style="font-size:12px;">{{ log.related_customer_id|default:"-" }}</td>
+                            <td style="font-size:12px;">{{ log.related_booking_id|default:"-" }}</td>
                             <td>{{ log.get_notification_type_display }}</td>
                             <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ log.subject }}">{{ log.subject|default:"-" }}</td>
                             <td>
-                                <span class="badge badge-{% if log.status == 'sent' %}success{% elif log.status == 'failed' %}danger{% else %}warning{% endif %}">
+                                <span class="badge badge-{% if log.status == 'sent' %}success{% elif log.status == 'failed' %}danger{% elif log.status == 'unknown' %}warning{% else %}secondary{% endif %}">
                                     {{ log.get_status_display }}
                                 </span>
+                            </td>
+                            <td style="max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px;" title="{{ log.error_message }}">
+                                {{ log.error_message|default:"-"|truncatechars:60 }}
                             </td>
                             <td style="white-space:nowrap; font-size:12px;">{{ log.sent_at|date:"d M Y H:i"|default:"-" }}</td>
                             <td style="white-space:nowrap; font-size:12px;">{{ log.created_at|date:"d M Y H:i" }}</td>
@@ -135,7 +157,7 @@
                 </table>
                 {% else %}
                 <div class="empty-state">
-                    <div class="empty-icon">🔔</div>
+                    <div class="empty-icon">ðŸ””</div>
                     <h3>No Notifications</h3>
                     <p>{% if channel_filter or type_filter or status_filter %}No notifications match the current filters.{% else %}Notification logs will appear here as messages are sent.{% endif %}</p>
                 </div>
@@ -145,58 +167,4 @@
     </main>
 </div>
 
-<!-- Send Notification Modal -->
-<div id="sendModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
-    <div style="background:var(--bg-card); border-radius:var(--radius); width:90%; max-width:500px; max-height:90vh; overflow-y:auto; box-shadow: var(--shadow-lg);">
-        <div style="padding:20px 24px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
-            <h3 style="margin:0; font-size:18px; font-weight:600;">Send Manual Notification</h3>
-            <button onclick="document.getElementById('sendModal').style.display='none'" style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-secondary);">&times;</button>
-        </div>
-        <form method="post" action="{% url 'send_notification' %}" style="padding:24px;">
-            {% csrf_token %}
-            <div style="margin-bottom:16px;">
-                <label style="display:block; margin-bottom:6px; font-size:13px; font-weight:500; color:var(--text-secondary);">Recipient Name</label>
-                <input type="text" name="recipient_name" required
-                    style="width:100%; padding:10px 14px; border:2px solid var(--border); border-radius:var(--radius-sm); font-size:14px; font-family:'Inter',sans-serif; background:var(--bg-input); color:var(--text-primary); outline:none; box-sizing:border-box;"
-                    placeholder="Customer name">
-            </div>
-            <div style="margin-bottom:16px;">
-                <label style="display:block; margin-bottom:6px; font-size:13px; font-weight:500; color:var(--text-secondary);">Contact (Email or Phone)</label>
-                <input type="text" name="recipient_contact" required
-                    style="width:100%; padding:10px 14px; border:2px solid var(--border); border-radius:var(--radius-sm); font-size:14px; font-family:'Inter',sans-serif; background:var(--bg-input); color:var(--text-primary); outline:none; box-sizing:border-box;"
-                    placeholder="email@example.com or +923001234567">
-            </div>
-            <div style="margin-bottom:16px;">
-                <label style="display:block; margin-bottom:6px; font-size:13px; font-weight:500; color:var(--text-secondary);">Channel</label>
-                <select name="channel" style="width:100%; height:42px; padding:0 14px; border:2px solid var(--border); border-radius:var(--radius-sm); font-size:14px; font-family:'Inter',sans-serif; background:var(--bg-input); color:var(--text-primary); appearance:none; background-image:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E&quot;); background-repeat:no-repeat; background-position:right 12px center; cursor:pointer; outline:none; box-sizing:border-box;">
-                    <option value="email">Email</option>
-                    <option value="sms">SMS</option>
-                    <option value="whatsapp">WhatsApp</option>
-                </select>
-                <p style="margin:8px 0 0; font-size:12px; line-height:1.5; color:var(--text-secondary);">
-                    <strong>WhatsApp:</strong> free-form text is only delivered within 24 hours of the
-                    customer's last message. After that Meta rejects it (error 131047) and you must use a
-                    template — the automatic payment, booking, installment and receipt notifications do this
-                    for you.
-                </p>
-            </div>
-            <div style="margin-bottom:16px;">
-                <label style="display:block; margin-bottom:6px; font-size:13px; font-weight:500; color:var(--text-secondary);">Subject</label>
-                <input type="text" name="subject"
-                    style="width:100%; padding:10px 14px; border:2px solid var(--border); border-radius:var(--radius-sm); font-size:14px; font-family:'Inter',sans-serif; background:var(--bg-input); color:var(--text-primary); outline:none; box-sizing:border-box;"
-                    placeholder="Notification subject">
-            </div>
-            <div style="margin-bottom:20px;">
-                <label style="display:block; margin-bottom:6px; font-size:13px; font-weight:500; color:var(--text-secondary);">Message *</label>
-                <textarea name="message" required rows="5"
-                    style="width:100%; padding:10px 14px; border:2px solid var(--border); border-radius:var(--radius-sm); font-size:14px; font-family:'Inter',sans-serif; background:var(--bg-input); color:var(--text-primary); outline:none; resize:vertical; box-sizing:border-box;"
-                    placeholder="Type your notification message..."></textarea>
-            </div>
-            <div style="display:flex; gap:10px; justify-content:flex-end;">
-                <button type="button" onclick="document.getElementById('sendModal').style.display='none'" class="btn btn-secondary btn-sm">Cancel</button>
-                <button type="submit" class="btn btn-primary btn-sm">Send Notification</button>
-            </div>
-        </form>
-    </div>
-</div>
 {% endblock %}

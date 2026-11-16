@@ -19,12 +19,15 @@ class NotificationLog(models.Model):
         ('general', 'General'),
     ]
     STATUS_CHOICES = [
+        ('queued', 'Queued'),
+        ('sending', 'Sending'),
         ('pending', 'Pending'),
         ('sent', 'Sent'),
-        # Provider switched off: the send was deliberately not attempted, so it
-        # must never be counted alongside real deliveries.
+        # Provider switched off or recipient opted out: the send was deliberately
+        # not attempted, so it must never be counted alongside real deliveries.
         ('skipped', 'Skipped'),
         ('failed', 'Failed'),
+        ('unknown', 'Unknown'),
     ]
 
     recipient_name = models.CharField(max_length=200)
@@ -33,12 +36,15 @@ class NotificationLog(models.Model):
     notification_type = models.CharField(max_length=30, choices=TYPE_CHOICES)
     subject = models.CharField(max_length=300, blank=True)
     message = models.TextField()
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='queued')
     error_message = models.TextField(blank=True)
+    attempts = models.PositiveIntegerField(default=0)
+    template_params = models.JSONField(default=dict, blank=True)
     provider_message_id = models.CharField(max_length=50, blank=True, help_text="Gateway message/delivery ID (e.g. SendPK messageid)")
     related_customer_id = models.CharField(max_length=20, blank=True)
     related_booking_id = models.CharField(max_length=20, blank=True)
     sent_at = models.DateTimeField(null=True, blank=True)
+    sending_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
 

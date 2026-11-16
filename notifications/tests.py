@@ -5,6 +5,7 @@ from decimal import Decimal
 from unittest.mock import Mock, patch
 
 from django.contrib.auth.models import User
+from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -729,6 +730,7 @@ class WhatsAppTemplateDeliveryTest(TestCase):
         resp = graph_response(wamid)
         with patch('notifications.services.requests.post', return_value=resp) as mock_post:
             action()
+            call_command('process_notification_queue', stdout=__import__('io').StringIO())
         return mock_post
 
     def _verified_payment(self):
@@ -819,6 +821,7 @@ class WhatsAppTemplateDeliveryTest(TestCase):
             resp = graph_response()
             with patch('notifications.services.requests.post', return_value=resp) as mock_post:
                 NotificationService.send_installment_reminder(installment)
+                call_command('process_notification_queue', stdout=__import__('io').StringIO())
 
         mock_post.assert_not_called()
         log = NotificationLog.objects.get(channel='whatsapp', notification_type='installment_reminder')
@@ -833,24 +836,13 @@ class WhatsAppTemplateDeliveryTest(TestCase):
         }})
         with patch('notifications.services.requests.post', return_value=resp):
             NotificationService.send_installment_reminder(installment)
+            call_command('process_notification_queue', stdout=__import__('io').StringIO())
 
         log = NotificationLog.objects.get(channel='whatsapp', notification_type='installment_reminder')
         self.assertEqual('failed', log.status)
+        self.assertEqual(3, log.attempts)
         self.assertIn('131047', log.error_message)
         self.assertIsNone(log.sent_at)
-
-    def test_manual_send_still_uses_freeform_text(self):
-        resp = graph_response('wamid.MANUAL')
-        with patch('notifications.services.requests.post', return_value=resp) as mock_post:
-            NotificationService.send_notification(
-                recipient_name='Ahmed Khan', recipient_contact='+92-300-1234567',
-                channel='whatsapp', notification_type='general',
-                subject='Quick question', message='Please call me back.',
-            )
-
-        payload = mock_post.call_args.kwargs['json']
-        self.assertEqual('text', payload['type'])
-        self.assertEqual('Please call me back.', payload['text']['body'])
 
     def test_email_copy_does_not_mention_late_fees(self):
         installment = self.plan.installments.get(installment_number=1)

@@ -30,8 +30,12 @@ class CustomerSerializer(serializers.ModelSerializer):
                   'phone', 'alternate_phone', 'cnic', 'address', 'city', 'notes',
                   'document', 'image', 'document_name',
                   'is_active', 'total_bookings', 'total_paid', 'current_balance',
+                  'do_not_contact', 'do_not_contact_reason', 'do_not_contact_set_by',
+                  'do_not_contact_at',
                   'created_at', 'updated_at', 'created_by']
-        read_only_fields = ['id', 'customer_id', 'created_at', 'updated_at', 'created_by']
+        read_only_fields = ['id', 'customer_id', 'created_at', 'updated_at', 'created_by',
+                            'do_not_contact', 'do_not_contact_reason',
+                            'do_not_contact_set_by', 'do_not_contact_at']
     
     def get_document_name(self, obj):
         if obj.document:
@@ -127,8 +131,12 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
                   'phone', 'alternate_phone', 'cnic', 'address', 'city', 'notes',
                   'document', 'image', 'document_name',
                   'is_active', 'total_bookings', 'total_paid', 'current_balance',
+                  'do_not_contact', 'do_not_contact_reason', 'do_not_contact_set_by',
+                  'do_not_contact_at',
                   'ledger_summary', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'customer_id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'customer_id', 'created_at', 'updated_at',
+                            'do_not_contact', 'do_not_contact_reason',
+                            'do_not_contact_set_by', 'do_not_contact_at']
     
     def get_document_name(self, obj):
         if obj.document:

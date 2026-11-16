@@ -61,8 +61,13 @@
                             onblur="this.style.borderColor='var(--border)'; this.style.boxShadow='none';"
                         >
                     </div>
+                    <select name="do_not_contact" class="form-control" style="height:42px; max-width:220px;">
+                        <option value="">All messaging states</option>
+                        <option value="1" {% if do_not_contact == '1' %}selected{% endif %}>Do not message</option>
+                        <option value="0" {% if do_not_contact == '0' %}selected{% endif %}>Messaging allowed</option>
+                    </select>
                     <button type="submit" class="btn btn-primary btn-sm" style="height:42px; padding:0 20px; white-space:nowrap;">Filter</button>
-                    {% if search %}
+                    {% if search or do_not_contact %}
                     <a href="{% url 'customers' %}" class="btn btn-secondary btn-sm" style="height:42px; padding:0 16px; white-space:nowrap;">Clear</a>
                     {% endif %}
                 </div>
@@ -94,7 +99,12 @@
                         {% for customer in customers %}
                         <tr>
                             <td><strong>{{ customer.customer_id }}</strong></td>
-                            <td>{{ customer.full_name }}</td>
+                            <td>
+                                {{ customer.full_name }}
+                                {% if customer.do_not_contact %}
+                                <span class="badge badge-danger" style="margin-left:6px;">Do not message</span>
+                                {% endif %}
+                            </td>
                             <td>{{ customer.formatted_phone }}</td>
                             <td>{{ customer.occupation_display_value|default:"-" }}</td>
                             <td>{{ customer.city|default:"-" }}</td>

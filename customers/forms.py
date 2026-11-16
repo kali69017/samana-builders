@@ -22,10 +22,11 @@ class CustomerForm(forms.ModelForm):
         model = Customer
         fields = ['first_name', 'last_name', 'email', 'phone', 'alternate_phone',
                   'cnic', 'occupation', 'occupation_other', 'address', 'city',
-                  'notes', 'document', 'image', 'is_active']
+                  'notes', 'document', 'image', 'is_active',
+                  'do_not_contact', 'do_not_contact_reason']
         widgets = {
-            'first_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' ', 'maxlength': '20'}),
-            'last_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' ', 'maxlength': '20'}),
+            'first_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
+            'last_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': ' '}),
             'email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': ' '}),
             'phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '+92-300-1234567'}),
             'alternate_phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '+92-300-1234567'}),
@@ -40,10 +41,28 @@ class CustomerForm(forms.ModelForm):
             'document': forms.ClearableFileInput(attrs={'class': 'form-control', 'accept': '.pdf,.doc,.docx,.jpg,.jpeg,.png'}),
             'image': forms.ClearableFileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'do_not_contact': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'do_not_contact_reason': forms.TextInput(attrs={
+                'class': 'form-control', 'placeholder': 'Optional reason',
+                'maxlength': '200',
+            }),
         }
 
     def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
+        if self.user is not None:
+            role = getattr(getattr(self.user, 'profile', None), 'role', None)
+            if not self.user.is_superuser and role not in ('super_admin', 'admin', 'management'):
+                self.fields.pop('do_not_contact', None)
+                self.fields.pop('do_not_contact_reason', None)
+        if 'do_not_contact' in self.fields:
+            self.fields['do_not_contact'].required = False
+            self.fields['do_not_contact_reason'].required = False
+        # Let the server show a length error instead of the browser silently
+        # stopping input at 100 characters.
+        self.fields['first_name'].widget.attrs.pop('maxlength', None)
+        self.fields['last_name'].widget.attrs.pop('maxlength', None)
         # Hard-cap the input at 13 digits. The model stores the canonical
         # dashed form (15 chars), so Django would otherwise render
         # maxlength="15" from the model field — set it here to win.
@@ -76,16 +95,16 @@ class CustomerForm(forms.ModelForm):
         value = (self.cleaned_data.get('first_name') or '').strip()
         if not value:
             raise forms.ValidationError('First name is required.')
-        if len(value) > 20:
-            raise forms.ValidationError('First name cannot exceed 20 characters.')
+        if len(value) > 100:
+            raise forms.ValidationError('First name cannot exceed 100 characters.')
         return value
 
     def clean_last_name(self):
         value = (self.cleaned_data.get('last_name') or '').strip()
         if not value:
             raise forms.ValidationError('Last name is required.')
-        if len(value) > 20:
-            raise forms.ValidationError('Last name cannot exceed 20 characters.')
+        if len(value) > 100:
+            raise forms.ValidationError('Last name cannot exceed 100 characters.')
         return value
 
     def clean_alternate_phone(self):

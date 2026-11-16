@@ -33,8 +33,8 @@ class Customer(models.Model):
     ]
     customer_id = models.CharField(max_length=20, unique=True, editable=False)
     user = models.OneToOneField(User, on_delete=models.SET_NULL, null=True, blank=True)
-    first_name = models.CharField(max_length=20)
-    last_name = models.CharField(max_length=20)
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
     email = models.EmailField(unique=True, blank=True, null=True)
     phone = models.CharField(max_length=20)
     alternate_phone = models.CharField(max_length=20, blank=True)
@@ -47,6 +47,13 @@ class Customer(models.Model):
     document = models.FileField(upload_to='customers/documents/', blank=True, null=True)
     image = models.ImageField(upload_to='customers/images/', blank=True, null=True)
     is_active = models.BooleanField(default=True)
+    do_not_contact = models.BooleanField(default=False)
+    do_not_contact_reason = models.CharField(max_length=200, blank=True)
+    do_not_contact_set_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='customers_marked_do_not_contact',
+    )
+    do_not_contact_at = models.DateTimeField(null=True, blank=True)
     account_head = models.ForeignKey(
         'finance.AccountHead', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='customers',

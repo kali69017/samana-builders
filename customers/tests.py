@@ -33,7 +33,7 @@ class CustomerFormTest(TestCase):
 
     def test_first_name_max_length_enforced(self):
         form_data = {
-            'first_name': 'A' * 25,  # exceeds max_length=20
+            'first_name': 'A' * 101,  # exceeds max_length=100
             'last_name': 'Khan',
             'phone': '+92-300-1234567',
             'cnic': '3520212345671',
@@ -46,7 +46,7 @@ class CustomerFormTest(TestCase):
     def test_last_name_max_length_enforced(self):
         form_data = {
             'first_name': 'Ahmed',
-            'last_name': 'K' * 25,  # exceeds max_length=20
+            'last_name': 'K' * 101,  # exceeds max_length=100
             'phone': '+92-300-1234567',
             'cnic': '3520212345671',
             'email': 'ahmed@example.com'
