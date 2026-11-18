@@ -53,7 +53,7 @@ D:\samana\.venv312\Scripts\python.exe manage.py process_notification_queue --dry
 D:\samana\.venv312\Scripts\python.exe manage.py retry_failed_notifications --dry-run
 ```
 
-Current full suite: 1,192 tests, OK. Runtime is roughly 14 to 22 minutes depending on disk and WAL state.
+Current full suite: 1,195 tests, OK. Runtime is roughly 14 to 22 minutes depending on disk and WAL state.
 
 Default local login: `admin` / `admin123`. Staff land on `/dashboard/`, customers on `/portal/`.
 
@@ -315,7 +315,7 @@ See `DEPLOY.md` for the full command sequence, rollback commands and server vali
 
 ## Testing and E2E
 
-- Django full suite: 1,192 tests, OK.
+- Django full suite: 1,195 tests, OK.
 - Python 3.12 shared venv: `D:\samana\.venv312\Scripts\python.exe`.
 - Playwright uses system Chrome. Do not run `npx playwright install`, the CDN is blocked.
 - Playwright runbook: `RUNBOOK.md`.
