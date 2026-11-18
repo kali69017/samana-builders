@@ -5,6 +5,87 @@ The stack: `db` (Postgres), `web` (Django + gunicorn + whitenoise), `worker`
 (notification queue worker), `scheduler` (cron for reminders and retries) and
 `caddy` (auto-HTTPS reverse proxy).
 
+## Production release record: 2026-11-18
+
+This release has been executed on the server.
+
+- App directory: `/opt/samana`
+- Branch: `main`
+- Legacy finance conversion fix commit: `7149a83`
+- Postgres container: `samana-db-1`
+- Database and user: both `samana`
+- Production database was recreated empty.
+- Production superuser username: `superadmin`. The password is not recorded here.
+- Providers were kept off during release verification.
+
+Backups created and kept:
+
+- `/root/backups/samana-pre-release-2026-11-16.dump`
+- `/root/backups/samana-before-clean-start-2026-11-18-082634.dump`, 314K
+- `/root/backups/samana-2026-11-18.dump`, 326K, created by the manual backup test
+
+Scratch validation results:
+
+- `samana_scratch` was restored from `samana-pre-release-2026-11-16.dump`.
+- Migration found legacy heads `0111 zeeshan` and `001 Bank Al-Falah Limited` and placed them under `1.9.1` and `1.1.1.3`. Production was wiped, so these did not carry forward.
+- The restored database had 5 Payment vouchers crediting Accounts Receivable and 3 Refund vouchers debiting Accounts Receivable.
+- Liability conversion dry run reported 8 corrections totalling 205,000.00.
+- Liability conversion real run posted 8 corrections.
+- Revenue remained 0.00.
+- Customer Advances became 151,000.00.
+- Customer Advances expected was 151,000.00.
+- Scratch finance integrity check passed.
+- `samana_empty` migrated and finance integrity check passed with all balances at 0.00.
+- Empty database had five roots and the required Cash, Bank, Revenue and Customer Advances accounts.
+- Both scratch databases were dropped after validation.
+
+Clean start results:
+
+- Final pre-clean backup was verified before the drop.
+- `samana` was dropped and recreated empty.
+- All migrations applied with no errors.
+- `migrate --check` reported no pending migrations.
+- Finance integrity check passed on the empty database.
+- Superuser `superadmin` was created interactively.
+- `collectstatic` copied 278 files.
+- `web`, `worker`, `scheduler`, `db` and `caddy` started.
+- Gunicorn started 3 workers with no errors.
+- `https://samanabuilders.com/` returned HTTP 200 through Caddy.
+- Queue dry run reported 0 rows.
+- Retry dry run reported 0 candidates.
+- Scheduler crontab showed the 08:00 reminder line and the 02:15 retry line.
+- Host cron was installed at 02:00 with 14 day retention.
+- The manual backup test created `/root/backups/samana-2026-11-18.dump`.
+- `systemctl status cron` showed cron active and running.
+
+Remaining manual check after the release:
+
+- Log in as `superadmin`.
+- Confirm the dashboard, Chart of Accounts, vouchers, payments, bookings, reports and Notification Center.
+- Enable providers only when the business is ready.
+
+### Legacy conversion is required on restored data
+
+The restored production snapshot used the old receivable mapping. Migrating alone does not convert those vouchers. On a restored scratch or restored production copy, run the liability conversion before the integrity check:
+
+```bash
+docker compose run --rm -e DB_NAME=samana_scratch web python manage.py convert_to_customer_liability --dry-run
+docker compose run --rm -e DB_NAME=samana_scratch web python manage.py convert_to_customer_liability
+docker compose run --rm -e DB_NAME=samana_scratch web python manage.py finance_integrity_check
+```
+
+The command handles:
+
+- Payment vouchers that credit Revenue.
+- Payment vouchers that credit Accounts Receivable for undelivered bookings.
+- Payment vouchers that credit Accounts Receivable for delivered bookings.
+- Refund vouchers that debit Revenue before delivery.
+- Refund vouchers that debit Accounts Receivable before delivery.
+- Refund vouchers after delivery, which remain in Revenue.
+- Payment vouchers with a paired CashBasisConversion voucher, which are not corrected twice.
+
+The clean production start creates an empty database and needs no conversion.
+
 ## 1. Prepare the host
 
 ```
@@ -234,3 +315,8 @@ docker exec -i samana-db-1 pg_restore -U samana -d samana --no-owner --no-privil
   deleted on rebuild).
 - **Emails/SMS not sending:** set the matching `*_ENABLED=true`; check the Notification Center
   row `error_message` for the exact provider reason (blank WhatsApp template is a common one).
+- **Scratch integrity fails with Customer Advances mismatch:** the restored database still has legacy receivable vouchers. Run `convert_to_customer_liability --dry-run` and then the real command before `finance_integrity_check`.
+- **Worker logs every 10 seconds:** this is expected. It prints `Processed 0 queued rows` each interval. It can be changed later to log only when rows are processed.
+- **Scratch databases remain after validation:** drop `samana_scratch` and `samana_empty` before the clean start.
+- **Host backup cron does not run:** check `systemctl status cron`, check `crontab -l`, and confirm the percent sign is escaped as `\%F` inside the crontab.
+- **Restore needs the exact dump path:** use `ls -lh /root/backups/` and substitute the real filename in the `pg_restore` command.
