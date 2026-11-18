@@ -283,6 +283,21 @@ class NotificationCenterFilterTest(TestCase):
                 self.assertEqual(resp.status_code, 200)
 
 
+class NotificationProviderMessageIdTest(TestCase):
+    def test_long_whatsapp_message_id_is_accepted(self):
+        long_wamid = 'wamid.' + ('A' * 80)
+        log = NotificationLog(
+            recipient_name='Ahmed Khan',
+            recipient_contact='+92-300-1234567',
+            channel='whatsapp',
+            notification_type='customer_welcome',
+            message='hello',
+            provider_message_id=long_wamid,
+        )
+
+        log.full_clean()
+
+
 @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
 class NotificationStatusRecordingTest(TestCase):
     """`sent` must mean transmitted: a switched-off provider is `skipped`."""

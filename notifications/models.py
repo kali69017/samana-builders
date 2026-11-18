@@ -40,7 +40,7 @@ class NotificationLog(models.Model):
     error_message = models.TextField(blank=True)
     attempts = models.PositiveIntegerField(default=0)
     template_params = models.JSONField(default=dict, blank=True)
-    provider_message_id = models.CharField(max_length=50, blank=True, help_text="Gateway message/delivery ID (e.g. SendPK messageid)")
+    provider_message_id = models.CharField(max_length=255, blank=True, help_text="Gateway message/delivery ID (e.g. SendPK messageid)")
     related_customer_id = models.CharField(max_length=20, blank=True)
     related_booking_id = models.CharField(max_length=20, blank=True)
     sent_at = models.DateTimeField(null=True, blank=True)

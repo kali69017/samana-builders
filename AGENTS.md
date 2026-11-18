@@ -251,6 +251,7 @@ Current migration chain includes:
 - `expenses/0006`: finance account links.
 - `notifications/0005`: retry tracking.
 - `notifications/0006`: outbox statuses.
+- `notifications/0007`: WhatsApp provider message ID width.
 - `payments/0008`: finance account links.
 - `payments/0009`: idempotency keys.
 
