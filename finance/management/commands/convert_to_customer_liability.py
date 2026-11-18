@@ -11,7 +11,7 @@ from django.core.management.base import BaseCommand
 from django.db.models import Sum
 
 from finance.accounting import (
-    customer_advance_head, post_source_voucher, revenue_head,
+    customer_advance_head, post_source_voucher, receivable_head, revenue_head,
 )
 from finance.models import Voucher, VoucherLine
 
@@ -44,52 +44,124 @@ class Command(BaseCommand):
         advances = customer_advance_head()
         before_revenue = self._balance(revenue)
         before_advances = self._balance(advances)
+        receivable = receivable_head()
 
         corrections = 0
         total = Decimal('0.00')
         skipped_delivered = 0
-        payment_vouchers = Voucher.objects.filter(
-            reference_type__in=['Payment', 'CashBasisConversion'],
+        cash_basis_source_ids = set(Voucher.objects.filter(
+            reference_type='CashBasisConversion', status='posted',
+        ).values_list('reference_id', flat=True))
+        vouchers = Voucher.objects.filter(
+            reference_type__in=['Payment', 'Refund', 'CashBasisConversion'],
             status='posted',
         ).order_by('id')
-        for voucher in payment_vouchers:
-            if self._conversion_exists(voucher):
-                continue
-            from payments.models import Payment
-            source_voucher = voucher
-            if voucher.reference_type == 'CashBasisConversion':
-                source_voucher = Voucher.objects.filter(pk=voucher.reference_id).first()
-                if source_voucher is None or source_voucher.reference_type != 'Payment':
-                    continue
-            payment = Payment.objects.select_related('booking').filter(
-                pk=source_voucher.reference_id).first()
-            if payment is None:
-                continue
-            if payment.booking.delivery_date is not None:
-                skipped_delivered += 1
-                continue
-            credited_revenue = voucher.lines.filter(
-                account_head=revenue, credit__gt=0,
-            ).aggregate(total=Sum('credit'))['total'] or Decimal('0.00')
-            if credited_revenue <= 0:
-                continue
+
+        def post_correction(voucher, amount, debit, credit, label):
+            nonlocal corrections, total
             corrections += 1
-            total += credited_revenue
+            total += amount
             if dry:
-                continue
+                return
             post_source_voucher(
                 reference_type='LiabilityConversion', reference_id=voucher.pk,
                 voucher_type='JV', date=voucher.date,
                 narration=(
-                    f'Customer liability conversion for Payment voucher '
+                    f'Customer liability conversion for {label} voucher '
                     f'{voucher.voucher_number}'
                 ),
                 lines=[
-                    (revenue, credited_revenue, Decimal('0.00')),
-                    (advances, Decimal('0.00'), credited_revenue),
+                    (debit, amount, Decimal('0.00')),
+                    (credit, Decimal('0.00'), amount),
                 ],
                 user=voucher.created_by,
             )
+
+        for voucher in vouchers:
+            if self._conversion_exists(voucher):
+                continue
+            from payments.models import Payment, Refund
+
+            amount = Decimal('0.00')
+            debit = None
+            credit = None
+            label = voucher.reference_type
+
+            if voucher.reference_type == 'CashBasisConversion':
+                source_voucher = Voucher.objects.filter(pk=voucher.reference_id).first()
+                if source_voucher is None or source_voucher.reference_type != 'Payment':
+                    continue
+                payment = Payment.objects.select_related('booking').filter(
+                    pk=source_voucher.reference_id).first()
+                if payment is None:
+                    continue
+                if (payment.booking.delivery_date is not None
+                        and payment.payment_date >= payment.booking.delivery_date):
+                    skipped_delivered += 1
+                    continue
+                amount = voucher.lines.filter(
+                    account_head=revenue, credit__gt=0,
+                ).aggregate(total=Sum('credit'))['total'] or Decimal('0.00')
+                debit, credit = revenue, advances
+                label = 'cash-basis payment'
+
+            elif voucher.reference_type == 'Payment':
+                if voucher.pk in cash_basis_source_ids:
+                    # The paired CashBasisConversion voucher is the correction point.
+                    continue
+                payment = Payment.objects.select_related('booking').filter(
+                    pk=voucher.reference_id).first()
+                if payment is None:
+                    continue
+                delivered = bool(
+                    payment.booking.delivery_date
+                    and payment.payment_date >= payment.booking.delivery_date
+                )
+                line = voucher.lines.filter(credit__gt=0).select_related(
+                    'account_head').first()
+                if line is None or line.account_head in (advances,):
+                    continue
+                amount = line.credit
+                if line.account_head == revenue:
+                    if delivered:
+                        skipped_delivered += 1
+                        continue
+                    debit, credit = revenue, advances
+                elif line.account_head == receivable:
+                    debit = receivable
+                    credit = revenue if delivered else advances
+                else:
+                    continue
+
+            elif voucher.reference_type == 'Refund':
+                refund = Refund.objects.select_related('booking').filter(
+                    pk=voucher.reference_id).first()
+                if refund is None:
+                    continue
+                post_date = refund.refund_date or voucher.date
+                delivered = bool(
+                    refund.booking.delivery_date
+                    and post_date >= refund.booking.delivery_date
+                )
+                line = voucher.lines.filter(debit__gt=0).select_related(
+                    'account_head').first()
+                if line is None or line.account_head in (advances,):
+                    continue
+                amount = line.debit
+                if line.account_head == revenue:
+                    if delivered:
+                        skipped_delivered += 1
+                        continue
+                    debit, credit = advances, revenue
+                elif line.account_head == receivable:
+                    debit = revenue if delivered else advances
+                    credit = receivable
+                else:
+                    continue
+
+            if amount <= 0 or debit is None or credit is None:
+                continue
+            post_correction(voucher, amount, debit, credit, label)
 
         after_revenue = self._balance(revenue)
         after_advances = self._balance(advances)

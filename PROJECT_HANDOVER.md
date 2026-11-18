@@ -313,3 +313,14 @@ After a confirmed wipe, document numbers restart from the first value because ev
 - The queue is drained by the worker service, not by cron.
 - The scheduler service builds the same image and receives the same environment as web.
 - `DEPLOY.md` now documents the Postgres scratch restore, empty database migration proof, clean start, rollback to `f33888d`, and a host cron for 14 daily `pg_dump -Fc` backups.
+
+## 2026-11-18: Legacy accrual conversion before scratch integrity
+
+The restored production snapshot has Payment vouchers that credit Accounts Receivable and Refund vouchers that debit Accounts Receivable. `convert_to_customer_liability` now handles that shape as well as the earlier cash-basis shape:
+
+- Payment credit to Receivable becomes Dr Receivable, Cr Customer Advances for an undelivered booking.
+- Refund debit to Receivable becomes Dr Customer Advances, Cr Receivable for a refund before delivery.
+- A Payment voucher that already has a CashBasisConversion voucher is not corrected twice. The conversion voucher remains the single correction point.
+- Delivered-booking payments and refunds move to Revenue instead of Customer Advances.
+
+Run the conversion on the restored scratch database before `finance_integrity_check`. The empty database and the clean production start need no conversion.

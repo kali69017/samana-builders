@@ -28,6 +28,7 @@ class CustomerLiabilityTests(TestCase):
         self.cash = AccountHead.objects.get(system_role='cash_default')
         self.bank = AccountHead.objects.get(system_role='bank_default')
         self.revenue = AccountHead.objects.get(system_role='revenue')
+        self.receivable = AccountHead.objects.get(system_role='receivable')
         self.advances = AccountHead.objects.get(system_role='customer_advances')
         self.customer = Customer.objects.create(
             first_name='Liability', last_name='Test', phone='03001234567',
@@ -257,3 +258,68 @@ class CustomerLiabilityTests(TestCase):
             reference_type='LiabilityConversion', reference_id=cash_basis.pk)
         self.assertEqual(correction.lines.get(debit__gt=0).account_head, self.revenue)
         self.assertEqual(correction.lines.get(credit__gt=0).account_head, self.advances)
+
+    def test_legacy_receivable_payments_and_refunds_are_converted(self):
+        booking = self._booking()
+        payment = self._payment(booking)
+        payment_voucher = Voucher.objects.get(
+            reference_type='Payment', reference_id=payment.pk)
+        refund = self._refund(booking)
+        refund_voucher = Voucher.objects.get(
+            reference_type='Refund', reference_id=refund.pk)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'UPDATE finance_voucherline SET account_head_id = %s '
+                'WHERE voucher_id = %s AND credit > 0',
+                [self.receivable.pk, payment_voucher.pk],
+            )
+            cursor.execute(
+                'UPDATE finance_voucherline SET account_head_id = %s '
+                'WHERE voucher_id = %s AND debit > 0',
+                [self.receivable.pk, refund_voucher.pk],
+            )
+        self.assertEqual(self._balance(self.receivable), Decimal('-80.00'))
+        call_command('convert_to_customer_liability', stdout=StringIO())
+        self.assertEqual(Voucher.objects.filter(
+            reference_type='LiabilityConversion').count(), 2)
+        self.assertEqual(self._balance(self.advances), Decimal('80.00'))
+        self.assertEqual(self._balance(self.receivable), Decimal('0.00'))
+        self.assertEqual(self._balance(self.revenue), Decimal('0.00'))
+        call_command('convert_to_customer_liability', stdout=StringIO())
+        self.assertEqual(Voucher.objects.filter(
+            reference_type='LiabilityConversion').count(), 2)
+
+    def test_legacy_cash_basis_pair_is_not_double_corrected(self):
+        booking = self._booking()
+        payment = self._payment(booking)
+        payment_voucher = Voucher.objects.get(
+            reference_type='Payment', reference_id=payment.pk)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'UPDATE finance_voucherline SET account_head_id = %s '
+                'WHERE voucher_id = %s AND credit > 0',
+                [self.receivable.pk, payment_voucher.pk],
+            )
+        cash_basis = Voucher.objects.create(
+            voucher_type='JV', date=payment.payment_date,
+            narration='Cash basis conversion for legacy payment',
+            reference_type='CashBasisConversion', reference_id=payment_voucher.pk,
+            created_by=self.user,
+        )
+        VoucherLine.objects.create(
+            voucher=cash_basis, account_head=self.receivable,
+            debit=Decimal('100'), credit=0)
+        VoucherLine.objects.create(
+            voucher=cash_basis, account_head=self.revenue,
+            debit=0, credit=Decimal('100'))
+        cash_basis.post(self.user)
+        call_command('convert_to_customer_liability', stdout=StringIO())
+        self.assertEqual(Voucher.objects.filter(
+            reference_type='LiabilityConversion').count(), 1)
+        self.assertTrue(Voucher.objects.filter(
+            reference_type='LiabilityConversion', reference_id=cash_basis.pk).exists())
+        self.assertFalse(Voucher.objects.filter(
+            reference_type='LiabilityConversion', reference_id=payment_voucher.pk).exists())
+        self.assertEqual(self._balance(self.advances), Decimal('100.00'))
+        self.assertEqual(self._balance(self.receivable), Decimal('0.00'))
+        self.assertEqual(self._balance(self.revenue), Decimal('0.00'))

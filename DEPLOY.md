@@ -107,10 +107,17 @@ docker exec -i samana-db-1 pg_restore -U samana -d samana_scratch --no-owner --n
 
 ```bash
 docker compose run --rm -e DB_NAME=samana_scratch web python manage.py migrate --noinput
+docker compose run --rm -e DB_NAME=samana_scratch web python manage.py convert_to_customer_liability --dry-run
+docker compose run --rm -e DB_NAME=samana_scratch web python manage.py convert_to_customer_liability
 docker compose run --rm -e DB_NAME=samana_scratch web python manage.py finance_integrity_check
 docker compose run --rm -e DB_NAME=samana_empty web python manage.py migrate --noinput
 docker compose run --rm -e DB_NAME=samana_empty web python manage.py finance_integrity_check
 ```
+
+The restored database still contains legacy accrual vouchers. The liability
+conversion is required on the scratch copy before the integrity check. The
+empty database needs no conversion. The clean production start creates an empty
+database, so it also needs no conversion.
 
 ### 4. Verify the empty database chart
 
