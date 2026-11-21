@@ -81,7 +81,7 @@
                 </div>
                 <div id="historyList" style="display:flex; flex-direction:column; gap:10px; max-height:520px; overflow-y:auto;">
                     {% for h in insights_history %}
-                    <div class="history-item{% if forloop.counter0 >= 3 %} history-hidden{% endif %}" data-response="{{ h.response|escapejs }}" style="cursor:pointer; padding:10px 12px; background:var(--bg); border:1px solid var(--border); border-radius:10px; font-size:13px;">
+                    <div class="history-item{% if forloop.counter0 >= history_visible_limit %} history-hidden{% endif %}" data-response="{{ h.response|escapejs }}" style="cursor:pointer; padding:10px 12px; background:var(--bg); border:1px solid var(--border); border-radius:10px; font-size:13px;">
                         <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
                             <span class="badge badge-info">Insights</span>
                             <span style="color:var(--text-3); font-size:11px;">{{ h.created_at|date:"d M H:i" }}</span>
@@ -183,9 +183,10 @@ document.addEventListener('DOMContentLoaded', function () {
         if (labelTimer) { clearInterval(labelTimer); labelTimer = null; }
     }
 
-    // ── Recent analyses: show top 3 by default, toggle to view the rest ──
+    // Recent analyses: show the first four by default, toggle to view the rest.
     const historyList = document.getElementById('historyList');
     const historyToggle = document.getElementById('historyToggle');
+    const historyVisibleLimit = {{ history_visible_limit }};
     let historyExpanded = false;
 
     function historyItems() {
@@ -196,10 +197,10 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     function refreshHistory() {
         const items = historyItems();
-        const limit = historyExpanded ? items.length : 3;
+        const limit = historyExpanded ? items.length : historyVisibleLimit;
         items.forEach(function (el, i) { el.classList.toggle('history-hidden', i >= limit); });
         if (historyToggle) {
-            historyToggle.style.display = items.length > 3 ? '' : 'none';
+            historyToggle.style.display = items.length > historyVisibleLimit ? '' : 'none';
             historyToggle.textContent = historyExpanded ? 'View Less' : 'View More';
         }
     }

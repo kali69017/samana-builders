@@ -27,6 +27,9 @@ from payments.models import Payment
 from expenses.models import Expense
 
 
+HISTORY_VISIBLE_LIMIT = 4
+
+
 def _post_login_target(user):
     """Employees go straight to their Leave portal; customers (non-staff) go
     to the React customer portal; staff go to the ERP dashboard."""
@@ -518,10 +521,8 @@ def revenue_trend_view(request):
     return JsonResponse({'labels': labels, 'amounts': amounts})
 
 
-@login_required
-@finance_or_above
-def financial_reports_view(request):
-    """Project-wise revenue and financial reports."""
+def _financial_reports_context(request):
+    """Build shared context for the financial reports page and PDF."""
     from payments.models import Receipt
     from django.db.models.functions import TruncMonth
     
@@ -593,7 +594,7 @@ def financial_reports_view(request):
     total_paid_amount = Installment.objects.aggregate(total=Sum('paid_amount'))['total'] or 0
     collection_rate = round((float(total_paid_amount) / float(total_installment_amount)) * 100, 1)
     
-    context = {
+    return {
         'project_revenue': project_revenue,
         'total_revenue': total_revenue,
         'total_expenses': total_expenses,
@@ -604,7 +605,29 @@ def financial_reports_view(request):
         'payment_method_data': payment_method_data,
         'collection_rate': min(collection_rate, 100),
     }
-    return render(request, 'financial_reports.html', context)
+
+
+@login_required
+@finance_or_above
+def financial_reports_view(request):
+    """Project-wise revenue and financial reports."""
+    return render(request, 'financial_reports.html', _financial_reports_context(request))
+
+
+@login_required
+@finance_or_above
+def financial_reports_pdf_view(request):
+    """Download the financial reports as a standalone PDF document."""
+    from payments.pdf_utils import render_to_pdf
+
+    pdf = render_to_pdf('financial_reports_pdf.html', _financial_reports_context(request))
+    if not pdf:
+        messages.error(request, 'Could not generate the financial report PDF.')
+        return redirect('financial_reports')
+
+    response = HttpResponse(pdf, content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment; filename="financial-report.pdf"'
+    return response
 
 
 # ─── CUSTOMERS ───────────────────────────────────────────────────────────────────
@@ -2703,6 +2726,7 @@ def ai_insights_page_view(request):
         'available_plots': available_plots,
         'active_bookings': active_bookings,
         'insights_history': history,
+        'history_visible_limit': HISTORY_VISIBLE_LIMIT,
     }
     return render(request, 'ai/insights.html', context)
 

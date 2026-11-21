@@ -682,6 +682,7 @@ select[multiple].form-control { background-image: none; min-height: 120px; paddi
   font-size: 26px;
   color: var(--text-3);
 }
+.empty-state .empty-icon svg { width: 26px; height: 26px; }
 .empty-state h3 { font-size: 16px; color: var(--text); margin-bottom: 6px; }
 .empty-state p { font-size: 13.5px; margin-bottom: 16px; }
 

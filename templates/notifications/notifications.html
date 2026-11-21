@@ -21,42 +21,42 @@
         <!-- Stats Cards -->
         <div class="stats-grid animate-fade-up">
             <div class="stat-card">
-                <div class="stat-icon" style="background: var(--primary-bg); color: var(--primary);">ðŸ””</div>
+                <div class="stat-icon" style="background: var(--primary-bg); color: var(--primary);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
                 <div class="stat-info">
                     <div class="stat-value">{{ total_count }}</div>
                     <div class="stat-label">Total Sent</div>
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon" style="background: #dcfce7; color: #16a34a;">âœ“</div>
+                <div class="stat-icon" style="background: #dcfce7; color: #16a34a;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg></div>
                 <div class="stat-info">
                     <div class="stat-value">{{ sent_count }}</div>
                     <div class="stat-label">Sent</div>
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon" style="background: #fef3c7; color: #d97706;">â³</div>
+                <div class="stat-icon" style="background: #fef3c7; color: #d97706;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
                 <div class="stat-info">
                     <div class="stat-value">{{ pending_count }}</div>
                     <div class="stat-label">Pending</div>
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon" style="background: #e0e7ff; color: #4f46e5;">â­</div>
+                <div class="stat-icon" style="background: #e0e7ff; color: #4f46e5;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 4 10 8-10 8V4Z"/><path d="M19 5v14"/></svg></div>
                 <div class="stat-info">
                     <div class="stat-value">{{ skipped_count }}</div>
                     <div class="stat-label">Skipped</div>
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon" style="background: #fee2e2; color: #dc2626;">âœ•</div>
+                <div class="stat-icon" style="background: #fee2e2; color: #dc2626;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></div>
                 <div class="stat-info">
                     <div class="stat-value">{{ failed_count }}</div>
                     <div class="stat-label">Failed</div>
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon" style="background: #fef3c7; color: #b45309;">?</div>
+                <div class="stat-icon" style="background: #fef3c7; color: #b45309;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 4 2c-.9.7-1.5 1.2-1.5 2.5"/><path d="M12 17h.01"/></svg></div>
                 <div class="stat-info">
                     <div class="stat-value">{{ unknown_count }}</div>
                     <div class="stat-label">Needs check</div>
@@ -132,7 +132,7 @@
                         <tr>
                             <td>
                                 <span class="badge badge-{% if log.channel == 'email' %}info{% elif log.channel == 'sms' %}warning{% else %}success{% endif %}">
-                                    {% if log.channel == 'email' %}ðŸ“§{% elif log.channel == 'sms' %}ðŸ“±{% else %}ðŸ’¬{% endif %} {{ log.get_channel_display }}
+                                    {% if log.channel == 'email' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;vertical-align:-2px;margin-right:2px;" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>{% elif log.channel == 'sms' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;vertical-align:-2px;margin-right:2px;" aria-hidden="true" focusable="false"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg>{% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;vertical-align:-2px;margin-right:2px;" aria-hidden="true" focusable="false"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z"/></svg>{% endif %} {{ log.get_channel_display }}
                                 </span>
                             </td>
                             <td><strong>{{ log.recipient_name }}</strong></td>
@@ -157,7 +157,7 @@
                 </table>
                 {% else %}
                 <div class="empty-state">
-                    <div class="empty-icon">ðŸ””</div>
+                    <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
                     <h3>No Notifications</h3>
                     <p>{% if channel_filter or type_filter or status_filter %}No notifications match the current filters.{% else %}Notification logs will appear here as messages are sent.{% endif %}</p>
                 </div>

@@ -1,22 +1,38 @@
+import base64
+import mimetypes
 from io import BytesIO
-from django.http import HttpResponse
-from xhtml2pdf import pisa
-from django.template.loader import get_template
+
 from django.conf import settings
-import os
+from django.contrib.staticfiles import finders
+from django.http import HttpResponse
+from django.template.loader import get_template
+from xhtml2pdf import pisa
+
+
+def _static_data_uri(relative_path):
+    """Return a self-contained data URI for a static asset."""
+    absolute_path = finders.find(relative_path)
+    if not absolute_path:
+        source_path = settings.BASE_DIR / 'static' / relative_path
+        if source_path.exists():
+            absolute_path = str(source_path)
+    if not absolute_path:
+        return ''
+
+    with open(absolute_path, 'rb') as asset_file:
+        encoded = base64.b64encode(asset_file.read()).decode('ascii')
+    media_type = mimetypes.guess_type(absolute_path)[0] or 'application/octet-stream'
+    return f'data:{media_type};base64,{encoded}'
 
 
 def render_to_pdf(template_src, context_dict=None):
     """Render a Django template to PDF."""
+    context = dict(context_dict or {})
+    context.setdefault('pdf_logo_uri', _static_data_uri('images/samana-logo.png'))
     template = get_template(template_src)
-    html = template.render(context_dict or {})
+    html = template.render(context)
     result = BytesIO()
-    # Resolve relative image paths (e.g. "images/samana-logo.png") against
-    # the project's static directory so logos render in PDFs.
-    pdf = pisa.pisaDocument(
-        BytesIO(html.encode('UTF-8')), result, encoding='UTF-8',
-        path=str(settings.BASE_DIR / 'static'),
-    )
+    pdf = pisa.pisaDocument(BytesIO(html.encode('UTF-8')), result, encoding='UTF-8')
     if not pdf.err:
         return result.getvalue()
     return None

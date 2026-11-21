@@ -1,0 +1,133 @@
+{% load humanize %}<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Financial Report</title>
+    <style>
+        @page {
+            size: A4 landscape;
+            margin: 14mm 14mm 20mm;
+            @frame footer {
+                -pdf-frame-content: footerContent;
+                left: 14mm;
+                width: 269mm;
+                top: 184mm;
+                height: 10mm;
+            }
+        }
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 10px; color: #1e293b; }
+        #footerContent { font-family: Helvetica, Arial, sans-serif; font-size: 8px; color: #64748b; text-align: center; }
+        .header { border-bottom: 2px solid #1e40af; padding-bottom: 10px; margin-bottom: 12px; }
+        .company { font-size: 17px; font-weight: 800; color: #1e40af; }
+        .tagline { font-size: 9px; color: #64748b; }
+        .doc-title { font-size: 17px; font-weight: 800; color: #1e40af; text-align: right; letter-spacing: 1px; }
+        .doc-sub { font-size: 9px; color: #64748b; text-align: right; }
+        h2 { font-size: 11px; color: #475569; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 1px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #cbd5e1; padding: 5px 6px; text-align: left; }
+        th { background: #f1f5f9; color: #475569; font-weight: 700; font-size: 9px; text-transform: uppercase; }
+        td.num, th.num { text-align: right; }
+        .kpi td { width: 16.6%; text-align: center; background: #f8fafc; }
+        .kpi .value { font-size: 13px; font-weight: 800; color: #1e40af; }
+        .kpi .label { font-size: 8px; color: #64748b; text-transform: uppercase; }
+        .muted { color: #64748b; }
+        .total-row td { font-weight: 800; background: #f8fafc; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <table style="border:none;">
+            <tr>
+                <td style="width:60px; border:none; vertical-align:middle;">
+                    <img src="{{ pdf_logo_uri }}" style="height:42px; width:42px;" alt="Samana Builders logo">
+                </td>
+                <td style="border:none; vertical-align:middle;">
+                    <div class="company">Samana Builders &amp; Developers</div>
+                    <div class="tagline">Excellence in Real Estate</div>
+                </td>
+                <td style="border:none; text-align:right; vertical-align:middle;">
+                    <div class="doc-title">FINANCIAL REPORT</div>
+                    <div class="doc-sub">Generated {% now "d F Y" %}</div>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <h2>Overall performance</h2>
+    <table class="kpi">
+        <tr>
+            <td><div class="value">Rs. {{ total_revenue|floatformat:0|intcomma }}</div><div class="label">Total revenue</div></td>
+            <td><div class="value">Rs. {{ year_revenue|floatformat:0|intcomma }}</div><div class="label">Current year</div></td>
+            <td><div class="value">Rs. {{ month_revenue|floatformat:0|intcomma }}</div><div class="label">Current month</div></td>
+            <td><div class="value">Rs. {{ total_expenses|floatformat:0|intcomma }}</div><div class="label">Expenses</div></td>
+            <td><div class="value">Rs. {{ net_profit|floatformat:0|intcomma }}</div><div class="label">Net profit</div></td>
+            <td><div class="value">{{ collection_rate }}%</div><div class="label">Collection rate</div></td>
+        </tr>
+    </table>
+
+    <h2>Project-wise revenue breakdown</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Project</th>
+                <th class="num">Total revenue</th>
+                <th class="num">Year revenue</th>
+                <th class="num">Month revenue</th>
+                <th class="num">Expenses</th>
+                <th class="num">Profit</th>
+                <th class="num">Bookings</th>
+                <th class="num">Plots sold</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in project_revenue %}
+            <tr>
+                <td>{{ p.project.name }}</td>
+                <td class="num">Rs. {{ p.total_revenue|floatformat:2 }}</td>
+                <td class="num">Rs. {{ p.year_revenue|floatformat:2 }}</td>
+                <td class="num">Rs. {{ p.month_revenue|floatformat:2 }}</td>
+                <td class="num">Rs. {{ p.expenses|floatformat:2 }}</td>
+                <td class="num">Rs. {{ p.profit|floatformat:2 }}</td>
+                <td class="num">{{ p.active_bookings }} / {{ p.total_bookings }}</td>
+                <td class="num">{{ p.sold_plots }} / {{ p.total_plots }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="8" class="muted">No project data.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2>Monthly revenue trend</h2>
+    <table>
+        <thead>
+            <tr><th>Month</th><th class="num">Revenue</th></tr>
+        </thead>
+        <tbody>
+            {% for entry in monthly_chart_data %}
+            <tr><td>{{ entry.label }}</td><td class="num">Rs. {{ entry.amount|floatformat:2 }}</td></tr>
+            {% empty %}
+            <tr><td colspan="2" class="muted">No verified payments in the trend window.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2>Revenue by payment method</h2>
+    <table>
+        <thead>
+            <tr><th>Method</th><th class="num">Revenue</th></tr>
+        </thead>
+        <tbody>
+            {% for method in payment_method_data %}
+            <tr><td>{{ method.method }}</td><td class="num">Rs. {{ method.total|floatformat:2 }}</td></tr>
+            {% empty %}
+            <tr><td colspan="2" class="muted">No payment method data.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div id="footerContent">
+        Office No. 207, 2nd Floor, Shayan Iconic Tower, Plot No. 5-A, Delhi Mercantile Cooperative Society, Karachi, Pakistan<br>
+        0320 6229330 &nbsp;&nbsp;|&nbsp;&nbsp; info@samanabuilders.com &nbsp;&nbsp;|&nbsp;&nbsp; www.samanabuilders.com
+    </div>
+</body>
+</html>

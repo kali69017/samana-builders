@@ -21,6 +21,7 @@ urlpatterns = [
     path('dashboard/', core_views.dashboard_view, name='dashboard'),
     path('dashboard/revenue-trend/', core_views.revenue_trend_view, name='revenue_trend_data'),
     path('reports/financial/', core_views.financial_reports_view, name='financial_reports'),
+    path('reports/financial/pdf/', core_views.financial_reports_pdf_view, name='financial_reports_pdf'),
     path('api/plan-templates/', core_views.plan_templates_api_view, name='plan_templates_api'),
     
     # Customers
