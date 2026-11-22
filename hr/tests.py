@@ -10,7 +10,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core.models import UserProfile
-from finance.models import AccountTransaction, Voucher
+from finance.models import Voucher
 from .models import (
     Department, Designation, SalaryComponent, Employee, EmployeeSalary,
     PayrollRun, SalarySlip, SalarySlipItem, SalaryPayment, Attendance, Leave,
@@ -182,8 +182,6 @@ class HRAPITest(APITestCase):
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_account_transactions_list(self):
-        AccountTransaction.objects.create(date=date.today(), amount=Decimal('100'), direction='out', transaction_type='payroll')
-        resp = self.client.get(reverse('accounttransaction-list'))
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertGreaterEqual(len(resp.data), 1)
+    def test_account_transactions_route_removed(self):
+        resp = self.client.get('/api/account-transactions/')
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)

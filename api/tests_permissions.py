@@ -105,7 +105,6 @@ class ApiReadAccessMatrixTests(SecurityBase):
         '/api/payments/': {'admin', 'super_admin', 'management', 'accounts'},
         '/api/receipts/': {'admin', 'super_admin', 'management', 'accounts'},
         '/api/office-expenses/': {'admin', 'super_admin', 'management', 'accounts'},
-        '/api/account-transactions/': {'admin', 'super_admin', 'management', 'accounts'},
         '/api/project-costs/': {'admin', 'super_admin', 'management', 'accounts'},
         '/api/employees/': {'admin', 'super_admin', 'management', 'hr'},
         '/api/audit-logs/': {'admin', 'super_admin', 'management'},
