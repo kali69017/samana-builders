@@ -195,7 +195,7 @@ def dashboard_view(request):
     if is_portal_customer(request.user):
         return redirect('portal')
 
-    today = timezone.now().date()
+    today = timezone.localdate()
     month_start = today.replace(day=1)
     all_time_start = date(2000, 1, 1)
 
@@ -480,7 +480,7 @@ def dashboard_view(request):
 def revenue_trend_view(request):
     """JSON endpoint for the revenue trend chart (week / month / year)."""
     period = request.GET.get('period', 'month')
-    today = timezone.now().date()
+    today = timezone.localdate()
 
     if period == 'week':
         start = today - timedelta(days=49)
@@ -502,7 +502,7 @@ def revenue_trend_view(request):
 
 def _financial_reports_context(request):
     """Build shared context for the financial reports page and PDF."""
-    today = timezone.now().date()
+    today = timezone.localdate()
     month_start = today.replace(day=1)
     year_start = today.replace(month=1, day=1)
     all_time_start = date(2000, 1, 1)
@@ -2652,7 +2652,7 @@ def ai_insights_page_view(request):
     from properties.models import Plot
     from ai.models import AiInteractionLog
 
-    today = timezone.now().date()
+    today = timezone.localdate()
     month_start = today.replace(day=1)
     total_revenue = Booking.objects.aggregate(total=Sum('advance_paid'))['total'] or 0
     monthly_revenue = Booking.objects.filter(
