@@ -89,9 +89,7 @@ def payment_verify_view(request, pk):
         with transaction.atomic():
             # Re-fetch under row locks so two concurrent verifications cannot both
             # apply the balance effects (check-then-act race, finding F6).
-            payment = Payment.objects.select_for_update().select_related(
-                'booking', 'installment'
-            ).get(pk=pk)
+            payment = Payment.objects.select_for_update().get(pk=pk)
             if payment.status != 'pending':
                 messages.error(request, 'This payment is no longer pending.')
                 return redirect('payment_detail', pk=pk)
@@ -163,9 +161,7 @@ def payment_reverse_view(request, pk):
             with transaction.atomic():
                 # Row locks: a concurrent verify/reverse must not interleave with the
                 # balance effects below.
-                payment = Payment.objects.select_for_update().select_related(
-                    'booking', 'installment'
-                ).get(pk=pk)
+                payment = Payment.objects.select_for_update().get(pk=pk)
                 if payment.status != 'verified':
                     messages.error(request, f'Only verified payments can be reversed.')
                     return redirect('payment_detail', pk=pk)

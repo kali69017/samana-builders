@@ -122,9 +122,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
             )
 
         with transaction.atomic():
-            payment = Payment.objects.select_for_update().select_related(
-                'booking', 'installment'
-            ).get(pk=pk)
+            payment = Payment.objects.select_for_update().get(pk=pk)
 
             # Only *pending* payments may be verified or rejected. Drafts have not
             # been submitted and a bounced payment is already finalised — mutating
