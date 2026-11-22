@@ -11,7 +11,7 @@ The production release is complete.
 - Production host app directory: `/opt/samana`
 - Remote: `https://github.com/kali69017/samana-builders.git`
 - Branch: `main`
-- Current production release commit: `40446b4`
+- Current production release commit: `58408d9`
 - Earlier release commit with the legacy finance conversion fix: `7149a83`
 - Postgres container: `samana-db-1`
 - Database name and user: both `samana`
@@ -57,7 +57,7 @@ D:\samana\.venv312\Scripts\python.exe manage.py process_notification_queue --dry
 D:\samana\.venv312\Scripts\python.exe manage.py retry_failed_notifications --dry-run
 ```
 
-Current full suite: 1,209 tests, OK. Runtime is roughly 14 to 22 minutes depending on disk and WAL state.
+Current full suite: 1,267 tests, OK. Runtime is roughly 15 to 25 minutes depending on disk and WAL state.
 
 Default local login: `admin` / `admin123`. Staff land on `/dashboard/`, customers on `/portal/`.
 
@@ -312,6 +312,21 @@ Production stack:
 
 `web`, `worker` and `scheduler` build the same repository image and use the same `x-app-env` environment.
 
+Release history on 2026-11-23:
+
+- Release commit: `58408d9`.
+- Payment vouchers post only on the transition to verified.
+- Verified payments that are bounced, reversed or rejected get an idempotent `PaymentReversal` voucher.
+- Posted payment amount, booking and cash/bank account are immutable.
+- Payment and receipt notifications queue only on the verified transition, with an idempotency key per payment, type and channel.
+- Payment verification is maker-checker. Accounts, admin and super_admin can verify. The creator cannot self-verify unless super_admin.
+- `finance/reporting.py` supplies collected, customer advances, recognized revenue, expenses and profit from the ledger.
+- Deprecated `AccountTransaction` API route and admin registration are removed. The model and table remain.
+- Project Manager and Contractor are explicit view-only roles.
+- Full suite: 1,267 tests, OK.
+- Fresh migrated database integrity check passed.
+- Production test data was wiped after verification. Only `superadmin` remains.
+
 Release history on 2026-11-22:
 
 - Release commit: `40446b4`.
@@ -346,7 +361,7 @@ See `DEPLOY.md` for the full command sequence, rollback commands and server vali
 
 ## Testing and E2E
 
-- Django full suite: 1,209 tests, OK.
+- Django full suite: 1,267 tests, OK.
 - Python 3.12 shared venv: `D:\samana\.venv312\Scripts\python.exe`.
 - Playwright uses system Chrome. Do not run `npx playwright install`, the CDN is blocked.
 - Playwright runbook: `RUNBOOK.md`.
