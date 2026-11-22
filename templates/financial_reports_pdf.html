@@ -56,25 +56,24 @@
     <h2>Overall performance</h2>
     <table class="kpi">
         <tr>
-            <td><div class="value">Rs. {{ total_revenue|floatformat:0|intcomma }}</div><div class="label">Total revenue</div></td>
-            <td><div class="value">Rs. {{ year_revenue|floatformat:0|intcomma }}</div><div class="label">Current year</div></td>
-            <td><div class="value">Rs. {{ month_revenue|floatformat:0|intcomma }}</div><div class="label">Current month</div></td>
+            <td><div class="value">Rs. {{ collected|floatformat:0|intcomma }}</div><div class="label">Collected</div></td>
+            <td><div class="value">Rs. {{ recognized_revenue|floatformat:0|intcomma }}</div><div class="label">Recognized revenue</div></td>
+            <td><div class="value">Rs. {{ year_collected|floatformat:0|intcomma }}</div><div class="label">Collected this year</div></td>
+            <td><div class="value">Rs. {{ month_collected|floatformat:0|intcomma }}</div><div class="label">Collected this month</div></td>
             <td><div class="value">Rs. {{ total_expenses|floatformat:0|intcomma }}</div><div class="label">Expenses</div></td>
             <td><div class="value">Rs. {{ net_profit|floatformat:0|intcomma }}</div><div class="label">Net profit</div></td>
             <td><div class="value">{{ collection_rate }}%</div><div class="label">Collection rate</div></td>
         </tr>
     </table>
 
-    <h2>Project-wise revenue breakdown</h2>
+    <h2>Project-wise collections</h2>
     <table>
         <thead>
             <tr>
                 <th>Project</th>
-                <th class="num">Total revenue</th>
-                <th class="num">Year revenue</th>
-                <th class="num">Month revenue</th>
-                <th class="num">Expenses</th>
-                <th class="num">Profit</th>
+                <th class="num">Collected</th>
+                <th class="num">Collected this year</th>
+                <th class="num">Collected this month</th>
                 <th class="num">Bookings</th>
                 <th class="num">Plots sold</th>
             </tr>
@@ -86,35 +85,33 @@
                 <td class="num">Rs. {{ p.total_revenue|floatformat:2 }}</td>
                 <td class="num">Rs. {{ p.year_revenue|floatformat:2 }}</td>
                 <td class="num">Rs. {{ p.month_revenue|floatformat:2 }}</td>
-                <td class="num">Rs. {{ p.expenses|floatformat:2 }}</td>
-                <td class="num">Rs. {{ p.profit|floatformat:2 }}</td>
                 <td class="num">{{ p.active_bookings }} / {{ p.total_bookings }}</td>
                 <td class="num">{{ p.sold_plots }} / {{ p.total_plots }}</td>
             </tr>
             {% empty %}
-            <tr><td colspan="8" class="muted">No project data.</td></tr>
+            <tr><td colspan="6" class="muted">No project data.</td></tr>
             {% endfor %}
         </tbody>
     </table>
 
-    <h2>Monthly revenue trend</h2>
+    <h2>Monthly recognized revenue trend</h2>
     <table>
         <thead>
-            <tr><th>Month</th><th class="num">Revenue</th></tr>
+            <tr><th>Month</th><th class="num">Recognized revenue</th></tr>
         </thead>
         <tbody>
             {% for entry in monthly_chart_data %}
             <tr><td>{{ entry.label }}</td><td class="num">Rs. {{ entry.amount|floatformat:2 }}</td></tr>
             {% empty %}
-            <tr><td colspan="2" class="muted">No verified payments in the trend window.</td></tr>
+            <tr><td colspan="2" class="muted">No recognized revenue in the trend window.</td></tr>
             {% endfor %}
         </tbody>
     </table>
 
-    <h2>Revenue by payment method</h2>
+    <h2>Collections by payment method</h2>
     <table>
         <thead>
-            <tr><th>Method</th><th class="num">Revenue</th></tr>
+            <tr><th>Method</th><th class="num">Collected</th></tr>
         </thead>
         <tbody>
             {% for method in payment_method_data %}

@@ -25,35 +25,40 @@
 
         <!-- Overall Stats -->
         <div class="stats-grid">
-            <div class="stat-card animate-fade-up stagger-1">
+            <div class="stat-card animate-fade-up stagger-1" title="Verified payments collected from customers.">
                 <div class="stat-icon blue">&#128176;</div>
-                <div class="stat-value">Rs. {{ total_revenue|floatformat:0|intcomma }}</div>
-                <div class="stat-label">Total Revenue</div>
+                <div class="stat-value">Rs. {{ collected|floatformat:0|intcomma }}</div>
+                <div class="stat-label">Collected</div>
             </div>
-            <div class="stat-card animate-fade-up stagger-2">
+            <div class="stat-card animate-fade-up stagger-2" title="Revenue recognized in the ledger after delivery.">
                 <div class="stat-icon green">&#128200;</div>
-                <div class="stat-value">Rs. {{ year_revenue|floatformat:0|intcomma }}</div>
-                <div class="stat-label">Current Year Revenue</div>
+                <div class="stat-value">Rs. {{ recognized_revenue|floatformat:0|intcomma }}</div>
+                <div class="stat-label">Recognized Revenue</div>
             </div>
-            <div class="stat-card animate-fade-up stagger-3">
+            <div class="stat-card animate-fade-up stagger-3" title="Verified payments received this calendar year.">
                 <div class="stat-icon amber">&#128202;</div>
-                <div class="stat-value">Rs. {{ month_revenue|floatformat:0|intcomma }}</div>
-                <div class="stat-label">Current Month Revenue</div>
+                <div class="stat-value">Rs. {{ year_collected|floatformat:0|intcomma }}</div>
+                <div class="stat-label">Collected This Year</div>
             </div>
-            <div class="stat-card animate-fade-up stagger-4">
+            <div class="stat-card animate-fade-up stagger-4" title="Verified payments received this calendar month.">
+                <div class="stat-icon teal">&#128197;</div>
+                <div class="stat-value">Rs. {{ month_collected|floatformat:0|intcomma }}</div>
+                <div class="stat-label">Collected This Month</div>
+            </div>
+            <div class="stat-card animate-fade-up stagger-5" title="Posted debits minus credits under the Expenses root.">
+                <div class="stat-icon red">&#128184;</div>
+                <div class="stat-value">Rs. {{ total_expenses|floatformat:0|intcomma }}</div>
+                <div class="stat-label">Total Expenses</div>
+            </div>
+            <div class="stat-card animate-fade-up stagger-6" title="Recognized revenue minus posted expenses.">
                 <div class="stat-icon {% if net_profit > 0 %}green{% else %}red{% endif %}">&#127974;</div>
                 <div class="stat-value">Rs. {{ net_profit|floatformat:0|intcomma }}</div>
                 <div class="stat-label">Net Profit</div>
             </div>
-            <div class="stat-card animate-fade-up stagger-5">
+            <div class="stat-card animate-fade-up stagger-7">
                 <div class="stat-icon purple">&#128203;</div>
                 <div class="stat-value">{{ collection_rate }}%</div>
                 <div class="stat-label">Collection Rate</div>
-            </div>
-            <div class="stat-card animate-fade-up stagger-6">
-                <div class="stat-icon red">&#128184;</div>
-                <div class="stat-value">Rs. {{ total_expenses|floatformat:0|intcomma }}</div>
-                <div class="stat-label">Total Expenses</div>
             </div>
         </div>
 
@@ -61,7 +66,7 @@
         <div style="display:grid; grid-template-columns:2fr 1fr; gap:24px;">
             <!-- Monthly Revenue Chart -->
             <div class="card animate-fade-up stagger-3">
-                <div class="card-header"><h3>Monthly Revenue Trend</h3></div>
+                <div class="card-header"><h3>Recognized Revenue Trend</h3></div>
                 <div class="card-body">
                     <div style="position:relative; height:300px;">
                         <canvas id="revenue-chart"></canvas>
@@ -71,7 +76,7 @@
 
             <!-- Payment Methods -->
             <div class="card animate-fade-up stagger-4">
-                <div class="card-header"><h3>Revenue by Payment Method</h3></div>
+                <div class="card-header"><h3>Collections by Payment Method</h3></div>
                 <div class="card-body">
                     {% for method in payment_method_data %}
                     <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border);">
@@ -86,18 +91,16 @@
         <!-- Project-wise Revenue Table -->
         <div class="card animate-fade-up stagger-5">
             <div class="card-header">
-                <h3>Project-wise Revenue Breakdown</h3>
+                <h3>Project-wise Collections</h3>
             </div>
             <div class="table-container">
                 <table class="sortable">
                     <thead>
                         <tr>
                             <th>Project</th>
-                            <th>Total Revenue</th>
-                            <th>Year Revenue</th>
-                            <th>Month Revenue</th>
-                            <th>Expenses</th>
-                            <th>Profit</th>
+                            <th>Collected</th>
+                            <th>Collected This Year</th>
+                            <th>Collected This Month</th>
                             <th>Bookings</th>
                             <th>Plots Sold</th>
                             <th>Collection %</th>
@@ -110,10 +113,6 @@
                             <td>Rs. {{ p.total_revenue|floatformat:0|intcomma }}</td>
                             <td>Rs. {{ p.year_revenue|floatformat:0|intcomma }}</td>
                             <td>Rs. {{ p.month_revenue|floatformat:0|intcomma }}</td>
-                            <td>Rs. {{ p.expenses|floatformat:0|intcomma }}</td>
-                            <td style="font-weight:700; color:{% if p.profit > 0 %}var(--accent-green){% else %}var(--accent-red){% endif %};">
-                                Rs. {{ p.profit|floatformat:0|intcomma }}
-                            </td>
                             <td>{{ p.total_bookings }}</td>
                             <td>{{ p.sold_plots }} / {{ p.total_plots }}</td>
                             <td>
@@ -146,7 +145,7 @@
                         data: {
                             labels: chartData.map(d => d.label),
                             datasets: [{
-                                label: 'Revenue (PKR)',
+                                label: 'Recognized Revenue (PKR)',
                                 data: chartData.map(d => d.amount),
                                 backgroundColor: 'rgba(45, 90, 135, 0.8)',
                                 borderRadius: 6,

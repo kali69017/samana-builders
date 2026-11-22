@@ -12,7 +12,7 @@ from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 from .models import UserProfile, AuditLog
 from .forms import UserForm, UserProfileForm, CreateUserForm, UserEditForm, RestoreBackupForm
@@ -26,6 +26,10 @@ from properties.models import Project, Plot
 from bookings.models import Booking, Installment
 from payments.models import Payment
 from expenses.models import Expense
+from finance.reporting import (
+    get_financial_metrics, collected_by_payment_type, collected_by_method,
+    collected_by_project, recognized_revenue_series,
+)
 
 
 HISTORY_VISIBLE_LIMIT = 4
@@ -193,52 +197,42 @@ def dashboard_view(request):
 
     today = timezone.now().date()
     month_start = today.replace(day=1)
-    
+    all_time_start = date(2000, 1, 1)
+
     verified_payments_qs = Payment.objects.filter(status='verified')
-    
-    # Revenue = total advance_paid across all bookings (single source of truth)
-    # This captures both recorded payments AND any historical advances
-    total_revenue = Booking.objects.aggregate(total=Sum('advance_paid'))['total'] or 0
-    
-    # Monthly revenue = advance_paid from bookings made this month + verified payments this month not yet in advance_paid
-    monthly_advance = Booking.objects.filter(
-        booking_date__gte=month_start
-    ).aggregate(total=Sum('advance_paid'))['total'] or 0
-    monthly_revenue = monthly_advance
-    
-    # Monthly revenue trend (last 12 months) — use advance_paid by booking month
+    metrics_all = get_financial_metrics(all_time_start, today)
+    metrics_month = get_financial_metrics(month_start, today)
+
+    collected = metrics_all.collected
+    recognized_revenue = metrics_all.recognized_revenue
+    monthly_collected = metrics_month.collected
+    monthly_recognized_revenue = metrics_month.recognized_revenue
+    total_expenses = metrics_all.expenses
+    net_profit = metrics_all.profit
+    total_revenue = collected
+    monthly_revenue = monthly_collected
+
+    # Recognized revenue trend (last 12 months), from posted ledger lines.
     twelve_months_ago = today - timedelta(days=365)
-    
-    monthly_revenue_data_raw = (
-        Booking.objects.filter(booking_date__gte=twelve_months_ago)
-        .annotate(month=TruncMonth('booking_date'))
-        .values('month')
-        .annotate(total=Sum('advance_paid'))
-        .order_by('month')
-    )
-    
     monthly_revenue_data = [
-        {'label': entry['month'].strftime('%b %Y'), 'amount': float(entry['total'])}
-        for entry in monthly_revenue_data_raw
+        {'label': bucket.strftime('%b %Y'), 'amount': float(amount)}
+        for bucket, amount in recognized_revenue_series(
+            twelve_months_ago, today, 'month')
     ]
-    
+
     max_amount = max(
         [item['amount'] for item in monthly_revenue_data], default=0
     ) or 1
     for item in monthly_revenue_data:
         item['pct'] = round((item['amount'] / max_amount) * 100, 1)
-    
-    # Revenue by payment type
-    type_data = (
-        verified_payments_qs.values('payment_type')
-        .annotate(total=Sum('amount'))
-        .order_by('-total')
-    )
+
+    # Collections by payment type, from verified payments.
     type_labels = dict(Payment.PAYMENT_TYPE_CHOICES)
     payment_type_data = [
-        {'type': type_labels.get(t['payment_type'], t['payment_type']), 'total': float(t['total'])}
-        for t in type_data
+        {'type': type_labels.get(key, key), 'total': float(total)}
+        for key, total in collected_by_payment_type(all_time_start, today).items()
     ]
+    payment_type_data.sort(key=lambda item: item['total'], reverse=True)
 
     # Collection rate trend (last 12 months)
     collection_trend = []
@@ -267,21 +261,26 @@ def dashboard_view(request):
             'rate': rate
         })
 
-    # Project-wise revenue
-    project_revenue = (
-        verified_payments_qs
-        .values('booking__plot__project__name')
-        .annotate(revenue=Sum('amount'), count=Count('id'))
-        .order_by('-revenue')
-    )
+    # Project-wise collections, from verified payments.
+    project_totals = collected_by_project(all_time_start, today)
+    project_counts = {
+        row['booking__plot__project_id']: row['count']
+        for row in verified_payments_qs.values(
+            'booking__plot__project_id').annotate(count=Count('id'))
+    }
+    project_names = {
+        project.pk: project.name
+        for project in Project.objects.filter(pk__in=project_totals)
+    }
     project_revenue_data = [
         {
-            'project': p['booking__plot__project__name'] or 'Unknown',
-            'revenue': float(p['revenue']),
-            'count': p['count']
+            'project': project_names.get(project_id, 'Unknown'),
+            'revenue': float(total),
+            'count': project_counts.get(project_id, 0),
         }
-        for p in project_revenue
+        for project_id, total in project_totals.items()
     ]
+    project_revenue_data.sort(key=lambda item: item['revenue'], reverse=True)
     
     # Top defaulters (customers with overdue installments)
     overdue_installments_qs = Installment.objects.filter(
@@ -349,17 +348,13 @@ def dashboard_view(request):
     if collection_rate > 100:
         collection_rate = 100
     
-    # Payment method breakdown
-    method_data = (
-        verified_payments_qs.values('payment_method')
-        .annotate(total=Sum('amount'))
-        .order_by('-total')
-    )
+    # Collection method breakdown, from verified payments.
     method_labels = dict(Payment.METHOD_CHOICES)
     payment_method_data = [
-        {'method': method_labels.get(m['payment_method'], m['payment_method']), 'total': float(m['total'])}
-        for m in method_data
+        {'method': method_labels.get(key, key), 'total': float(total)}
+        for key, total in collected_by_method(all_time_start, today).items()
     ]
+    payment_method_data.sort(key=lambda item: item['total'], reverse=True)
     
     # Plots by project
     plots_by_project = (
@@ -440,6 +435,12 @@ def dashboard_view(request):
         'total_payments': Payment.objects.count(),
         'pending_payments': pending_payments,
         'verified_payments': verified_payments,
+        'collected': collected,
+        'recognized_revenue': recognized_revenue,
+        'monthly_collected': monthly_collected,
+        'monthly_recognized_revenue': monthly_recognized_revenue,
+        'total_expenses': total_expenses,
+        'net_profit': net_profit,
         'total_revenue': total_revenue,
         'monthly_revenue': monthly_revenue,
         'monthly_target': monthly_target,
@@ -481,129 +482,92 @@ def revenue_trend_view(request):
     period = request.GET.get('period', 'month')
     today = timezone.now().date()
 
-    qs = Payment.objects.filter(status='verified')
-
-    labels = []
-    amounts = []
-
     if period == 'week':
         start = today - timedelta(days=49)
-        data = (
-            qs.filter(payment_date__gte=start)
-            .annotate(bucket=TruncWeek('payment_date'))
-            .values('bucket')
-            .annotate(total=Sum('amount'))
-            .order_by('bucket')
-        )
-        for entry in data:
-            labels.append(entry['bucket'].strftime('%d %b'))
-            amounts.append(float(entry['total']))
+        label_format = '%d %b'
     elif period == 'year':
-        data = (
-            qs.annotate(bucket=TruncYear('payment_date'))
-            .values('bucket')
-            .annotate(total=Sum('amount'))
-            .order_by('bucket')
-        )
-        for entry in data:
-            labels.append(entry['bucket'].strftime('%Y'))
-            amounts.append(float(entry['total']))
+        start = date(2000, 1, 1)
+        label_format = '%Y'
     else:
+        period = 'month'
         start = today - timedelta(days=180)
-        data = (
-            qs.filter(payment_date__gte=start)
-            .annotate(bucket=TruncMonth('payment_date'))
-            .values('bucket')
-            .annotate(total=Sum('amount'))
-            .order_by('bucket')
-        )
-        for entry in data:
-            labels.append(entry['bucket'].strftime('%b %Y'))
-            amounts.append(float(entry['total']))
+        label_format = '%b %Y'
 
-    return JsonResponse({'labels': labels, 'amounts': amounts})
+    series = recognized_revenue_series(start, today, period)
+    return JsonResponse({
+        'labels': [bucket.strftime(label_format) for bucket, _ in series],
+        'amounts': [float(amount) for _, amount in series],
+    })
 
 
 def _financial_reports_context(request):
     """Build shared context for the financial reports page and PDF."""
-    from payments.models import Receipt
-    from django.db.models.functions import TruncMonth
-    
     today = timezone.now().date()
     month_start = today.replace(day=1)
     year_start = today.replace(month=1, day=1)
-    
-    # Project-wise revenue
+    all_time_start = date(2000, 1, 1)
+
+    metrics_all = get_financial_metrics(all_time_start, today)
+    metrics_year = get_financial_metrics(year_start, today)
+    metrics_month = get_financial_metrics(month_start, today)
+
+    project_collections = collected_by_project(all_time_start, today)
+    project_year_collections = collected_by_project(year_start, today)
+    project_month_collections = collected_by_project(month_start, today)
+
     projects = Project.objects.exclude(status='inactive')
     project_revenue = []
     for project in projects:
-        verified_payments = Payment.objects.filter(
-            status='verified',
-            booking__plot__project=project
-        )
-        total_revenue = verified_payments.aggregate(total=Sum('amount'))['total'] or 0
-        year_revenue = verified_payments.filter(payment_date__gte=year_start).aggregate(total=Sum('amount'))['total'] or 0
-        month_revenue = verified_payments.filter(payment_date__gte=month_start).aggregate(total=Sum('amount'))['total'] or 0
         total_bookings = Booking.objects.filter(plot__project=project).count()
-        active_bookings = Booking.objects.filter(plot__project=project, status__in=['active', 'confirmed', 'pending']).count()
-        total_plots = project.plots.count()
-        sold_plots = project.plots.filter(status='sold').count()
-        
-        expenses = Expense.objects.filter(project=project).aggregate(total=Sum('amount'))['total'] or 0
-        profit = float(total_revenue) - float(expenses)
-        
+        active_bookings = Booking.objects.filter(
+            plot__project=project,
+            status__in=['active', 'confirmed', 'pending'],
+        ).count()
         project_revenue.append({
             'project': project,
-            'total_revenue': total_revenue,
-            'year_revenue': year_revenue,
-            'month_revenue': month_revenue,
+            'total_revenue': project_collections.get(project.pk, Decimal('0.00')),
+            'year_revenue': project_year_collections.get(project.pk, Decimal('0.00')),
+            'month_revenue': project_month_collections.get(project.pk, Decimal('0.00')),
             'total_bookings': total_bookings,
             'active_bookings': active_bookings,
-            'total_plots': total_plots,
-            'sold_plots': sold_plots,
-            'expenses': expenses,
-            'profit': profit,
+            'total_plots': project.plots.count(),
+            'sold_plots': project.plots.filter(status='sold').count(),
         })
-    
-    # Overall stats
-    total_revenue = Payment.objects.filter(status='verified').aggregate(total=Sum('amount'))['total'] or 0
-    total_expenses = Expense.objects.aggregate(total=Sum('amount'))['total'] or 0
-    year_revenue = Payment.objects.filter(status='verified', payment_date__gte=year_start).aggregate(total=Sum('amount'))['total'] or 0
-    month_revenue = Payment.objects.filter(status='verified', payment_date__gte=month_start).aggregate(total=Sum('amount'))['total'] or 0
-    
-    # Monthly revenue trend for chart
+
     six_months_ago = today - timedelta(days=180)
-    monthly_data = (
-        Payment.objects.filter(status='verified', payment_date__gte=six_months_ago)
-        .annotate(month=TruncMonth('payment_date'))
-        .values('month')
-        .annotate(total=Sum('amount'))
-        .order_by('month')
-    )
-    monthly_chart_data = [{'label': entry['month'].strftime('%b %Y'), 'amount': float(entry['total'])} for entry in monthly_data]
-    
-    # Payment method breakdown
-    method_data = (
-        Payment.objects.filter(status='verified')
-        .values('payment_method')
-        .annotate(total=Sum('amount'))
-        .order_by('-total')
-    )
+    monthly_chart_data = [
+        {'label': bucket.strftime('%b %Y'), 'amount': float(amount)}
+        for bucket, amount in recognized_revenue_series(
+            six_months_ago, today, 'month')
+    ]
+
     method_labels = dict(Payment.METHOD_CHOICES)
-    payment_method_data = [{'method': method_labels.get(m['payment_method'], m['payment_method']), 'total': float(m['total'])} for m in method_data]
-    
-    # Collection rate
+    payment_method_data = [
+        {'method': method_labels.get(key, key), 'total': float(total)}
+        for key, total in collected_by_method(all_time_start, today).items()
+    ]
+    payment_method_data.sort(key=lambda item: item['total'], reverse=True)
+
     total_installment_amount = Installment.objects.aggregate(total=Sum('amount'))['total'] or 1
     total_paid_amount = Installment.objects.aggregate(total=Sum('paid_amount'))['total'] or 0
     collection_rate = round((float(total_paid_amount) / float(total_installment_amount)) * 100, 1)
-    
+
     return {
         'project_revenue': project_revenue,
-        'total_revenue': total_revenue,
-        'total_expenses': total_expenses,
-        'year_revenue': year_revenue,
-        'month_revenue': month_revenue,
-        'net_profit': float(total_revenue) - float(total_expenses),
+        'collected': metrics_all.collected,
+        'recognized_revenue': metrics_all.recognized_revenue,
+        'customer_advances_held': metrics_all.customer_advances_held,
+        'total_expenses': metrics_all.expenses,
+        'expense_groups': metrics_all.expense_groups,
+        'net_profit': metrics_all.profit,
+        'year_collected': metrics_year.collected,
+        'year_recognized_revenue': metrics_year.recognized_revenue,
+        'month_collected': metrics_month.collected,
+        'month_recognized_revenue': metrics_month.recognized_revenue,
+        # Backward-compatible keys used by older tests and templates.
+        'total_revenue': metrics_all.collected,
+        'year_revenue': metrics_year.collected,
+        'month_revenue': metrics_month.collected,
         'monthly_chart_data': monthly_chart_data,
         'payment_method_data': payment_method_data,
         'collection_rate': min(collection_rate, 100),

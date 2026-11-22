@@ -44,35 +44,35 @@
         <!-- Stats Row 2 - Financial Overview -->
         {% if can_view_payments %}
         <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
-            <div class="stat-card animate-fade-up stagger-5">
+            <div class="stat-card animate-fade-up stagger-5" title="Verified payments collected from customers. This is cash received, not accounting revenue.">
                 <div class="stat-icon green">💰</div>
-                <div class="stat-value" style="font-size:22px; font-weight:700;">Rs. <span data-target="{{ total_revenue|default:0|floatformat:0 }}">{{ total_revenue|default:0|floatformat:0 }}</span></div>
-                <div class="stat-label">Total Revenue</div>
+                <div class="stat-value" style="font-size:22px; font-weight:700;">Rs. <span data-target="{{ collected|default:0|floatformat:0 }}">{{ collected|default:0|floatformat:0 }}</span></div>
+                <div class="stat-label">Collected</div>
             </div>
-            <div class="stat-card animate-fade-up stagger-6">
+            <div class="stat-card animate-fade-up stagger-6" title="Revenue recognized in the ledger after delivery. Undelivered customer advances are not included.">
                 <div class="stat-icon blue">📈</div>
-                <div class="stat-value" style="font-size:22px; font-weight:700;">Rs. <span data-target="{{ monthly_revenue|default:0|floatformat:0 }}">{{ monthly_revenue|default:0|floatformat:0 }}</span></div>
-                <div class="stat-label">This Month</div>
+                <div class="stat-value" style="font-size:22px; font-weight:700;">Rs. <span data-target="{{ recognized_revenue|default:0|floatformat:0 }}">{{ recognized_revenue|default:0|floatformat:0 }}</span></div>
+                <div class="stat-label">Recognized Revenue</div>
             </div>
-            <div class="stat-card animate-fade-up stagger-7">
+            <div class="stat-card animate-fade-up stagger-7" title="Verified payments received in the current calendar month.">
+                <div class="stat-icon teal">📅</div>
+                <div class="stat-value" style="font-size:22px; font-weight:700;">Rs. <span data-target="{{ monthly_collected|default:0|floatformat:0 }}">{{ monthly_collected|default:0|floatformat:0 }}</span></div>
+                <div class="stat-label">Collected This Month</div>
+            </div>
+            <div class="stat-card animate-fade-up stagger-8">
                 <div class="stat-icon amber">⏳</div>
                 <div class="stat-value" data-target="{{ pending_payments|default:0 }}">{{ pending_payments|default:0 }}</div>
                 <div class="stat-label">Pending Payments</div>
             </div>
-            <div class="stat-card animate-fade-up stagger-8">
+            <div class="stat-card animate-fade-up stagger-9">
                 <div class="stat-icon red">⚠️</div>
                 <div class="stat-value" data-target="{{ overdue_installments|default:0 }}">{{ overdue_installments|default:0 }}</div>
                 <div class="stat-label">Overdue Installments</div>
             </div>
-            <div class="stat-card animate-fade-up stagger-9">
-                <div class="stat-icon teal">📊</div>
+            <div class="stat-card animate-fade-up stagger-10">
+                <div class="stat-icon violet">📊</div>
                 <div class="stat-value" data-target="{{ collection_rate|default:0 }}">{{ collection_rate|default:0 }}%</div>
                 <div class="stat-label">Collection Rate</div>
-            </div>
-            <div class="stat-card animate-fade-up stagger-10">
-                <div class="stat-icon violet">📋</div>
-                <div class="stat-value" data-target="{{ active_bookings|default:0 }}">{{ active_bookings|default:0 }}</div>
-                <div class="stat-label">Active Bookings</div>
             </div>
         </div>
         {% endif %}
@@ -120,7 +120,7 @@
             {% if can_view_payments %}
             <div class="card animate-fade-up stagger-5">
                 <div class="card-header">
-                    <h3>📈 Revenue Trend</h3>
+                    <h3>📈 Recognized Revenue Trend</h3>
                     <div class="card-actions">
                         <div class="revenue-period" style="display:flex; gap:4px;">
                             <button type="button" class="btn btn-sm btn-ghost revenue-period-btn" data-period="week">Weekly</button>
@@ -149,7 +149,7 @@
             {% if can_view_payments and payment_type_data %}
             <div class="card animate-fade-up stagger-5">
                 <div class="card-header">
-                    <h3>📊 Revenue by Payment Type</h3>
+                    <h3>📊 Collections by Payment Type</h3>
                 </div>
                 <div class="chart-container" style="height:260px; display:flex; align-items:center; justify-content:center;">
                     <canvas id="paymentTypeChart" style="max-width:260px; max-height:260px;"></canvas>
@@ -168,7 +168,7 @@
             {% endif %}
         </div>
 
-        <!-- Payment Method & Revenue by Project -->
+        <!-- Payment Method & Collections by Project -->
         <div class="charts-grid-2col">
             {% if can_view_payments %}
             <div class="card animate-fade-up stagger-7">
@@ -215,7 +215,7 @@
             {% if can_view_payments and project_revenue_data %}
             <div class="card animate-fade-up stagger-6">
                 <div class="card-header">
-                    <h3>🏗️ Project-wise Revenue</h3>
+                    <h3>🏗️ Project-wise Collections</h3>
                     <div class="card-actions">
                         <button type="button" class="btn btn-sm btn-ghost" id="projectRevenueToggle">See More</button>
                     </div>
@@ -225,7 +225,7 @@
                         <thead>
                             <tr>
                                 <th>Project</th>
-                                <th>Revenue (Rs.)</th>
+                                <th>Collected (Rs.)</th>
                                 <th>Payments</th>
                             </tr>
                         </thead>
@@ -505,7 +505,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         legend: { display: false },
                         tooltip: Object.assign({}, tip, {
                             callbacks: {
-                                label: function(ctx) { return 'Revenue: Rs. ' + Number(ctx.raw).toLocaleString(); }
+                                label: function(ctx) { return 'Recognized revenue: Rs. ' + Number(ctx.raw).toLocaleString(); }
                             }
                         })
                     },
