@@ -2,7 +2,7 @@
 
 Django 6.0.7 ERP plus corporate website. SQLite for development, PostgreSQL 16 for production. `CLAUDE.md` remains the long-form project context. This file is the current operating guide for agents and operators.
 
-Last updated: 2026-11-18.
+Last updated: 2026-11-22.
 
 ## Production status
 
@@ -53,7 +53,7 @@ D:\samana\.venv312\Scripts\python.exe manage.py process_notification_queue --dry
 D:\samana\.venv312\Scripts\python.exe manage.py retry_failed_notifications --dry-run
 ```
 
-Current full suite: 1,195 tests, OK. Runtime is roughly 14 to 22 minutes depending on disk and WAL state.
+Current full suite: 1,209 tests, OK. Runtime is roughly 14 to 22 minutes depending on disk and WAL state.
 
 Default local login: `admin` / `admin123`. Staff land on `/dashboard/`, customers on `/portal/`.
 
@@ -122,7 +122,7 @@ Chart of accounts:
 ## Booking delivery
 
 - `Booking.delivery_date` and `Booking.delivered_by` are nullable schema fields.
-- Delivery is allowed only for active or completed bookings, by super_admin, admin or management.
+- Delivery is allowed for confirmed, active or completed bookings, by super_admin, admin or management.
 - Delivery date defaults to today and cannot be in the future.
 - An unpaid balance shows a warning and requires the explicit confirmation checkbox. Delivery is still allowed.
 - Delivery sets status to completed, records the delivery date and poster, and posts net advances to revenue in one transaction.
@@ -315,7 +315,7 @@ See `DEPLOY.md` for the full command sequence, rollback commands and server vali
 
 ## Testing and E2E
 
-- Django full suite: 1,195 tests, OK.
+- Django full suite: 1,209 tests, OK.
 - Python 3.12 shared venv: `D:\samana\.venv312\Scripts\python.exe`.
 - Playwright uses system Chrome. Do not run `npx playwright install`, the CDN is blocked.
 - Playwright runbook: `RUNBOOK.md`.

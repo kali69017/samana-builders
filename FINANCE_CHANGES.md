@@ -622,7 +622,7 @@ Client decision: every amount received from a customer before final delivery is 
 
 - `Booking.delivery_date` and `Booking.delivered_by` added by schema migration.
 - Mark as Delivered is available to super_admin, admin and management.
-- Only active or completed bookings can be delivered. Pending and cancelled bookings are blocked.
+- Only confirmed, active or completed bookings can be delivered. Pending and cancelled bookings are blocked.
 - Delivery date defaults to today and cannot be in the future.
 - An unpaid balance shows a warning and requires the explicit confirmation checkbox. Delivery is still allowed.
 - The status change, delivery fields and `BookingDelivery` journal are one transaction.

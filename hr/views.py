@@ -4,6 +4,7 @@ from decimal import InvalidOperation
 
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Sum, Count, Q
 from django.shortcuts import render, redirect, get_object_or_404
@@ -284,9 +285,20 @@ def employee_edit_view(request, pk):
 @hr_required
 def employee_delete_view(request, pk):
     employee = get_object_or_404(Employee, pk=pk)
+    if employee.salary_slips.exists():
+        messages.error(
+            request,
+            'Cannot delete an employee with payroll history. '
+            'Set the status to Resigned or Terminated instead.',
+        )
+        return redirect('hr_employee_detail', pk=pk)
     if request.method == 'POST':
         emp_id = employee.employee_id
-        employee.delete()
+        try:
+            employee.delete()
+        except ValidationError as exc:
+            messages.error(request, ' '.join(exc.messages))
+            return redirect('hr_employee_detail', pk=pk)
         _log(request, 'delete', 'Employee', emp_id, f'Deleted employee {emp_id}')
         messages.success(request, 'Employee deleted successfully!')
         return redirect('hr_employees')

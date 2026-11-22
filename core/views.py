@@ -1415,10 +1415,10 @@ def booking_deliver_view(request, pk):
     if booking.delivery_date:
         messages.info(request, f'Booking {booking.booking_id} is already delivered.')
         return redirect('booking_detail', pk=pk)
-    if booking.status not in ('active', 'completed'):
+    if booking.status not in ('confirmed', 'active', 'completed'):
         messages.error(
             request,
-            'Only an active or completed booking can be marked as delivered.',
+            'Only a confirmed, active or completed booking can be marked as delivered.',
         )
         return redirect('booking_detail', pk=pk)
 

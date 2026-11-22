@@ -21,7 +21,7 @@
             <div class="page-actions">
                 <a href="{% url 'invoice_pdf' booking.pk %}" class="btn btn-primary btn-sm">📥 Download Invoice</a>
                 <a href="{% url 'booking_edit' booking.pk %}" class="btn btn-secondary btn-sm">✏️ Edit Booking</a>
-                {% if not booking.delivery_date and booking.status == 'active' or not booking.delivery_date and booking.status == 'completed' %}
+                {% if booking.can_be_delivered %}
                 <a href="{% url 'booking_deliver' booking.pk %}" class="btn btn-success btn-sm">Mark as Delivered</a>
                 {% endif %}
                 <a href="{% url 'bookings' %}" class="btn btn-secondary btn-sm">← Back to List</a>

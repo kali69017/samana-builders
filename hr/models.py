@@ -92,6 +92,15 @@ class Employee(models.Model):
                 self.employee_id = f'EMP-{str(num).zfill(5)}'
         super().save(*args, **kwargs)
 
+    def delete(self, *args, **kwargs):
+        from django.core.exceptions import ValidationError
+        if self.pk and self.salary_slips.exists():
+            raise ValidationError(
+                'Cannot delete an employee with payroll history. '
+                'Set the status to Resigned or Terminated instead.'
+            )
+        return super().delete(*args, **kwargs)
+
     def __str__(self):
         return f"{self.employee_id} - {self.full_name}"
 

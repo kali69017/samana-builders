@@ -167,6 +167,13 @@ class Booking(models.Model):
         return self.delivery_date is not None
 
     @property
+    def can_be_delivered(self):
+        return (
+            self.delivery_date is None
+            and self.status in ('confirmed', 'active', 'completed')
+        )
+
+    @property
     def customer_advances_held(self):
         """Posted customer money held for this booking, net of posted refunds."""
         if not self.pk:
@@ -177,7 +184,7 @@ class Booking(models.Model):
     def mark_delivered(self, user=None, delivery_date=None):
         """Record delivery and release the booking's customer advances to revenue.
 
-        Only an active or completed booking can be delivered, and only once.
+        Only a confirmed, active or completed booking can be delivered, and only once.
         The status change and the ledger journal are one transaction.
         """
         from datetime import date
@@ -197,9 +204,9 @@ class Booking(models.Model):
             ).get(pk=self.pk)
             if booking.delivery_date is not None:
                 raise ValidationError('This booking has already been delivered.')
-            if booking.status not in ('active', 'completed'):
+            if booking.status not in ('confirmed', 'active', 'completed'):
                 raise ValidationError(
-                    'Only an active or completed booking can be marked as delivered.'
+                    'Only a confirmed, active or completed booking can be marked as delivered.'
                 )
             booking.delivery_date = delivery_date
             booking.delivered_by = user

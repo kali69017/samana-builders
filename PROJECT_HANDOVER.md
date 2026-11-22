@@ -45,7 +45,7 @@ The receivable account and the refunds payable account stay seeded, but the new 
 
 ## 3. Delivery workflow
 
-1. Open an active or completed booking.
+1. Open a confirmed, active or completed booking.
 2. Choose Mark as Delivered.
 3. Enter a delivery date. It defaults to today and cannot be in the future.
 4. If the booking is not fully paid, the page shows the unpaid amount and requires the confirmation checkbox. Delivery is still allowed.

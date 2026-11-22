@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework import status
@@ -54,6 +55,15 @@ class EmployeeModelTest(TestCase):
         self.assertEqual(slip.total_deductions, Decimal('2000'))
         self.assertEqual(net, Decimal('58000'))
 
+    def test_employee_with_salary_slip_cannot_be_deleted(self):
+        dept = Department.objects.create(name='Eng')
+        emp = Employee.objects.create(first_name='A', last_name='B', department=dept, joining_date=date.today())
+        run = PayrollRun.objects.create(month=3, year=2026)
+        SalarySlip.objects.create(employee=emp, run=run)
+        with self.assertRaises(ValidationError):
+            emp.delete()
+        self.assertTrue(Employee.objects.filter(pk=emp.pk).exists())
+
 
 class PayrollWorkflowTest(TestCase):
     def setUp(self):
@@ -98,6 +108,23 @@ class PayrollWorkflowTest(TestCase):
             sum((line.debit for line in voucher.lines.all()), Decimal('0.00')),
             Decimal('58000'),
         )
+
+    def test_employee_delete_view_blocks_payroll_history(self):
+        run = PayrollRun.objects.create(month=9, year=2026)
+        run.generate_slips()
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse('hr_employee_delete', args=[self.emp.pk]), follow=True)
+        self.assertTrue(Employee.objects.filter(pk=self.emp.pk).exists())
+        self.assertContains(response, 'payroll history')
+
+    def test_employee_without_payroll_still_deletes(self):
+        emp = Employee.objects.create(
+            first_name='No', last_name='Payroll', department=self.dept,
+            joining_date=date.today())
+        self.client.force_login(self.admin)
+        self.client.post(reverse('hr_employee_delete', args=[emp.pk]))
+        self.assertFalse(Employee.objects.filter(pk=emp.pk).exists())
 
 
 class HRAPITest(APITestCase):

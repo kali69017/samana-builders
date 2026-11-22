@@ -130,6 +130,34 @@ class CustomerLiabilityTests(TestCase):
             with self.assertRaises(ValidationError):
                 booking.mark_delivered(self.user, date.today())
 
+    def test_confirmed_booking_can_be_delivered(self):
+        booking = self._booking(status='confirmed')
+        self._payment(booking)
+        booking.mark_delivered(self.user, date.today())
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, 'completed')
+        self.assertEqual(booking.delivery_date, date.today())
+        self.assertTrue(Voucher.objects.filter(
+            reference_type='BookingDelivery', reference_id=booking.pk).exists())
+
+    def test_confirmed_booking_shows_delivery_button_and_view(self):
+        booking = self._booking(status='confirmed')
+        self._payment(booking)
+        self.client.force_login(self.user)
+        detail = self.client.get(reverse('booking_detail', args=[booking.pk]))
+        self.assertEqual(detail.status_code, 200)
+        self.assertContains(detail, 'Mark as Delivered')
+        response = self.client.get(reverse('booking_deliver', args=[booking.pk]))
+        self.assertEqual(response.status_code, 200)
+        response = self.client.post(reverse('booking_deliver', args=[booking.pk]), {
+            'delivery_date': date.today().isoformat(),
+            'confirm_unpaid': 'on',
+        })
+        self.assertEqual(response.status_code, 302)
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, 'completed')
+        self.assertEqual(booking.delivery_date, date.today())
+
     def test_delivery_date_cannot_be_future(self):
         booking = self._booking()
         with self.assertRaises(ValidationError):
