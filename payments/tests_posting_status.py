@@ -101,6 +101,22 @@ class PaymentPostingModelTests(PaymentPostingBase, TestCase):
         self.assertEqual(self.payment_vouchers(payment).count(), 0)
         self.assertEqual(self.reversal_vouchers(payment).count(), 0)
 
+    def test_delivery_excludes_bounced_payment_from_advances(self):
+        bounced = self.make_payment(status_value='verified', amount='1000')
+        bounced.status = 'bounced'
+        bounced.save()
+        verified = self.make_payment(status_value='verified', amount='1000')
+        self.booking.mark_delivered(self.user, date.today())
+        delivery = Voucher.objects.get(
+            reference_type='BookingDelivery', reference_id=self.booking.pk)
+        self.assertEqual(delivery.total_debit, Decimal('1000'))
+        line = delivery.lines.get(account_head=self.advances)
+        self.assertEqual(line.debit, Decimal('1000'))
+        self.assertEqual(
+            verified.payment_id,
+            self.booking.payments.get(status='verified').payment_id,
+        )
+
     def test_post_delivery_reversal_debits_revenue(self):
         self.booking.delivery_date = date.today()
         self.booking.status = 'completed'

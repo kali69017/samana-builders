@@ -195,29 +195,39 @@ def post_refund(refund):
 
 
 def booking_net_advances(booking, as_of=None):
-    """Posted customer money held for a booking, net of posted refunds.
+    """Posted customer money held for a booking, net of reversals and refunds.
 
-    Uses only Payment and Refund records that actually have a posted voucher.
-    Refunds are limited to vouchers dated on or before ``as_of`` when supplied,
-    which is the delivery date for the delivery posting.
+    Uses only verified Payment records that actually have a posted receipt
+    voucher, minus posted PaymentReversal vouchers and posted Refund vouchers.
+    Vouchers dated after ``as_of`` are excluded, which is the delivery date for
+    the delivery posting.
     """
     from payments.models import Payment, Refund
 
-    payment_ids = Voucher.objects.filter(
+    payment_vouchers = Voucher.objects.filter(
         reference_type='Payment', status='posted',
-    ).values_list('reference_id', flat=True)
-    refunds = Voucher.objects.filter(
+    )
+    reversal_vouchers = Voucher.objects.filter(
+        reference_type='PaymentReversal', status='posted',
+    )
+    refund_vouchers = Voucher.objects.filter(
         reference_type='Refund', status='posted',
     )
     if as_of is not None:
-        refunds = refunds.filter(date__lte=as_of)
-    refund_ids = refunds.values_list('reference_id', flat=True)
+        payment_vouchers = payment_vouchers.filter(date__lte=as_of)
+        reversal_vouchers = reversal_vouchers.filter(date__lte=as_of)
+        refund_vouchers = refund_vouchers.filter(date__lte=as_of)
+
+    payment_ids = payment_vouchers.values_list('reference_id', flat=True)
+    reversed_payment_ids = reversal_vouchers.values_list('reference_id', flat=True)
+    refund_ids = refund_vouchers.values_list('reference_id', flat=True)
 
     paid = Payment.objects.filter(
-        booking=booking, pk__in=payment_ids,
-    ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        booking=booking, status='verified', pk__in=payment_ids,
+    ).exclude(pk__in=reversed_payment_ids).aggregate(
+        total=Sum('amount'))['total'] or Decimal('0.00')
     refunded = Refund.objects.filter(
-        booking=booking, pk__in=refund_ids,
+        booking=booking, status='processed', pk__in=refund_ids,
     ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
     return paid - refunded
 

@@ -56,7 +56,7 @@ class CustomerLiabilityTests(TestCase):
     def _refund(self, booking, amount=Decimal('20'), method='bank_transfer'):
         refund = Refund.objects.create(
             booking=booking, paid_from=self.bank, amount=amount,
-            reason='overpayment', refund_method=method, status='approved',
+            reason='overpayment', refund_method=method, status='processed',
         )
         refund.post_to_ledger()
         return refund
