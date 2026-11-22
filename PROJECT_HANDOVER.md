@@ -68,6 +68,22 @@ Project Manager and Contractor are explicit view-only roles. Project Manager can
 
 The receivable account and the refunds payable account stay seeded, but the new customer-liability rules do not use them for payment and refund posting.
 
+### 2.1 Reporting metrics
+
+- `finance/reporting.py` is the single source for reporting metrics.
+- `collected` is the sum of verified payments in the date range.
+- `customer_advances_held` is the posted Customer Advances ledger balance as of the range end.
+- `recognized_revenue` is posted credits minus debits on revenue accounts.
+- `expenses` is posted debits minus credits under the Expenses root, split into operating, office, project cost, salaries and depreciation.
+- `profit` is recognized revenue minus expenses.
+- Dashboard, Financial Reports and the Financial Reports PDF use these metrics. The Sales Report and Receivables report stay on booking and installment data.
+
+### 2.2 Deprecated AccountTransaction
+
+- The `AccountTransaction` model and table remain for history.
+- Its API route and Django admin registration are removed.
+- No production writer exists. Only legacy tests create rows directly.
+
 ## 3. Delivery workflow
 
 1. Open a confirmed, active or completed booking.

@@ -3,6 +3,8 @@
 > Production note: the production database was wiped on 2026-11-22. Only `superadmin`, the 29 seeded account heads and the migration history remain. Examples and balances below are historical.
 >
 > Legacy conversion note: `convert_to_cash_basis` and `convert_to_customer_liability` are one-time legacy tools. They skip unverified payments and must not be run on a new database. The old development copy has one-time conversion vouchers JV-00032 to JV-00038, which explain its expected Customer Advances mismatch. The clean production database does not have those vouchers.
+>
+> Reporting note: `finance/reporting.py` now provides collected, customer advances, recognized revenue, expenses and profit from posted ledger lines. Dashboard and Financial Reports use this service. The deprecated `AccountTransaction` API route and Django admin registration are removed, while the model and table remain.
 
 ## Stage 1: Chart of Accounts
 
