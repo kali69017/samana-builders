@@ -638,53 +638,17 @@ class BudgetInvestmentTests(MoneyBase):
 # ─── ACCOUNT TRANSACTIONS ───────────────────────────────────────────────────
 class AccountTransactionTests(MoneyBase):
 
-    def test_account_transaction_create(self):
+    def test_account_transaction_api_route_is_removed(self):
+        resp = self.client.get('/api/account-transactions/')
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_account_transaction_model_remains(self):
         tx = AccountTransaction.objects.create(
             date=date.today(), amount=Decimal('10000'), direction='in',
             transaction_type='receipt', category='Sales',
-            description='Sale proceeds', created_by=self.admin,
+            description='Legacy row', created_by=self.admin,
         )
         self.assertEqual(tx.direction, 'in')
-
-    def test_account_transaction_out_direction(self):
-        tx = AccountTransaction.objects.create(
-            date=date.today(), amount=Decimal('5000'), direction='out',
-            transaction_type='office_expense', category='Utilities',
-            description='Bill', created_by=self.admin,
-        )
-        self.assertEqual(tx.direction, 'out')
-
-    def test_account_transaction_invalid_direction_rejected(self):
-        # ORM accepts any string; the API serializer must reject it.
-        resp = self.client.post(reverse('accounttransaction-list'), {
-            'date': date.today().isoformat(), 'amount': '100',
-            'direction': 'sideways', 'transaction_type': 'adjustment',
-            'description': 'X',
-        }, format='json')
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-
-    def test_account_transaction_negative_amount_rejected(self):
-        with self.assertRaises(Exception):
-            AccountTransaction.objects.create(
-                date=date.today(), amount=Decimal('-100'), direction='in',
-                transaction_type='other', description='X', created_by=self.admin,
-            )
-
-    def test_account_transaction_api(self):
-        resp = self.client.post(reverse('accounttransaction-list'), {
-            'date': date.today().isoformat(), 'amount': '25000',
-            'direction': 'in', 'transaction_type': 'income',
-            'category': 'Sales', 'reference_type': 'manual', 'reference_id': None, 'description': 'Test',
-        }, format='json')
-        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-
-    def test_account_transaction_list_filter(self):
-        AccountTransaction.objects.create(
-            date=date.today(), amount=Decimal('100'), direction='in',
-            transaction_type='receipt', description='X', created_by=self.admin,
-        )
-        resp = self.client.get(reverse('accounttransaction-list'))
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
 
 # ─── END-TO-END MONEY CONSISTENCY ───────────────────────────────────────────

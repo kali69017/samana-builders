@@ -1,18 +1,10 @@
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
 from .models import (
-    AccountTransaction, AccountHead, Office, ExpenseCategory, OfficeExpense,
+    AccountHead, Office, ExpenseCategory, OfficeExpense,
     ProjectBudget, ProjectCost, ProjectInvestment, Voucher, VoucherLine,
     VoucherDeletionLog,
 )
-
-
-@admin.register(AccountTransaction)
-class AccountTransactionAdmin(admin.ModelAdmin):
-    list_display = ['date', 'transaction_type', 'direction', 'amount', 'category', 'employee', 'reference_type']
-    list_filter = ['transaction_type', 'direction', 'date']
-    search_fields = ['description', 'category', 'reference_type', 'employee__first_name', 'employee__last_name']
-    readonly_fields = ['created_at']
 
 
 @admin.register(Office)

@@ -27,7 +27,7 @@ from hr.api_views import (
     SalarySlipViewSet, SalaryPaymentViewSet, AttendanceViewSet, LeaveViewSet,
 )
 from finance.api_views import (
-    AccountTransactionViewSet, AccountHeadViewSet, OfficeViewSet,
+    AccountHeadViewSet, OfficeViewSet,
     ExpenseCategoryViewSet, OfficeExpenseViewSet, ProjectCostViewSet,
     ProjectBudgetViewSet, ProjectInvestmentViewSet, VoucherViewSet,
 )
@@ -82,7 +82,6 @@ router.register(r'attendance', AttendanceViewSet)
 router.register(r'leaves', LeaveViewSet)
 
 # Finance
-router.register(r'account-transactions', AccountTransactionViewSet)
 router.register(r'offices', OfficeViewSet)
 router.register(r'expense-categories', ExpenseCategoryViewSet)
 router.register(r'office-expenses', OfficeExpenseViewSet)
