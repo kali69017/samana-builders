@@ -6,6 +6,25 @@ from django.utils import timezone
 from bookings.models import Booking, Installment
 
 
+class PaymentQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        protected = {
+            'amount', 'booking', 'booking_id', 'received_into', 'received_into_id',
+        } & set(kwargs)
+        if protected:
+            from django.core.exceptions import ValidationError
+            from finance.models import Voucher
+            payment_ids = self.values_list('pk', flat=True)
+            if Voucher.objects.filter(
+                    reference_type='Payment', reference_id__in=payment_ids,
+                    status='posted').exists():
+                raise ValidationError(
+                    'A posted payment cannot be changed. '
+                    'Reverse the payment and create a new one.'
+                )
+        return super().update(**kwargs)
+
+
 class Payment(models.Model):
     STATUS_CHOICES = [
         ('draft', 'Draft'),
@@ -72,8 +91,39 @@ class Payment(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     verified_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='payments_verified')
     verified_at = models.DateTimeField(null=True, blank=True)
-    
+
+    objects = PaymentQuerySet.as_manager()
+
+    def _posted_receipt_exists(self):
+        if not self.pk:
+            return False
+        from finance.models import Voucher
+        return Voucher.objects.filter(
+            reference_type='Payment', reference_id=self.pk, status='posted').exists()
+
+    def _assert_posted_payment_immutable(self, previous):
+        if not previous or not self._posted_receipt_exists():
+            return
+        if (
+            previous['amount'] != self.amount
+            or previous['booking_id'] != self.booking_id
+            or previous['received_into_id'] != self.received_into_id
+        ):
+            from django.core.exceptions import ValidationError
+            raise ValidationError(
+                'A posted payment cannot be changed. '
+                'Reverse the payment and create a new one.'
+            )
+
     def save(self, *args, **kwargs):
+        previous = None
+        previous_status = None
+        if self.pk:
+            previous = Payment.objects.filter(pk=self.pk).values(
+                'status', 'amount', 'booking_id', 'received_into_id').first()
+            if previous:
+                previous_status = previous['status']
+                self._assert_posted_payment_immutable(previous)
         if not self.payment_id:
             from django.db import transaction
             with transaction.atomic():
@@ -84,12 +134,25 @@ class Payment(models.Model):
                 else:
                     self.payment_id = 'PAY-00001'
         super().save(*args, **kwargs)
-        self.post_to_ledger()
+        if previous_status != 'verified' and self.status == 'verified':
+            self.post_to_ledger()
+        elif previous_status == 'verified' and self.status in (
+                'rejected', 'bounced', 'reversed'):
+            self.post_reversal()
 
     def post_to_ledger(self):
-        """Post through the central finance posting service (idempotent)."""
+        """Post the receipt voucher only for a verified payment."""
+        if self.status != 'verified':
+            return None
         from finance.accounting import post_payment
         return post_payment(self)
+
+    def post_reversal(self):
+        """Post the inverse receipt voucher after verification is undone."""
+        if self.status not in ('rejected', 'bounced', 'reversed'):
+            return None
+        from finance.accounting import post_payment_reversal
+        return post_payment_reversal(self)
     
     def delete(self, *args, **kwargs):
         from finance.accounting import block_source_delete

@@ -53,7 +53,13 @@ class PaymentAdmin(admin.ModelAdmin):
         return obj.booking.customer.full_name if obj.booking else '-'
     customer_name.short_description = 'Customer'
     customer_name.admin_order_field = 'booking__customer__first_name'
-    
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly = list(super().get_readonly_fields(request, obj))
+        if obj and obj.pk and obj._posted_receipt_exists():
+            readonly.extend(['amount', 'booking', 'received_into'])
+        return readonly
+
     def has_delete_permission(self, request, obj=None):
         # Only superusers can delete payments
         return request.user.is_superuser

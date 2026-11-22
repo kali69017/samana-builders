@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -319,6 +320,12 @@ class FinanceAccountLinkAPITests(APITestCase):
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         payment = Payment.objects.get(payment_id=response.data['payment_id'])
+        self.assertFalse(Voucher.objects.filter(
+            reference_type='Payment', reference_id=payment.pk).exists())
+        response = self.client.post(
+            reverse('payment-verify', args=[payment.pk]),
+            {'action': 'verify'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         voucher = Voucher.objects.get(reference_type='Payment', reference_id=payment.pk)
         self.assertEqual(voucher.lines.get(debit__gt=0).account_head, self.cash)
 

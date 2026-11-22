@@ -8,6 +8,7 @@ from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Sum
+from django.utils import timezone
 
 from .models import AccountHead, Voucher, VoucherLine
 
@@ -133,6 +134,36 @@ def post_payment(payment):
             (credit_head, Decimal('0.00'), payment.amount),
         ],
         user=payment.created_by,
+    )
+
+
+def post_payment_reversal(payment):
+    """Post the exact inverse of a posted payment receipt voucher.
+
+    The reversal is idempotent on ``('PaymentReversal', payment id)``. It uses
+    the original voucher lines, so a pre-delivery receipt reverses Customer
+    Advances and a post-delivery receipt reverses Revenue.
+    """
+    original = Voucher.objects.filter(
+        reference_type='Payment', reference_id=payment.pk, status='posted',
+    ).prefetch_related('lines__account_head').first()
+    if original is None:
+        return None
+    inverse_types = {'CR': 'CP', 'BR': 'BP', 'CP': 'CR', 'BP': 'BR'}
+    lines = [
+        (line.account_head, line.credit, line.debit)
+        for line in original.lines.select_related('account_head').order_by('id')
+    ]
+    return post_source_voucher(
+        reference_type='PaymentReversal', reference_id=payment.pk,
+        voucher_type=inverse_types.get(original.voucher_type, 'JV'),
+        date=timezone.localdate(),
+        narration=(
+            f'Reversal of Payment {payment.payment_id} - '
+            f'{payment.get_status_display()}'
+        ),
+        lines=lines,
+        user=payment.verified_by or payment.created_by,
     )
 
 

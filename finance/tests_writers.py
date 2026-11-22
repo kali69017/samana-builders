@@ -7,6 +7,7 @@ from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from bookings.models import Booking
@@ -55,7 +56,7 @@ class WriterMigrationTest(TestCase):
     def test_cash_payment_posts_cash_receipt_voucher(self):
         payment = Payment.objects.create(
             booking=self.booking, amount=Decimal('100000'), payment_date=date.today(),
-            payment_method='cash', created_by=self.user,
+            payment_method='cash', status='verified', created_by=self.user,
         )
         voucher = self._voucher_for('Payment', payment.pk)
         self.assertEqual(voucher.voucher_type, 'CR')
@@ -72,7 +73,7 @@ class WriterMigrationTest(TestCase):
     def test_bank_payment_posts_bank_receipt_voucher(self):
         payment = Payment.objects.create(
             booking=self.booking, amount=Decimal('250000'), payment_date=date.today(),
-            payment_method='bank_transfer', created_by=self.user,
+            payment_method='bank_transfer', status='verified', created_by=self.user,
         )
         voucher = self._voucher_for('Payment', payment.pk)
         self.assertEqual(voucher.voucher_type, 'BR')
@@ -87,10 +88,11 @@ class WriterMigrationTest(TestCase):
     def test_payment_resave_does_not_duplicate_voucher(self):
         payment = Payment.objects.create(
             booking=self.booking, amount=Decimal('100000'), payment_date=date.today(),
-            payment_method='cash', created_by=self.user,
+            payment_method='cash', status='verified', created_by=self.user,
         )
         payment.amount = Decimal('120000')
-        payment.save()
+        with self.assertRaises(ValidationError):
+            payment.save()
         self.assertEqual(
             Voucher.objects.filter(reference_type='Payment', reference_id=payment.pk).count(), 1,
         )

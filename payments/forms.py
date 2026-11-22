@@ -58,6 +58,19 @@ class PaymentForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
+        if self.instance and self.instance.pk and self.instance._posted_receipt_exists():
+            changed = False
+            if 'amount' in cleaned and cleaned['amount'] != self.instance.amount:
+                changed = True
+            if 'booking' in cleaned and cleaned['booking'].pk != self.instance.booking_id:
+                changed = True
+            if 'received_into' in cleaned and cleaned['received_into'].pk != self.instance.received_into_id:
+                changed = True
+            if changed:
+                raise forms.ValidationError(
+                    'A posted payment cannot be changed. '
+                    'Reverse the payment and create a new one.'
+                )
         method = cleaned.get('payment_method')
         account = cleaned.get('received_into')
         if account:

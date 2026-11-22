@@ -162,7 +162,17 @@ class PaymentSerializer(serializers.ModelSerializer):
               'verified_by', 'verified_by_name', 'verified_at']
         read_only_fields = ['id', 'payment_id', 'created_at', 'updated_at',
                             'created_by', 'verified_by', 'verified_at', 'receipt_generated']
-    
+
+    def validate(self, attrs):
+        if self.instance and self.instance.pk and self.instance._posted_receipt_exists():
+            protected = {'amount', 'booking', 'received_into'} & set(attrs)
+            if protected:
+                raise serializers.ValidationError(
+                    'A posted payment cannot be changed. '
+                    'Reverse the payment and create a new one.'
+                )
+        return attrs
+
     def validate_amount(self, value):
         if value is not None and value <= 0:
             raise serializers.ValidationError('Amount must be greater than 0')

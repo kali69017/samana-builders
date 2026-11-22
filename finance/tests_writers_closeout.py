@@ -85,7 +85,7 @@ class CloseoutWriterTest(TestCase):
     def test_refund_does_not_touch_original_receipt_voucher(self):
         payment = Payment.objects.create(
             booking=self.booking, amount=Decimal('100000'), payment_date=date.today(),
-            payment_method='cash', created_by=self.user,
+            payment_method='cash', status='verified', created_by=self.user,
         )
         receipt = self._voucher('Payment', payment.pk)
         receipt_number = receipt.voucher_number
