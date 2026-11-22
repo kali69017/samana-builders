@@ -1943,14 +1943,6 @@ def payment_create_view(request):
                     if hasattr(booking, 'installment_plan') and booking.installment_plan:
                         booking.installment_plan.recalculate()
 
-                    # Auto-generate receipt
-                    receipt = Receipt.objects.create(
-                        payment=payment,
-                        receipt_date=payment.payment_date,
-                        generated_by=request.user,
-                    )
-                    payment.receipt_generated = True
-                    payment.save(update_fields=['receipt_generated'])
             except IntegrityError:
                 existing = _find_existing_payment(idem_key)
                 if existing:
@@ -1984,16 +1976,9 @@ def payment_create_view(request):
                 description=f'Created payment {payment.payment_id} for booking {payment.booking.booking_id}'
             )
 
-            # AUTO-SEND NOTIFICATIONS
-            try:
-                from notifications.services import NotificationService
-                NotificationService.send_payment_confirmation(payment)
-                NotificationService.send_receipt_notification(receipt)
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).warning(f'Notification send failed: {e}')
-
-            messages.success(request, f'Payment {payment.payment_id} recorded successfully! Receipt {receipt.receipt_number} generated.')
+            receipt = payment.receipts.order_by('id').first()
+            receipt_number = receipt.receipt_number if receipt else 'not generated'
+            messages.success(request, f'Payment {payment.payment_id} recorded successfully! Receipt {receipt_number}.')
             return redirect('payments')
     else:
         form = PaymentForm(initial={'idempotency_key': uuid4().hex})

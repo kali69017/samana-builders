@@ -129,11 +129,11 @@ class BookingCancelReopenTests(TestCase):
     def test_cancel_blocked_with_verified_payments(self):
         from payments.models import Payment
         booking = Booking.objects.create(
-            customer=self.customer, plot=self.plot, total_amount='50000.00',
-            advance_paid='5000.00', status='confirmed',
+            customer=self.customer, plot=self.plot, total_amount=Decimal('50000.00'),
+            advance_paid=Decimal('5000.00'), status='confirmed',
         )
         Payment.objects.create(
-            booking=booking, amount='5000.00', payment_date='2026-01-10',
+            booking=booking, amount=Decimal('5000.00'), payment_date='2026-01-10',
             payment_method='cash', payment_type='down_payment', status='verified',
         )
         resp = self.client.post(reverse('booking_cancel', args=[booking.pk]), {

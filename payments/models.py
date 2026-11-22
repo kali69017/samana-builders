@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.models import User
 from django.utils import timezone
 from bookings.models import Booking, Installment
@@ -124,8 +124,9 @@ class Payment(models.Model):
             if previous:
                 previous_status = previous['status']
                 self._assert_posted_payment_immutable(previous)
+        update_fields = kwargs.get('update_fields')
+        status_saved = update_fields is None or 'status' in update_fields
         if not self.payment_id:
-            from django.db import transaction
             with transaction.atomic():
                 last_payment = Payment.objects.select_for_update().order_by('-id').first()
                 if last_payment:
@@ -133,12 +134,36 @@ class Payment(models.Model):
                     self.payment_id = f'PAY-{str(last_num + 1).zfill(5)}'
                 else:
                     self.payment_id = 'PAY-00001'
-        super().save(*args, **kwargs)
-        if previous_status != 'verified' and self.status == 'verified':
-            self.post_to_ledger()
-        elif previous_status == 'verified' and self.status in (
-                'rejected', 'bounced', 'reversed'):
-            self.post_reversal()
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            if status_saved and previous_status != 'verified' and self.status == 'verified':
+                self._handle_verified_transition()
+            elif status_saved and previous_status == 'verified' and self.status in (
+                    'rejected', 'bounced', 'reversed'):
+                self.post_reversal()
+
+    def _ensure_receipt(self):
+        receipt = self.receipts.order_by('id').first()
+        if receipt is None:
+            receipt = Receipt.objects.create(
+                payment=self, receipt_date=self.payment_date,
+                generated_by=self.verified_by or self.created_by,
+            )
+        if not self.receipt_generated:
+            self.receipt_generated = True
+            Payment.objects.filter(pk=self.pk).update(receipt_generated=True)
+        return receipt
+
+    def _handle_verified_transition(self):
+        if isinstance(self.payment_date, str):
+            from django.utils.dateparse import parse_date
+            self.payment_date = parse_date(self.payment_date)
+        voucher = self.post_to_ledger()
+        receipt = self._ensure_receipt()
+        from notifications.services import NotificationService
+        NotificationService.send_payment_confirmation(self)
+        NotificationService.send_receipt_notification(receipt)
+        return voucher
 
     def post_to_ledger(self):
         """Post the receipt voucher only for a verified payment."""

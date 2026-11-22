@@ -749,11 +749,15 @@ class WhatsAppTemplateDeliveryTest(TestCase):
         return mock_post
 
     def _verified_payment(self):
-        return Payment.objects.create(
-            booking=self.booking, amount=Decimal('120000'),
-            payment_date=date.today(), payment_method='cash', payment_type='installment',
-            status='verified', created_by=self.user,
-        )
+        Payment.objects.bulk_create([
+            Payment(
+                payment_id='PAY-00001', booking=self.booking,
+                amount=Decimal('120000'), payment_date=date.today(),
+                payment_method='cash', payment_type='installment',
+                status='verified', created_by=self.user,
+            ),
+        ])
+        return Payment.objects.get(payment_id='PAY-00001')
 
     def test_payment_confirmation_sends_approved_template(self):
         payment = self._verified_payment()

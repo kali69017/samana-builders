@@ -122,16 +122,15 @@ class ReceiptTest(TestCase):
             customer=self.customer, plot=self.plot,
             total_amount=Decimal('5000000'), created_by=self.user
         )
-        self.payment = Payment.objects.create(
-            booking=self.booking,
-            amount=Decimal('100000'),
-            payment_date=date.today(),
-            payment_method='bank_transfer',
-            reference_number='',
-            method_data={},
-            status='verified',
-            created_by=self.user
-        )
+        Payment.objects.bulk_create([
+            Payment(
+                payment_id='PAY-90001', booking=self.booking,
+                amount=Decimal('100000'), payment_date=date.today(),
+                payment_method='bank_transfer', reference_number='',
+                method_data={}, status='verified', created_by=self.user,
+            ),
+        ])
+        self.payment = Payment.objects.get(payment_id='PAY-90001')
 
     def test_receipt_number_sequential(self):
         r1 = Receipt.objects.create(payment=self.payment, generated_by=self.user)

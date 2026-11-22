@@ -9,7 +9,7 @@ from datetime import timedelta
 import requests
 from django.conf import settings
 from django.core.mail import send_mail
-from django.db import OperationalError, connection, transaction
+from django.db import IntegrityError, OperationalError, connection, transaction
 from django.utils import timezone
 from . import wa_templates
 from .models import NotificationLog
@@ -773,7 +773,7 @@ class NotificationService:
     @staticmethod
     def send_notification(recipient_name, recipient_contact, channel, notification_type,
                          message, subject='', customer_id='', booking_id='', user=None,
-                         sms_message=None, template_params=None):
+                         sms_message=None, template_params=None, related_payment_id=None):
         effective_message = (sms_message or message) if channel == 'sms' else message
         log = NotificationLog.objects.create(
             recipient_name=recipient_name,
@@ -786,6 +786,7 @@ class NotificationService:
             template_params=template_params or {},
             related_customer_id=customer_id,
             related_booking_id=booking_id,
+            related_payment_id=related_payment_id,
             created_by=user,
         )
         return NotificationService._deliver(log)
@@ -793,26 +794,35 @@ class NotificationService:
     @staticmethod
     def queue_notification(recipient_name, recipient_contact, channel, notification_type,
                            message, subject='', customer_id='', booking_id='', user=None,
-                           sms_message=None, template_params=None):
+                           sms_message=None, template_params=None, related_payment_id=None):
         effective_message = (sms_message or message) if channel == 'sms' else message
         customer = NotificationService._resolve_customer(customer_id, recipient_contact)
         reason = NotificationService.preference_reason(
             customer, channel, notification_type)
-        log = NotificationLog.objects.create(
-            recipient_name=recipient_name,
-            recipient_contact=recipient_contact,
-            channel=channel,
-            notification_type=notification_type,
-            subject=subject,
-            message=effective_message,
-            status='skipped' if reason else 'queued',
-            error_message=reason,
-            attempts=0,
-            template_params=template_params or {},
-            related_customer_id=customer.customer_id if customer else customer_id,
-            related_booking_id=booking_id,
-            created_by=user,
-        )
+        try:
+            with transaction.atomic():
+                log = NotificationLog.objects.create(
+                    recipient_name=recipient_name,
+                    recipient_contact=recipient_contact,
+                    channel=channel,
+                    notification_type=notification_type,
+                    subject=subject,
+                    message=effective_message,
+                    status='skipped' if reason else 'queued',
+                    error_message=reason,
+                    attempts=0,
+                    template_params=template_params or {},
+                    related_customer_id=customer.customer_id if customer else customer_id,
+                    related_booking_id=booking_id,
+                    related_payment_id=related_payment_id,
+                    created_by=user,
+                )
+        except IntegrityError:
+            return NotificationLog.objects.filter(
+                notification_type=notification_type,
+                related_payment_id=related_payment_id,
+                channel=channel,
+            ).first()
         if not reason:
             transaction.on_commit(
                 lambda log_id=log.pk: NotificationService._schedule(log_id))
@@ -952,6 +962,7 @@ class NotificationService:
                     template_params=template_params,
                     customer_id=customer.customer_id,
                     booking_id=booking.booking_id,
+                    related_payment_id=payment.payment_id,
                 )
 
     @staticmethod
@@ -1180,4 +1191,5 @@ class NotificationService:
                     template_params=template_params,
                     customer_id=customer.customer_id,
                     booking_id=booking.booking_id,
+                    related_payment_id=payment.payment_id,
                 )

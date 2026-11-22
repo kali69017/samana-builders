@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 from core.models import AuditLog
 from core.permissions import finance_or_above, management_or_above, admin_or_above
-from .models import Payment, Refund, Receipt
+from .models import Payment, Refund
 from .forms import RefundForm
 
 
@@ -94,12 +94,6 @@ def payment_verify_view(request, pk):
             payment.save()
             _apply_payment_effects(payment)
             payment.save(update_fields=['unallocated_amount'])
-
-            # Ensure a receipt exists
-            if not payment.receipts.exists():
-                Receipt.objects.create(payment=payment, receipt_date=payment.payment_date, generated_by=request.user)
-                payment.receipt_generated = True
-                payment.save(update_fields=['receipt_generated'])
 
         _log(request, 'verify', 'Payment', payment.payment_id, f'Verified payment {payment.payment_id}')
         messages.success(request, f'Payment {payment.payment_id} verified successfully!')

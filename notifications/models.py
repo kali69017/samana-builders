@@ -43,6 +43,7 @@ class NotificationLog(models.Model):
     provider_message_id = models.CharField(max_length=255, blank=True, help_text="Gateway message/delivery ID (e.g. SendPK messageid)")
     related_customer_id = models.CharField(max_length=20, blank=True)
     related_booking_id = models.CharField(max_length=20, blank=True)
+    related_payment_id = models.CharField(max_length=20, blank=True, null=True, db_index=True)
     sent_at = models.DateTimeField(null=True, blank=True)
     sending_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -56,6 +57,12 @@ class NotificationLog(models.Model):
         indexes = [
             models.Index(fields=['status', 'channel']),
             models.Index(fields=['notification_type']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['notification_type', 'related_payment_id', 'channel'],
+                name='uniq_notification_payment_channel',
+            ),
         ]
 
 

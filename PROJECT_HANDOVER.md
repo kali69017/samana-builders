@@ -106,6 +106,15 @@ Net advances are posted payments minus refunds posted on or before the delivery 
 - Django admin has a list filter and bulk Stop all messages and Allow messages actions.
 - API fields are read only.
 
+### 5.1 Payment notification trigger
+
+- Payment confirmation and receipt notifications are queued only when a payment becomes `verified`.
+- Pending, rejected, bounced, reversed and under-clearing payments queue nothing.
+- Queueing runs inside the same transaction as the status change, receipt voucher posting and receipt creation.
+- The idempotency key is `(notification_type, related_payment_id, channel)`. Double approval, retries and races cannot create a second set.
+- Receipt numbers are generated when the receipt row is created during verification. A pending payment has no receipt row and no customer-facing receipt page or PDF.
+- Do-not-message and channel preferences still apply.
+
 ## 6. Notification worker commands
 
 Cron:

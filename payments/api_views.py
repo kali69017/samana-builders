@@ -184,15 +184,6 @@ class PaymentViewSet(viewsets.ModelViewSet):
                 if hasattr(booking, 'installment_plan') and booking.installment_plan:
                     booking.installment_plan.recalculate()
 
-                # Auto-generate a receipt (mirrors the web verification flow).
-                from .models import Receipt
-                if not payment.receipts.exists():
-                    Receipt.objects.create(
-                        payment=payment,
-                        receipt_date=payment.payment_date,
-                        generated_by=request.user,
-                    )
-                    payment.receipt_generated = True
             else:
                 payment.status = 'rejected'
                 payment.verified_by = request.user
