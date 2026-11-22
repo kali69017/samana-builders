@@ -17,6 +17,13 @@ This document covers the customer-liability accounting change, manual voucher de
 - Employees with salary slips cannot be deleted. Set them to Resigned or Terminated instead.
 - All 37 menu pages returned HTTP 200 after the wipe.
 
+## Legacy conversion tools
+
+- `convert_to_cash_basis` and `convert_to_customer_liability` are one-time legacy tools. Do not run them on a new database.
+- Both commands skip payments that are not verified and print the number skipped.
+- The old development copy contains one-time conversion vouchers `JV-00032` to `JV-00038`. They explain the expected Customer Advances mismatch on that copy. They do not exist on the clean production database.
+- Stage 1 fresh-database verification is recorded in `release-report/stage1-fresh-integrity.txt`.
+
 ## 1. Roles and permissions
 
 | Action | super_admin | admin | management | accounts | sales | hr | others |
