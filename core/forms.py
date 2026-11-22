@@ -1,7 +1,23 @@
 from django import forms
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.validators import FileExtensionValidator
 from .models import UserProfile, Lead, LeadNote, Agent, AgentCommissionPayment, CompanySettings
+
+LIMITED_USER_ROLES = {'project_manager', 'contractor'}
+
+
+def available_role_choices():
+    choices = [
+        (key, label) for key, label in UserProfile.ROLE_CHOICES
+        if key != 'super_admin'
+    ]
+    if not getattr(settings, 'SHOW_LIMITED_ROLES', False):
+        choices = [
+            (key, label) for key, label in choices
+            if key not in LIMITED_USER_ROLES
+        ]
+    return choices
 
 
 class UserForm(forms.ModelForm):
@@ -70,6 +86,7 @@ class CreateUserForm(forms.Form):
     def __init__(self, *args, **kwargs):
         self.actor = kwargs.pop('actor', None)
         super().__init__(*args, **kwargs)
+        self.fields['role'].choices = available_role_choices()
 
     def clean_role(self):
         role = self.cleaned_data.get('role')
@@ -146,14 +163,21 @@ class UserEditForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        choices = available_role_choices()
         profile = getattr(self.instance, 'profile', None)
         if profile:
             # Existing super admin roles stay visible so they can be viewed/edited.
             if profile.role == 'super_admin':
-                self.fields['role'].choices = UserProfile.ROLE_CHOICES
+                choices = list(UserProfile.ROLE_CHOICES)
+            elif profile.role not in [key for key, _ in choices]:
+                # Existing limited-role users keep their current role even when hidden.
+                choices.append((profile.role, dict(UserProfile.ROLE_CHOICES)[profile.role]))
+            self.fields['role'].choices = choices
             self.fields['role'].initial = profile.role
             self.fields['phone'].initial = profile.phone
             self.fields['cnic'].initial = profile.cnic
+        else:
+            self.fields['role'].choices = choices
 
     def clean(self):
         cleaned = super().clean()

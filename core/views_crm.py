@@ -13,7 +13,10 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from .models import AuditLog, Lead, LeadNote, Agent
 from .forms import LeadForm, LeadNoteForm, AgentForm
-from .permissions import management_or_above, get_user_role
+from .permissions import (
+    management_or_above, get_user_role, role_required, AGENT_VIEW_ROLES,
+    LEAD_VIEW_ROLES,
+)
 from customers.models import Customer
 from bookings.models import Booking
 
@@ -29,6 +32,7 @@ def _log(request, action, model, object_id, description):
 # ─── LEADS ─────────────────────────────────────────────────────────────────────
 
 @login_required
+@role_required(*LEAD_VIEW_ROLES)
 def leads_view(request):
     status_filter = request.GET.get('status', '')
     source_filter = request.GET.get('source', '')
@@ -63,6 +67,7 @@ def leads_view(request):
 
 
 @login_required
+@role_required(*LEAD_VIEW_ROLES)
 def lead_create_view(request):
     if request.method == 'POST':
         form = LeadForm(request.POST)
@@ -77,6 +82,7 @@ def lead_create_view(request):
 
 
 @login_required
+@role_required(*LEAD_VIEW_ROLES)
 def lead_detail_view(request, pk):
     lead = get_object_or_404(Lead.objects.select_related(
         'assigned_to', 'interest_project', 'converted_customer'), pk=pk)
@@ -90,6 +96,7 @@ def lead_detail_view(request, pk):
 
 
 @login_required
+@role_required(*LEAD_VIEW_ROLES)
 def lead_edit_view(request, pk):
     lead = get_object_or_404(Lead, pk=pk)
     if request.method == 'POST':
@@ -118,6 +125,7 @@ def lead_delete_view(request, pk):
 
 
 @login_required
+@role_required(*LEAD_VIEW_ROLES)
 def lead_status_update_view(request, pk):
     """Inline status change from the leads list / detail."""
     lead = get_object_or_404(Lead, pk=pk)
@@ -142,6 +150,7 @@ def lead_status_update_view(request, pk):
 
 
 @login_required
+@role_required(*LEAD_VIEW_ROLES)
 def lead_note_add_view(request, pk):
     lead = get_object_or_404(Lead, pk=pk)
     if request.method == 'POST':
@@ -156,6 +165,7 @@ def lead_note_add_view(request, pk):
 
 
 @login_required
+@role_required(*LEAD_VIEW_ROLES)
 @transaction.atomic
 def lead_convert_view(request, pk):
     """Convert a lead into a Customer record (and optionally a portal login)."""
@@ -212,6 +222,7 @@ def lead_convert_view(request, pk):
 # ─── AGENTS ────────────────────────────────────────────────────────────────────
 
 @login_required
+@role_required(*AGENT_VIEW_ROLES)
 def agents_view(request):
     agents = Agent.objects.annotate(
         booking_count=Count('bookings'),

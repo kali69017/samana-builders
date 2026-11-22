@@ -1,6 +1,7 @@
 from .permissions import (
     get_user_role, MANAGEMENT_ROLES, ADMIN_ROLES, PAYMENTS_ACCESS_ROLES,
     FINANCE_ROLES, ACCOUNTS, SALES, HR_MANAGEMENT_ROLES, PAYROLL_ROLES,
+    PAYMENT_VERIFIER_ROLES,
 )
 
 
@@ -32,6 +33,7 @@ def erp_context(request):
                 'can_view_payments': role in PAYMENTS_ACCESS_ROLES,
         'can_view_expenses': role in FINANCE_ROLES,
         'can_manage_users': role in ADMIN_ROLES,
+        'can_verify_payments': role in PAYMENT_VERIFIER_ROLES,
         'can_view_users': role in MANAGEMENT_ROLES,
         'can_backup': role in ADMIN_ROLES,
         'can_audit': role in MANAGEMENT_ROLES,

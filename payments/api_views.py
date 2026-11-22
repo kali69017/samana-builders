@@ -114,9 +114,10 @@ class PaymentViewSet(viewsets.ModelViewSet):
         if hasattr(request.user, 'profile'):
             user_role = request.user.profile.role
 
-        if not request.user.is_superuser and user_role not in ['super_admin', 'admin']:
+        from core.permissions import PAYMENT_VERIFIER_ROLES
+        if not request.user.is_superuser and user_role not in PAYMENT_VERIFIER_ROLES:
             return Response(
-                {'error': 'Only administrators can verify payments.'},
+                {'error': 'Only accounts, admin or super_admin can verify payments.'},
                 status=status.HTTP_403_FORBIDDEN
             )
 
@@ -134,6 +135,16 @@ class PaymentViewSet(viewsets.ModelViewSet):
                               f'(current status: {payment.get_status_display()}).'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+            if payment.created_by_id == request.user.id and not request.user.is_superuser:
+                return Response(
+                    {'error': 'You cannot verify a payment you created. '
+                              'Another accounts, admin or super_admin user must verify it.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            self_verified = (
+                payment.created_by_id == request.user.id
+                and request.user.is_superuser
+            )
 
             serializer = PaymentVerificationSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
@@ -193,11 +204,14 @@ class PaymentViewSet(viewsets.ModelViewSet):
             payment.save()
 
         from core.models import AuditLog
+        description = f'{action_type.title()} payment {payment.payment_id} via API'
+        if action_type == 'verify' and self_verified:
+            description += ' (self-verified by super_admin)'
         AuditLog.objects.create(
             user=request.user, action='verify' if action_type == 'verify' else 'reject',
             model_name='Payment',
             object_id=payment.payment_id,
-            description=f'{action_type.title()} payment {payment.payment_id} via API'
+            description=description,
         )
 
         return Response(PaymentSerializer(payment).data)

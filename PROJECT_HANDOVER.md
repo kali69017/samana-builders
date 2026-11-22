@@ -38,9 +38,14 @@ This document covers the customer-liability accounting change, manual voucher de
 | Create or edit draft vouchers | Yes | Yes | Yes | Yes | No | No | No |
 | Post or unlock vouchers | Yes | Yes | Yes | No | No | No | No |
 | Record payments and refunds | Yes | Yes | Yes | Yes | No | No | No |
+| Verify payments | Yes | Yes | No | Yes | No | No | No |
+| View properties list and detail | Yes | Yes | Yes | Yes | Yes | Yes | Project Manager yes; Contractor no |
+| View milestones | Yes | Yes | Yes | Yes | Yes | Yes | Project Manager and Contractor yes |
 | View financial, sales and receivables reports | Yes | Yes | Yes | Yes | No | No | No |
 
 A Django superuser always counts as `super_admin`. The API keeps DELETE on vouchers at 405 for every role.
+
+Project Manager and Contractor are explicit view-only roles. Project Manager can view properties and milestones. Contractor can view milestones only. They are hidden from the user create and edit forms unless `SHOW_LIMITED_ROLES=True`. Existing users with these roles keep working and keep their current role visible when edited.
 
 ## 2. Final entity and event posting map
 

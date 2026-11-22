@@ -34,6 +34,12 @@
                         Status: <span class="badge badge-{% if payment.status == 'verified' %}success{% elif payment.status == 'pending' %}warning{% elif payment.status == 'rejected' or payment.status == 'bounced' %}danger{% else %}info{% endif %}" style="font-size:13px;">{{ payment.get_status_display }}</span>
                     </div>
                     <div style="font-size:12px; color:var(--text-secondary);">Recorded by {{ payment.created_by.get_full_name|default:payment.created_by.username }}</div>
+                    {% if payment.verified_by %}
+                    <div style="font-size:12px; color:var(--text-secondary);">
+                        Verified by {{ payment.verified_by.get_full_name|default:payment.verified_by.username }}
+                        on {{ payment.verified_at|date:"d M Y H:i" }}
+                    </div>
+                    {% endif %}
                 </div>
             </div>
             <div style="text-align:right;">
@@ -42,25 +48,31 @@
             </div>
         </div>
 
-        {% if can_manage_users and payment.status in 'pending,draft,under_clearing,partially_applied' %}
-        <!-- Verification Workflow -->
-        <div class="card animate-fade-up" style="padding:16px 24px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:16px;">
-            <strong style="font-size:14px;">Verification Actions:</strong>
-            <form method="post" action="{% url 'payment_verify' payment.pk %}" style="margin:0;">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('Verify this payment of Rs. {{ payment.amount|floatformat:0 }}?');">✓ Verify</button>
-            </form>
-            <form method="post" action="{% url 'payment_reject' payment.pk %}" style="margin:0;">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Reject this payment?');">✕ Reject</button>
-            </form>
-            <form method="post" action="{% url 'payment_bounce' payment.pk %}" style="margin:0; display:flex; gap:6px; align-items:center;">
-                {% csrf_token %}
-                <input type="text" name="bounce_reason" placeholder="Bounce reason" class="form-control" style="width:auto; height:34px; font-size:12px;">
-                <button type="submit" class="btn btn-warning btn-sm" onclick="return confirm('Mark this payment as bounced?');">↩ Bounce</button>
-            </form>
-        </div>
-        {% elif can_manage_users and payment.status == 'verified' %}
+        {% if payment.status in 'pending,draft,under_clearing,partially_applied' %}
+            {% if can_verify_payments or can_manage_users %}
+            <!-- Verification Workflow -->
+            <div class="card animate-fade-up" style="padding:16px 24px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:16px;">
+                <strong style="font-size:14px;">Verification Actions:</strong>
+                {% if can_verify_payments %}
+                <form method="post" action="{% url 'payment_verify' payment.pk %}" style="margin:0;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('Verify this payment of Rs. {{ payment.amount|floatformat:0 }}?');">✓ Verify</button>
+                </form>
+                {% endif %}
+                {% if can_manage_users %}
+                <form method="post" action="{% url 'payment_reject' payment.pk %}" style="margin:0;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Reject this payment?');">✕ Reject</button>
+                </form>
+                <form method="post" action="{% url 'payment_bounce' payment.pk %}" style="margin:0; display:flex; gap:6px; align-items:center;">
+                    {% csrf_token %}
+                    <input type="text" name="bounce_reason" placeholder="Bounce reason" class="form-control" style="width:auto; height:34px; font-size:12px;">
+                    <button type="submit" class="btn btn-warning btn-sm" onclick="return confirm('Mark this payment as bounced?');">↩ Bounce</button>
+                </form>
+                {% endif %}
+            </div>
+            {% endif %}
+        {% elif payment.status == 'verified' and can_manage_users %}
         <div class="card animate-fade-up" style="padding:16px 24px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:16px;">
             <strong style="font-size:14px;">This payment is verified.</strong>
             <form method="post" action="{% url 'payment_reverse' payment.pk %}" style="margin:0;">

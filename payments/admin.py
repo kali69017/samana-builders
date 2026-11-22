@@ -1,4 +1,5 @@
 from django.contrib import admin
+from core.permissions import PAYMENT_VERIFIER_ROLES
 from .models import Payment, Receipt, Refund, PaymentAllocation
 
 
@@ -59,6 +60,12 @@ class PaymentAdmin(admin.ModelAdmin):
         if obj and obj.pk and obj._posted_receipt_exists():
             readonly.extend(['amount', 'booking', 'received_into'])
         return readonly
+
+    def has_change_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+        role = getattr(getattr(request.user, 'profile', None), 'role', None)
+        return role in PAYMENT_VERIFIER_ROLES
 
     def has_delete_permission(self, request, obj=None):
         # Only superusers can delete payments

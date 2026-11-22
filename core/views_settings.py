@@ -12,7 +12,10 @@ from datetime import timedelta
 
 from .models import AuditLog, CompanySettings
 from .forms import CompanySettingsForm
-from .permissions import management_or_above, admin_or_above, finance_or_above
+from .permissions import (
+    management_or_above, admin_or_above, finance_or_above,
+    role_required, MILESTONE_VIEW_ROLES,
+)
 from properties.models import Project, ProjectMilestone
 from properties.forms import ProjectMilestoneForm
 from customers.models import Customer
@@ -50,6 +53,7 @@ def company_settings_view(request):
 # ─── PROJECT MILESTONES ────────────────────────────────────────────────────────
 
 @login_required
+@role_required(*MILESTONE_VIEW_ROLES)
 def milestones_view(request):
     project_filter = request.GET.get('project', '')
     milestones = ProjectMilestone.objects.select_related('project').all()

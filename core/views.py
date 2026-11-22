@@ -19,6 +19,7 @@ from .forms import UserForm, UserProfileForm, CreateUserForm, UserEditForm, Rest
 from .permissions import (
     role_required, super_admin_required, admin_or_above,
     management_or_above, finance_or_above, payments_access, get_user_role,
+    PROPERTY_VIEW_ROLES, AI_VIEW_ROLES,
 )
 from customers.models import Customer, CustomerNominee
 from properties.models import Project, Plot
@@ -221,7 +222,9 @@ def dashboard_view(request):
         for entry in monthly_revenue_data_raw
     ]
     
-    max_amount = max([item['amount'] for item in monthly_revenue_data]) if monthly_revenue_data else 1
+    max_amount = max(
+        [item['amount'] for item in monthly_revenue_data], default=0
+    ) or 1
     for item in monthly_revenue_data:
         item['pct'] = round((item['amount'] / max_amount) * 100, 1)
     
@@ -915,6 +918,7 @@ def customer_do_not_contact_view(request, pk):
 # ─── PROPERTIES / PROJECTS / PLOTS ───────────────────────────────────────────────
 
 @login_required
+@role_required(*PROPERTY_VIEW_ROLES)
 def properties_view(request):
     projects = Project.objects.prefetch_related('phases').all()
     plots = Plot.objects.select_related('project', 'phase').all()
@@ -1180,6 +1184,7 @@ def plot_delete_view(request, pk):
     return render(request, 'confirm_delete.html', {'object': plot, 'title': 'Delete Plot', 'cancel_url': 'properties'})
 
 @login_required
+@role_required(*PROPERTY_VIEW_ROLES)
 def plot_detail_view(request, pk):
     plot = get_object_or_404(
         Plot.objects.select_related('project', 'phase'),
@@ -2655,6 +2660,7 @@ def portal_view(request):
 # ─── AI ASSISTANT (LangChain + OpenRouter) ─────────────────────────────────────
 
 @login_required
+@role_required(*AI_VIEW_ROLES)
 def ai_assistant_page_view(request):
     """ERP AI chat assistant page (staff only)."""
     from django.conf import settings

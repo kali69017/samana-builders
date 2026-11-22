@@ -198,6 +198,7 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 _RUNNING_TESTS = 'test' in [arg.lower() for arg in __import__('sys').argv]
 _MANIFEST_EXISTS = (BASE_DIR / 'staticfiles' / 'staticfiles.json').exists()
 _FORCE_MANIFEST = os.environ.get('STATICFILES_MANIFEST', '0').lower() in ('1', 'true', 'yes')
+SHOW_LIMITED_ROLES = os.environ.get('SHOW_LIMITED_ROLES', 'False').lower() in ('1', 'true', 'yes')
 if DEBUG or _RUNNING_TESTS or (not _MANIFEST_EXISTS and not _FORCE_MANIFEST):
     STORAGES = {
         'default': {

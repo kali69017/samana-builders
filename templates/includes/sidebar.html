@@ -18,24 +18,30 @@
                     Dashboard
                 </a>
             </li>
+            {% if user_role != 'project_manager' and user_role != 'contractor' %}
             <li>
                 <a href="{% url 'customers' %}" class="nav-link{% if url_name == 'customers' or url_name == 'customer_create' or url_name == 'customer_edit' or url_name == 'customer_detail' or url_name == 'customer_profile_create' %} active{% endif %}">
                     <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
                     Customers
                 </a>
             </li>
+            {% endif %}
+            {% if user_role != 'contractor' %}
             <li>
                 <a href="{% url 'properties' %}" class="nav-link{% if url_name == 'properties' or url_name == 'project_create' or url_name == 'project_edit' or url_name == 'plot_create' or url_name == 'plot_edit' or url_name == 'reservation_create' %} active{% endif %}">
                     <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg></span>
                     Properties
                 </a>
             </li>
+            {% endif %}
+            {% if user_role != 'project_manager' and user_role != 'contractor' %}
             <li>
                 <a href="{% url 'bookings' %}" class="nav-link{% if url_name == 'bookings' or url_name == 'booking_create' or url_name == 'booking_edit' or url_name == 'booking_detail' or url_name == 'booking_transfer' %} active{% endif %}">
                     <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></span>
                     Bookings
                 </a>
             </li>
+            {% endif %}
             {% if can_view_payments %}
             <li>
                 <a href="{% url 'payments' %}" class="nav-link{% if url_name == 'payments' or url_name == 'payment_create' or url_name == 'payment_detail' or url_name == 'receipt_detail' %} active{% endif %}">
@@ -71,12 +77,14 @@
                 </a>
             </li>
             {% endif %}
+            {% if user_role != 'project_manager' and user_role != 'contractor' %}
             <li>
                 <a href="{% url 'agents' %}" class="nav-link{% if url_name == 'agents' or url_name == 'agent_create' or url_name == 'agent_detail' or url_name == 'agent_edit' %} active{% endif %}">
                     <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="7" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></span>
                     Agents
                 </a>
             </li>
+            {% endif %}
         </ul>
 
         {% if can_view_payments %}
@@ -250,6 +258,7 @@
         {% endif %}
 
         {% if not is_employee %}
+        {% if user_role != 'project_manager' and user_role != 'contractor' %}
         <div class="nav-divider"></div>
         <div class="nav-section">AI Assistant</div>
         <ul class="nav-menu">
@@ -274,6 +283,7 @@
             </li>
             {% endif %}
         </ul>
+        {% endif %}
 
         <div class="nav-divider"></div>
         <div class="nav-section">Administration</div>

@@ -25,6 +25,22 @@ PAYMENTS_ACCESS_ROLES = (SUPER_ADMIN, ADMIN, MANAGEMENT, ACCOUNTS)
 HR_MANAGEMENT_ROLES = (SUPER_ADMIN, ADMIN, MANAGEMENT, HR)
 # Payroll viewing + processing (accounts can record salary payments)
 PAYROLL_ROLES = (SUPER_ADMIN, ADMIN, MANAGEMENT, HR, ACCOUNTS)
+# Payment verification is maker-checker: accounts, admin and super_admin only.
+PAYMENT_VERIFIER_ROLES = (SUPER_ADMIN, ADMIN, ACCOUNTS)
+# Roles with ordinary ERP view access. Limited view-only roles are added below.
+BASE_VIEW_ROLES = (
+    SUPER_ADMIN, ADMIN, MANAGEMENT, ACCOUNTS, SALES, HR, STAFF,
+)
+PROPERTY_VIEW_ROLES = BASE_VIEW_ROLES + (PROJECT_MANAGER,)
+MILESTONE_VIEW_ROLES = BASE_VIEW_ROLES + (PROJECT_MANAGER, CONTRACTOR)
+AGENT_VIEW_ROLES = BASE_VIEW_ROLES
+AI_VIEW_ROLES = BASE_VIEW_ROLES
+LEAD_VIEW_ROLES = MANAGEMENT_ROLES + (ACCOUNTS, SALES)
+# Explicit limited-role modules. These roles get no other ERP module access.
+VIEW_ONLY_ROLES = {
+    PROJECT_MANAGER: ('properties', 'milestones'),
+    CONTRACTOR: ('milestones',),
+}
 
 
 def is_portal_customer(user):

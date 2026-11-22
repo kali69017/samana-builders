@@ -25,8 +25,8 @@ see and which actions you are allowed to perform.
 | **Accounts** | Accountant, finance officer | Payments, receipts, expenses, finance, payroll view, reports, installment plans |
 | **Sales** | Sales representative | Customers, properties, bookings, leads, agents — view & create; CANNOT view payments or confirm bookings |
 | **HR** | HR officer | HR module (employees, salary, attendance, leave, payroll) |
-| **Project Manager** | Construction PM | Milestones and project progress views |
-| **Contractor** | Site contractor | Limited view access |
+| **Project Manager** | Construction PM | Properties and milestones, view only |
+| **Contractor** | Site contractor | Milestones, view only |
 | **Staff** | General staff | Login, dashboard, profile, view customers/properties/bookings |
 
 ### Access summary by action

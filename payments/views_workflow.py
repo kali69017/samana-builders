@@ -16,7 +16,10 @@ from datetime import timedelta
 logger = logging.getLogger(__name__)
 
 from core.models import AuditLog
-from core.permissions import finance_or_above, management_or_above, admin_or_above
+from core.permissions import (
+    finance_or_above, management_or_above, admin_or_above, role_required,
+    PAYMENT_VERIFIER_ROLES,
+)
 from .models import Payment, Refund
 from .forms import RefundForm
 
@@ -63,7 +66,7 @@ def _apply_payment_effects(payment):
 
 
 @login_required
-@admin_or_above
+@role_required(*PAYMENT_VERIFIER_ROLES)
 def payment_verify_view(request, pk):
     payment = get_object_or_404(Payment.objects.select_related('booking', 'installment'), pk=pk)
     # Only *pending* payments may be verified — drafts/ bounced/ finalised states
@@ -72,6 +75,13 @@ def payment_verify_view(request, pk):
         messages.error(
             request,
             f'Only pending payments can be verified (current status: {payment.get_status_display()}).',
+        )
+        return redirect('payment_detail', pk=pk)
+    if payment.created_by_id == request.user.id and not request.user.is_superuser:
+        messages.error(
+            request,
+            'You cannot verify a payment you created. '
+            'Another accounts, admin or super_admin user must verify it.',
         )
         return redirect('payment_detail', pk=pk)
 
@@ -87,6 +97,10 @@ def payment_verify_view(request, pk):
                 return redirect('payment_detail', pk=pk)
             from bookings.models import Booking
             Booking.objects.select_for_update().get(pk=payment.booking_id)
+            self_verified = (
+                payment.created_by_id == request.user.id
+                and request.user.is_superuser
+            )
 
             payment.status = 'verified'
             payment.verified_by = request.user
@@ -95,7 +109,10 @@ def payment_verify_view(request, pk):
             _apply_payment_effects(payment)
             payment.save(update_fields=['unallocated_amount'])
 
-        _log(request, 'verify', 'Payment', payment.payment_id, f'Verified payment {payment.payment_id}')
+        description = f'Verified payment {payment.payment_id}'
+        if self_verified:
+            description += ' (self-verified by super_admin)'
+        _log(request, 'verify', 'Payment', payment.payment_id, description)
         messages.success(request, f'Payment {payment.payment_id} verified successfully!')
     return redirect('payment_detail', pk=pk)
 
