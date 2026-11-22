@@ -1,8 +1,9 @@
 from datetime import date
 from decimal import Decimal
 
+from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import User
-from django.test import Client, TestCase
+from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -11,6 +12,7 @@ from bookings.models import Booking
 from core.models import AuditLog, UserProfile
 from customers.models import Customer
 from finance.models import AccountHead
+from payments.admin import PaymentAdmin
 from payments.models import Payment
 from properties.models import Plot, Project
 
@@ -177,3 +179,35 @@ class APIMakerCheckerTests(MakerCheckerBase, TestCase):
             action='verify', model_name='Payment', object_id=payment.payment_id,
         ).latest('id')
         self.assertIn('self-verified by super_admin', log.description)
+
+
+class PaymentAdminPermissionTests(MakerCheckerBase, TestCase):
+    def setUp(self):
+        super().setUp()
+        self.model_admin = PaymentAdmin(Payment, AdminSite())
+
+    def request_for(self, user):
+        request = RequestFactory().get('/admin/payments/payment/')
+        request.user = user
+        return request
+
+    def test_accounts_can_access_payment_admin(self):
+        accounts = self.make_user('admin_accounts', 'accounts')
+        request = self.request_for(accounts)
+        self.assertTrue(self.model_admin.has_module_permission(request))
+        self.assertTrue(self.model_admin.has_view_permission(request))
+        self.assertTrue(self.model_admin.has_change_permission(request))
+
+    def test_management_cannot_access_payment_admin(self):
+        manager = self.make_user('admin_manager', 'management')
+        request = self.request_for(manager)
+        self.assertFalse(self.model_admin.has_module_permission(request))
+        self.assertFalse(self.model_admin.has_view_permission(request))
+        self.assertFalse(self.model_admin.has_change_permission(request))
+
+    def test_superuser_can_access_payment_admin(self):
+        superuser = self.make_user('admin_super', 'super_admin', superuser=True)
+        request = self.request_for(superuser)
+        self.assertTrue(self.model_admin.has_module_permission(request))
+        self.assertTrue(self.model_admin.has_view_permission(request))
+        self.assertTrue(self.model_admin.has_change_permission(request))
