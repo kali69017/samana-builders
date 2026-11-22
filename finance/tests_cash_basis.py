@@ -124,8 +124,17 @@ class CashBasisConversionTests(TestCase):
             [(self.receivable, Decimal('1000'), Decimal('0')),
              (self.revenue, Decimal('0'), Decimal('1000'))],
         )
+        Payment.objects.bulk_create([
+            Payment(
+                payment_id='PAY-00777', booking=self.booking,
+                received_into=self.cash, amount=Decimal('100'),
+                payment_date=date.today(), payment_method='cash',
+                payment_type='advance', status='verified', created_by=self.user,
+            ),
+        ])
+        self.payment = Payment.objects.get(payment_id='PAY-00777')
         self.payment_voucher = self._old_voucher(
-            'Payment', 777, date.today(),
+            'Payment', self.payment.pk, date.today(),
             [(self.cash, Decimal('100'), Decimal('0')),
              (self.receivable, Decimal('0'), Decimal('100'))],
         )

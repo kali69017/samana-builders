@@ -17,8 +17,11 @@ from finance.models import Voucher, VoucherLine
 
 
 class Command(BaseCommand):
-    help = ('Post correcting journals from cash-basis revenue to Customer '
-            'Advances & Bookings for payments on undelivered bookings.')
+    help = (
+        'ONE-TIME LEGACY TOOL: post correcting journals from cash-basis '
+        'revenue to Customer Advances & Bookings for verified payments on '
+        'undelivered bookings. Do not run on a new database.'
+    )
 
     def add_arguments(self, parser):
         parser.add_argument('--dry-run', action='store_true')
@@ -49,6 +52,7 @@ class Command(BaseCommand):
         corrections = 0
         total = Decimal('0.00')
         skipped_delivered = 0
+        skipped_unverified = 0
         cash_basis_source_ids = set(Voucher.objects.filter(
             reference_type='CashBasisConversion', status='posted',
         ).values_list('reference_id', flat=True))
@@ -95,6 +99,9 @@ class Command(BaseCommand):
                     pk=source_voucher.reference_id).first()
                 if payment is None:
                     continue
+                if payment.status != 'verified':
+                    skipped_unverified += 1
+                    continue
                 if (payment.booking.delivery_date is not None
                         and payment.payment_date >= payment.booking.delivery_date):
                     skipped_delivered += 1
@@ -112,6 +119,9 @@ class Command(BaseCommand):
                 payment = Payment.objects.select_related('booking').filter(
                     pk=voucher.reference_id).first()
                 if payment is None:
+                    continue
+                if payment.status != 'verified':
+                    skipped_unverified += 1
                     continue
                 delivered = bool(
                     payment.booking.delivery_date
@@ -169,6 +179,10 @@ class Command(BaseCommand):
         self.stdout.write(
             f'{prefix} {corrections} customer liability correction(s) '
             f'totalling {total}.')
+        if skipped_unverified:
+            self.stdout.write(
+                f'Skipped {skipped_unverified} unverified payment(s); '
+                'their vouchers are not converted.')
         if skipped_delivered:
             self.stdout.write(
                 f'Skipped {skipped_delivered} delivered-booking payment(s); '

@@ -15,8 +15,11 @@ from finance.models import Voucher, VoucherLine
 
 
 class Command(BaseCommand):
-    help = ('DEPRECATED: cash basis was replaced by customer-liability accounting. '
-            'Use convert_to_customer_liability for existing data.')
+    help = (
+        'ONE-TIME LEGACY TOOL: convert old accrual-basis vouchers to the '
+        'deprecated cash-basis mapping for verified payments. Do not run on a '
+        'new database.'
+    )
 
     def add_arguments(self, parser):
         parser.add_argument('--dry-run', action='store_true')
@@ -48,11 +51,17 @@ class Command(BaseCommand):
 
         payment_journals = 0
         booking_journals = 0
+        skipped_unverified = 0
+        from payments.models import Payment
 
         for voucher in Voucher.objects.filter(
                 reference_type='Payment', status='posted',
         ):
             if self._conversion_exists(voucher):
+                continue
+            payment = Payment.objects.filter(pk=voucher.reference_id).first()
+            if payment is None or payment.status != 'verified':
+                skipped_unverified += 1
                 continue
             credited_ar = voucher.lines.filter(
                 account_head=receivable, credit__gt=0,
@@ -62,8 +71,6 @@ class Command(BaseCommand):
             payment_journals += 1
             if dry:
                 continue
-            from payments.models import Payment
-            payment = Payment.objects.filter(pk=voucher.reference_id).first()
             post_source_voucher(
                 reference_type='CashBasisConversion', reference_id=voucher.pk,
                 voucher_type='JV', date=payment.payment_date if payment else voucher.date,
@@ -105,6 +112,10 @@ class Command(BaseCommand):
         self.stdout.write(
             f'{prefix} {payment_journals} payment correction(s) and '
             f'{booking_journals} booking reversal(s).')
+        if skipped_unverified:
+            self.stdout.write(
+                f'Skipped {skipped_unverified} unverified payment(s); '
+                'their vouchers are not converted.')
         self.stdout.write(f'Receivable balance before: {before_ar}')
         self.stdout.write(f'Receivable balance after: {after_ar}')
         self.stdout.write(f'Revenue balance before: {before_revenue}')
