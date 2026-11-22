@@ -6,9 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Real Estate Management ERP + corporate website for Samana Builders & Developers. Django 6.0 + Django REST Framework backend serving two frontends: a server-rendered ERP (Django templates) and a corporate marketing site (also Django templates, with a compiled React build artifact in `frontend/dist/`). SQLite for dev, PostgreSQL for production.
 
-## Work status (last updated 2026-10-11)
+> Current operating guide: `AGENTS.md`.
+> Current production release: `40446b4`.
+> Production was wiped on 2026-11-22. Only `superadmin` remains.
+> This file is historical context and may lag behind `AGENTS.md`.
 
-### Shipped — production-ready finalization (cron scheduler + Docker deploy, 2026-10-11)
+## Historical work status (last updated 2026-10-11)
+
+### Shipped - production-ready finalization (cron scheduler + Docker deploy, 2026-10-11)
 
 - **Notification scheduler**: `send_installment_reminders` now fires both installment
   reminders (due within N days) and overdue alerts, with a per-booking cooldown dedupe via

@@ -1,8 +1,21 @@
 # Samana Builders ERP - Project Handover
 
-Date: 2026-11-16
+Date: 2026-11-22. Originally written 2026-11-16.
 
 This document covers the customer-liability accounting change, manual voucher deletion, customer do-not-message controls, and the operating rules needed to run the ERP safely.
+
+## Current production state, 2026-11-22
+
+- Production release commit: `40446b4`.
+- The production database was wiped on 2026-11-22.
+- Only the `superadmin` user remains. Its profile role is `super_admin`.
+- 29 seeded account heads, 103 migrations, 308 auth permissions and 77 content types remain.
+- Expense categories are empty. Create the real categories in the ERP.
+- Finance integrity passed after the wipe with all balances at 0.00.
+- Pre-wipe backup: `/root/backups/samana-before-wipe-2026-11-22-134148.dump`, 344K.
+- Confirmed, active and completed bookings can be delivered.
+- Employees with salary slips cannot be deleted. Set them to Resigned or Terminated instead.
+- All 37 menu pages returned HTTP 200 after the wipe.
 
 ## 1. Roles and permissions
 
@@ -53,6 +66,14 @@ The receivable account and the refunds payable account stay seeded, but the new 
 6. Delivery cannot run twice. No undo exists.
 
 Net advances are posted payments minus refunds posted on or before the delivery date. The delivery journal is idempotent on `('BookingDelivery', booking id)` and is atomic with the status change.
+
+### 3.1 Employee deletion rules
+
+- Employees with salary slips cannot be deleted.
+- `Employee.delete()` raises a validation error when payroll history exists.
+- The ERP delete action shows the error and keeps the employee record.
+- Set the employee status to Resigned or Terminated instead.
+- This prevents salary payments and salary slips from being removed while a posted salary voucher remains.
 
 ## 4. Voucher deletion rules
 
@@ -187,7 +208,7 @@ Do not delete these until the release is accepted:
 5. E2E fixes and reports.
 6. This task: handover documents, tests and release report.
 
-No commit was made as part of this task.
+No commit was made as part of that original task. Later release commits exist. See the current production state at the top of this document.
 
 ## 2026-11-16: Final go-live hardening
 

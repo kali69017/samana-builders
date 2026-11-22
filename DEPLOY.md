@@ -5,6 +5,28 @@ The stack: `db` (Postgres), `web` (Django + gunicorn + whitenoise), `worker`
 (notification queue worker), `scheduler` (cron for reminders and retries) and
 `caddy` (auto-HTTPS reverse proxy).
 
+## Production release record: 2026-11-22
+
+This release fixed two defects and then wiped the test data before handover.
+
+- App directory: `/opt/samana`
+- Branch: `main`
+- Release commit: `40446b4`
+- Booking delivery now accepts confirmed, active and completed bookings.
+- Employees with salary slips cannot be deleted. Set them to Resigned or Terminated instead.
+- Pre-deploy backup: `/root/backups/samana-before-fix-2026-11-22-131634.dump`, 344K.
+- Images rebuilt: `web`, `worker`, `scheduler`.
+- Services started: `db`, `web`, `worker`, `scheduler`, `caddy`.
+- `migrate --check` reported no pending migrations.
+- Finance integrity check passed before the wipe.
+- Pre-wipe backup: `/root/backups/samana-before-wipe-2026-11-22-134148.dump`, 344K.
+- Wipe removed 441 business rows from 73 tables and deleted 3 extra users.
+- Only `superadmin` remains, with profile role `super_admin`.
+- 29 account heads, 103 migrations, 308 auth permissions and 77 content types remain.
+- Expense categories are empty after the wipe.
+- Finance integrity check passed after the wipe with all balances at 0.00.
+- All 37 menu pages returned HTTP 200 after the wipe.
+
 ## Production release record: 2026-11-18
 
 This release has been executed on the server.

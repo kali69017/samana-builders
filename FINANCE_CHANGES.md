@@ -1,5 +1,7 @@
 # Finance Module Changes
 
+> Production note: the production database was wiped on 2026-11-22. Only `superadmin`, the 29 seeded account heads and the migration history remain. Examples and balances below are historical.
+
 ## Stage 1: Chart of Accounts
 
 ### What was broken or missing

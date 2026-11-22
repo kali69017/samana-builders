@@ -11,14 +11,18 @@ The production release is complete.
 - Production host app directory: `/opt/samana`
 - Remote: `https://github.com/kali69017/samana-builders.git`
 - Branch: `main`
-- Release commit with the legacy finance conversion fix: `7149a83`
+- Current production release commit: `40446b4`
+- Earlier release commit with the legacy finance conversion fix: `7149a83`
 - Postgres container: `samana-db-1`
 - Database name and user: both `samana`
 - Services: `db`, `web`, `worker`, `scheduler`, `caddy`
 - Public site: `https://samanabuilders.com/`
-- Production database was recreated empty during the release.
+- Production database was wiped on 2026-11-22. Only the `superadmin` user remains.
 - Production superuser username: `superadmin`. The password is not recorded here.
-- Finance integrity check passed after the clean start.
+- Finance integrity check passed after the wipe with all balances at 0.00.
+- 29 account heads and 103 migrations remain after the wipe.
+- Expense categories are empty after the wipe. Create the real categories in the ERP.
+- Pre-wipe backup: `/root/backups/samana-before-wipe-2026-11-22-134148.dump`, 344K.
 - The host cron backup is installed and was manually tested.
 
 ## Environment (Windows development)
@@ -130,7 +134,18 @@ Chart of accounts:
 - No undo exists.
 - `templates/booking_deliver.html` and `core/views.py::booking_deliver_view` implement the page.
 - API action: `POST /api/bookings/<id>/deliver/`.
-- Delivery state on production after the clean start: no bookings exist.
+- Delivery state on production after the 2026-11-22 wipe: no bookings exist.
+
+## Employee deletion
+
+- Employees with salary slips cannot be deleted.
+- `hr/models.py::Employee.delete` raises `ValidationError` when `salary_slips` exist.
+- `hr/views.py::employee_delete_view` blocks the action and shows a clear message.
+- Set the employee status to Resigned or Terminated instead.
+- This prevents cascade removal of `SalaryPayment` and `SalarySlip` while a posted salary voucher remains.
+- Regression tests: `hr.tests.EmployeeModelTest.test_employee_with_salary_slip_cannot_be_deleted`, `hr.tests.PayrollWorkflowTest.test_employee_delete_view_blocks_payroll_history` and `hr.tests.PayrollWorkflowTest.test_employee_without_payroll_still_deletes`.
+
+The pre-release delivery state below is historical and no longer applies after the 2026-11-22 wipe.
 
 Production pre-release delivery state was recorded in `release-report/booking-delivery-state.txt`:
 
@@ -143,7 +158,7 @@ Production pre-release delivery state was recorded in `release-report/booking-de
 - BKG-00012 pending, 1,500.00 advances.
 - No booking had possession date or possession taken set without a delivery date.
 
-`release-report/deliver_existing_bookings.py` is a proposed idempotent script. Its mapping is empty and it was not run. Fill the mapping with booking number to ISO date, run `--dry-run` first, then run for real. It wraps all deliveries in one transaction and calls `booking.mark_delivered`.
+`release-report/deliver_existing_bookings.py` is historical and no longer applicable after the 2026-11-22 wipe. Its mapping is empty and it was not run.
 
 ## Voucher deletion
 
@@ -297,7 +312,23 @@ Production stack:
 
 `web`, `worker` and `scheduler` build the same repository image and use the same `x-app-env` environment.
 
-Release history on 2026-11-18:
+Release history on 2026-11-22:
+
+- Release commit: `40446b4`.
+- Fixes: confirmed bookings can be delivered; employees with payroll history cannot be deleted.
+- Pre-deploy backup: `/root/backups/samana-before-fix-2026-11-22-131634.dump`, 344K.
+- Images rebuilt for `web`, `worker` and `scheduler`; all services started.
+- `migrate --check` reported no pending migrations.
+- Finance integrity check passed before the wipe.
+- Pre-wipe backup: `/root/backups/samana-before-wipe-2026-11-22-134148.dump`, 344K.
+- Production wipe removed 441 business rows across 73 tables and deleted 3 extra users.
+- Only `superadmin` remains. Its profile role is `super_admin`.
+- 29 account heads, 103 migrations, 308 auth permissions and 77 content types remain.
+- Expense categories are empty.
+- Finance integrity check passed after the wipe with debit 0.00, credit 0.00 and Customer Advances 0.00.
+- All 37 menu pages returned HTTP 200 after the wipe, with no console errors.
+
+Historical release history on 2026-11-18:
 
 - Pre-release dump: `/root/backups/samana-pre-release-2026-11-16.dump`.
 - Final pre-clean dump: `/root/backups/samana-before-clean-start-2026-11-18-082634.dump`.
@@ -332,9 +363,8 @@ See `DEPLOY.md` for the full command sequence, rollback commands and server vali
 - System vouchers cannot be deleted.
 - Per-customer receivable balances are not tracked in the ledger.
 - Manual journals posted directly to Customer Advances can make the integrity check fail by design.
-- BKG-00010 was completed without a delivery date before the production wipe.
-- The proposed delivery script mapping is empty.
-- The wipe script was never run with `--confirm`.
 - SQLite concurrent writes are hardened, but production uses PostgreSQL.
 - Worker logs zero-row polling every 10 seconds.
-- The production database is empty after the clean start. Create the real company data and open the first admin session.
+- The production database contains only `superadmin`. Create the real company data and open the first admin session.
+- Expense categories are empty after the wipe. Create the categories used by the business.
+- The pre-wipe production data is preserved in `/root/backups/samana-before-wipe-2026-11-22-134148.dump`.
