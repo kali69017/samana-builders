@@ -65,7 +65,7 @@ class RefundIdempotencyTest(TestCase):
         self.assertEqual(second.status_code, 302)
         self.assertEqual(Refund.objects.filter(idempotency_key='refund-token-1').count(), 1)
 
-    def test_double_web_post_same_token_creates_one_payment_and_one_queue_set(self):
+    def test_double_web_post_same_token_creates_one_pending_payment(self):
         self.assertIsNotNone(self.account)
         from notifications.models import NotificationLog
         data = {
@@ -77,14 +77,21 @@ class RefundIdempotencyTest(TestCase):
             'payment_type': 'advance',
             'idempotency_key': 'payment-web-token-1',
         }
+        queued_before = NotificationLog.objects.count()
         first = self.client.post('/payments/create/', data)
         queued_after_first = NotificationLog.objects.count()
         second = self.client.post('/payments/create/', data)
         self.assertEqual(first.status_code, 302)
         self.assertEqual(second.status_code, 302)
-        self.assertEqual(Payment.objects.filter(idempotency_key='payment-web-token-1').count(), 1)
-        self.assertGreater(queued_after_first, 0)
-        self.assertEqual(NotificationLog.objects.count(), queued_after_first)
+        payment = Payment.objects.get(idempotency_key='payment-web-token-1')
+        self.assertEqual(payment.status, 'pending')
+        self.assertFalse(payment.receipts.exists())
+        self.assertEqual(queued_after_first, queued_before)
+        self.assertEqual(NotificationLog.objects.count(), queued_before)
+        self.client.post(f'/payments/{payment.pk}/verify/')
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, 'verified')
+        self.assertGreater(NotificationLog.objects.count(), queued_before)
 
     def test_double_api_post_same_token_creates_one_payment(self):
         self.assertIsNotNone(self.account)
