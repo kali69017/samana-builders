@@ -50,6 +50,7 @@
                             <th>Amount</th>
                             <th>Late Fee</th>
                             <th>Paid</th>
+                            <th>Pending</th>
                             <th>Remaining</th>
                             <th>Status</th>
                             <th class="no-sort">Actions</th>
@@ -63,10 +64,11 @@
                             <td>Rs. {{ inst.amount|floatformat:0 }}</td>
                             <td>Rs. {{ inst.late_fee|floatformat:0 }}</td>
                             <td>Rs. {{ inst.paid_amount|floatformat:0 }}</td>
+                            <td>Rs. {{ inst.pending_payment_amount|floatformat:0 }}</td>
                             <td>Rs. {{ inst.remaining_amount|floatformat:0 }}</td>
                             <td>
-                                <span class="badge badge-{% if inst.status == 'paid' %}success{% elif inst.status == 'overdue' %}danger{% elif inst.status == 'partial' %}warning{% else %}secondary{% endif %}">
-                                    {{ inst.get_status_display }}
+                                <span class="badge badge-{% if inst.payment_pending_verification %}warning{% elif inst.status == 'paid' %}success{% elif inst.status == 'overdue' %}danger{% elif inst.status == 'partial' %}warning{% else %}secondary{% endif %}">
+                                    {{ inst.display_status }}
                                 </span>
                             </td>
                             <td>

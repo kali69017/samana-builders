@@ -83,33 +83,50 @@ def installment_plan_detail_view(request, pk):
 @login_required
 @finance_or_above
 def installment_mark_paid_view(request, pk):
-    """Manually mark an installment as paid and adjust the booking advance."""
+    """Record a pending payment for an installment.
+
+    The installment becomes paid only when that payment is verified.
+    """
     installment = get_object_or_404(Installment.objects.select_related('plan__booking'), pk=pk)
     booking = installment.plan.booking
 
     if request.method == 'POST':
         with transaction.atomic():
+            installment = Installment.objects.select_for_update().get(pk=installment.pk)
+            if installment.payments.filter(
+                    status__in=['pending', 'under_clearing']).exists():
+                messages.error(
+                    request,
+                    'A payment for this installment is already pending verification.',
+                )
+                return redirect('installment_plan_detail', pk=installment.plan_id)
+            from finance.accounting import cash_bank_head
+            from payments.models import Payment
             remaining = installment.remaining_amount
-            installment.paid_amount = installment.amount + installment.late_fee
-            installment.status = 'paid'
-            installment.paid_date = timezone.localdate()
-            installment.save()
-
-            # Keep revenue (booking.advance_paid) consistent with the adjustment.
-            new_advance = booking.advance_paid + remaining
-            booking.advance_paid = min(new_advance, booking.total_amount)
-            if booking.remaining_balance <= 0:
-                booking.status = 'completed'
-            booking.save()
-
-            # Recalculate the plan: this installment is now settled, so the
-            # remaining balance shrinks and later installments must adjust.
-            if hasattr(booking, 'installment_plan') and booking.installment_plan:
-                booking.installment_plan.recalculate()
+            if remaining <= 0:
+                messages.error(request, 'This installment has no remaining amount.')
+                return redirect('installment_plan_detail', pk=installment.plan_id)
+            payment = Payment.objects.create(
+                booking=booking,
+                installment=installment,
+                received_into=cash_bank_head('cash'),
+                amount=remaining,
+                payment_date=timezone.localdate(),
+                payment_method='cash',
+                payment_type='installment',
+                status='pending',
+                created_by=request.user,
+                notes='Installment payment recorded, pending verification',
+            )
 
         _log(request, 'update', 'Installment', pk,
-             f'Marked installment {installment.installment_number} of {booking.booking_id} as paid')
-        messages.success(request, f'Installment #{installment.installment_number} marked as paid.')
+             f'Recorded pending payment {payment.payment_id} for installment '
+             f'{installment.installment_number} of {booking.booking_id}')
+        messages.success(
+            request,
+            f'Payment {payment.payment_id} recorded for installment '
+            f'#{installment.installment_number} and is pending verification.',
+        )
     return redirect('installment_plan_detail', pk=installment.plan_id)
 
 

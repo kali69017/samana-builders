@@ -81,35 +81,28 @@ class BookingViewSet(viewsets.ModelViewSet):
             plot = Plot.objects.select_for_update().get(pk=serializer.validated_data['plot'].pk)
             if plot.status in ('booked', 'sold', 'cancelled'):
                 raise ValidationError({'plot': f'Plot {plot.plot_number} is not available for booking.'})
-            booking = serializer.save(created_by=self.request.user)
-            plot.status = 'booked'
-            plot.save()
-            # Record the upfront advance as a real verified Payment so the
-            # payment ledger, receipts, and customer payment history stay
-            # consistent with booking.advance_paid.
             from decimal import Decimal as _Decimal
             advance = _Decimal(serializer.validated_data.get('advance_paid') or 0)
+            booking = serializer.save(
+                created_by=self.request.user, advance_paid=_Decimal('0'))
+            plot.status = 'booked'
+            plot.save()
+            # Record the upfront advance as a pending Payment. The booking
+            # balance and receipt are only applied when it is verified.
             if advance > 0:
-                from payments.models import Payment, Receipt
-                payment = Payment.objects.create(
+                from finance.accounting import cash_bank_head
+                from payments.models import Payment
+                Payment.objects.create(
                     booking=booking,
+                    received_into=cash_bank_head('cash'),
                     amount=advance,
                     payment_date=timezone.now().date(),
                     payment_method='cash',
                     payment_type='down_payment',
-                    status='verified',
-                    verified_by=self.request.user,
-                    verified_at=timezone.now(),
+                    status='pending',
                     created_by=self.request.user,
-                    notes='Upfront advance collected at booking',
+                    notes='Upfront advance recorded at booking, pending verification',
                 )
-                Receipt.objects.create(
-                    payment=payment,
-                    receipt_date=payment.payment_date,
-                    generated_by=self.request.user,
-                )
-                payment.receipt_generated = True
-                payment.save(update_fields=['receipt_generated'])
             # Link the reservation if one exists for this customer+plot.
             from .models import Reservation
             Reservation.objects.filter(
@@ -374,54 +367,56 @@ class InstallmentViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'])
     def mark_paid(self, request, pk=None):
-        """Mark an installment paid and record a verified Payment for the ledger."""
+        """Record a pending payment for an installment.
+
+        The installment becomes paid only when that payment is verified.
+        """
         from django.db import transaction as db_transaction
         installment = self.get_object()
         booking = installment.plan.booking
 
         total = installment.amount + installment.late_fee
-        new_paid = Decimal(str(request.data.get('paid_amount', total)))
-        if new_paid < 0:
+        target_paid = Decimal(str(request.data.get('paid_amount', total)))
+        if target_paid < 0:
             return Response({'error': 'paid_amount cannot be negative.'},
                             status=status.HTTP_400_BAD_REQUEST)
-        if new_paid > total:
+        if target_paid > total:
             return Response(
                 {'error': f'paid_amount cannot exceed installment total {total}.'},
                 status=status.HTTP_400_BAD_REQUEST)
+        delta = target_paid - installment.paid_amount
+        if delta <= 0:
+            return Response(
+                {'error': 'paid_amount must be greater than the amount already paid.'},
+                status=status.HTTP_400_BAD_REQUEST)
 
-        delta = new_paid - installment.paid_amount
+        if installment.payments.filter(
+                status__in=['pending', 'under_clearing']).exists():
+            return Response(
+                {'error': 'A payment for this installment is already pending verification.'},
+                status=status.HTTP_400_BAD_REQUEST)
 
+        payment_method = request.data.get('payment_method', 'cash')
         with db_transaction.atomic():
-            installment.paid_amount = new_paid
-            installment.status = 'paid' if new_paid >= total else 'partial'
-            installment.paid_date = request.data.get('paid_date', timezone.now().date())
-            installment.save()
-
-            # Record a real Payment row so the ledger, receipts, and
-            # customer totals stay consistent with advance_paid.
-            if delta > 0:
-                Payment.objects.create(
-                    booking=booking,
-                    installment=installment,
-                    amount=delta,
-                    payment_date=request.data.get('paid_date', timezone.now().date()),
-                    payment_method=request.data.get('payment_method', 'cash'),
-                    payment_type='installment',
-                    status='verified',
-                    verified_by=request.user,
-                    verified_at=timezone.now(),
-                    created_by=request.user,
-                    notes='Marked paid via installment action',
-                )
-                booking.advance_paid = min(booking.advance_paid + delta, booking.total_amount)
-                if booking.remaining_balance <= 0:
-                    booking.status = 'completed'
-                booking.save()
-
-                # Recalculate the plan: this installment is now settled, so
-                # later installments must adjust to the new remaining balance.
-                if hasattr(booking, 'installment_plan') and booking.installment_plan:
-                    booking.installment_plan.recalculate()
+            installment = Installment.objects.select_for_update().get(pk=installment.pk)
+            if installment.payments.filter(
+                    status__in=['pending', 'under_clearing']).exists():
+                return Response(
+                    {'error': 'A payment for this installment is already pending verification.'},
+                    status=status.HTTP_400_BAD_REQUEST)
+            from finance.accounting import cash_bank_head
+            Payment.objects.create(
+                booking=booking,
+                installment=installment,
+                received_into=cash_bank_head(payment_method),
+                amount=delta,
+                payment_date=request.data.get('paid_date', timezone.now().date()),
+                payment_method=payment_method,
+                payment_type='installment',
+                status='pending',
+                created_by=request.user,
+                notes='Installment payment recorded, pending verification',
+            )
 
         return Response(InstallmentSerializer(installment).data)
 
@@ -476,7 +471,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
                 customer=reservation.customer,
                 plot=plot,
                 total_amount=plot.price,
-                advance_paid=reservation.token_amount,
+                advance_paid=Decimal('0'),
                 status='confirmed',
                 created_by=request.user,
                 notes=f'Converted from reservation {reservation.pk}',
@@ -485,6 +480,19 @@ class ReservationViewSet(viewsets.ModelViewSet):
             plot.save()
             reservation.status = 'converted'
             reservation.save()
+            if reservation.token_amount > 0:
+                from finance.accounting import cash_bank_head
+                Payment.objects.create(
+                    booking=booking,
+                    received_into=cash_bank_head('cash'),
+                    amount=reservation.token_amount,
+                    payment_date=timezone.now().date(),
+                    payment_method='cash',
+                    payment_type='advance',
+                    status='pending',
+                    created_by=request.user,
+                    notes='Reservation token converted to booking, pending verification',
+                )
 
         from core.models import AuditLog
         AuditLog.objects.create(

@@ -1228,6 +1228,8 @@ def booking_create_view(request):
                 return redirect('booking_detail', pk=existing.pk)
             booking.idempotency_key = idem_key or None
             booking.created_by = request.user
+            requested_advance = booking.advance_paid or Decimal('0')
+            booking.advance_paid = Decimal('0')
             try:
                 with transaction.atomic():
                     booking.save()
@@ -1251,7 +1253,7 @@ def booking_create_view(request):
                     template = InstallmentPlanTemplate.objects.get(pk=template_id, project=booking.plot.project)
                     # Down payment = what the customer actually paid at booking
                     # time (falling back to the template's expected percentage).
-                    down_payment = booking.advance_paid if booking.advance_paid > 0 else (
+                    down_payment = requested_advance if requested_advance > 0 else (
                         booking.total_amount * template.down_payment_percentage / 100
                     )
                     plan = InstallmentPlan.objects.create(
@@ -1270,30 +1272,22 @@ def booking_create_view(request):
                 except InstallmentPlanTemplate.DoesNotExist:
                     pass
             
-            # Record the upfront advance as a real verified Payment so the
-            # payment ledger, receipts, and customer payment history stay
-            # consistent with booking.advance_paid.
-            if booking.advance_paid > 0:
-                from payments.models import Payment, Receipt
-                payment = Payment.objects.create(
+            # Record the upfront advance as a pending Payment. The booking
+            # balance and receipt are only applied when it is verified.
+            if requested_advance > 0:
+                from finance.accounting import cash_bank_head
+                from payments.models import Payment
+                Payment.objects.create(
                     booking=booking,
-                    amount=booking.advance_paid,
+                    received_into=cash_bank_head('cash'),
+                    amount=requested_advance,
                     payment_date=booking.booking_date,
                     payment_method='cash',
                     payment_type='down_payment',
-                    status='verified',
-                    verified_by=request.user,
-                    verified_at=timezone.now(),
+                    status='pending',
                     created_by=request.user,
-                    notes='Upfront advance collected at booking',
+                    notes='Upfront advance recorded at booking, pending verification',
                 )
-                Receipt.objects.create(
-                    payment=payment,
-                    receipt_date=payment.payment_date,
-                    generated_by=request.user,
-                )
-                payment.receipt_generated = True
-                payment.save(update_fields=['receipt_generated'])
             
             AuditLog.objects.create(
                 user=request.user, action='create', model_name='Booking',

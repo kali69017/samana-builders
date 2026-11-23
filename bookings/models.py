@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import models
 from django.contrib.auth.models import User
 from customers.models import Customer
@@ -241,6 +243,31 @@ class Booking(models.Model):
     @property
     def remaining_balance(self):
         return self.total_amount - self.advance_paid
+
+    def recalculate_advance_paid(self, save=True):
+        """Set advance_paid from verified payments, less approved refunds."""
+        from django.db.models import Sum
+        verified = self.payments.filter(status='verified').aggregate(
+            total=Sum('amount'))['total'] or Decimal('0.00')
+        refunded = self.refunds.filter(
+            status__in=['approved', 'processed'],
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        amount = max(verified - refunded, Decimal('0.00'))
+        amount = min(amount, self.total_amount)
+        if save:
+            Booking.objects.filter(pk=self.pk).update(advance_paid=amount)
+            self.advance_paid = amount
+        return amount
+
+    @property
+    def pending_payment_amount(self):
+        if not self.pk:
+            return Decimal('0.00')
+        from django.db.models import Sum
+        total = self.payments.filter(
+            status__in=['pending', 'under_clearing'],
+        ).aggregate(total=Sum('amount'))['total']
+        return total or Decimal('0.00')
 
     @property
     def payment_progress(self):
@@ -561,6 +588,51 @@ class Installment(models.Model):
     @property
     def remaining_amount(self):
         return (self.amount + self.late_fee) - self.paid_amount
+
+    @property
+    def pending_payment_amount(self):
+        if not self.pk:
+            return Decimal('0.00')
+        from django.db.models import Sum
+        total = self.payments.filter(
+            status__in=['pending', 'under_clearing'],
+        ).aggregate(total=Sum('amount'))['total']
+        return total or Decimal('0.00')
+
+    @property
+    def payment_pending_verification(self):
+        return self.pending_payment_amount > 0 and self.status != 'paid'
+
+    @property
+    def display_status(self):
+        if self.payment_pending_verification:
+            return 'Payment pending verification'
+        return self.get_status_display()
+
+    def recalculate_paid_amount(self, save=True):
+        """Set paid_amount from verified payments linked to this installment."""
+        from django.db.models import Sum
+        verified = self.payments.filter(status='verified').aggregate(
+            total=Sum('amount'))['total'] or Decimal('0.00')
+        total = self.amount + self.late_fee
+        paid = min(verified, total)
+        self.paid_amount = paid
+        if total > 0 and paid >= total:
+            self.status = 'paid'
+            latest = self.payments.filter(
+                status='verified').order_by('-payment_date').first()
+            self.paid_date = latest.payment_date if latest else self.paid_date
+        elif paid > 0:
+            self.status = 'partial'
+            self.paid_date = None
+        else:
+            self.status = 'pending'
+            self.paid_date = None
+        if save:
+            self.save(update_fields=[
+                'paid_amount', 'status', 'paid_date', 'updated_at',
+            ])
+        return paid
     
     class Meta:
         ordering = ['due_date']

@@ -162,12 +162,42 @@ class Payment(models.Model):
             Payment.objects.filter(pk=self.pk).update(receipt_generated=True)
         return receipt
 
+    def _apply_balance_effects(self):
+        """Recompute booking and installment balances from payment rows."""
+        from django.db.models import Sum
+        booking = Booking.objects.select_for_update().get(pk=self.booking_id)
+        if self.installment_id:
+            installment = Installment.objects.select_for_update().get(
+                pk=self.installment_id)
+            installment.recalculate_paid_amount()
+            total = installment.amount + installment.late_fee
+            verified = installment.payments.filter(status='verified').aggregate(
+                total=Sum('amount'))['total'] or Decimal('0.00')
+            unallocated = max(verified - total, Decimal('0.00'))
+            if unallocated != self.unallocated_amount:
+                self.unallocated_amount = unallocated
+                Payment.objects.filter(pk=self.pk).update(
+                    unallocated_amount=unallocated)
+        booking.recalculate_advance_paid()
+        if booking.remaining_balance <= 0:
+            new_status = 'completed'
+        elif booking.delivery_date is None and booking.status == 'completed':
+            new_status = 'active'
+        else:
+            new_status = booking.status
+        if new_status != booking.status:
+            booking.status = new_status
+            booking.save(update_fields=['status', 'updated_at'])
+        if hasattr(booking, 'installment_plan'):
+            booking.installment_plan.recalculate()
+
     def _handle_verified_transition(self):
         if isinstance(self.payment_date, str):
             from django.utils.dateparse import parse_date
             self.payment_date = parse_date(self.payment_date)
         voucher = self.post_to_ledger()
         receipt = self._ensure_receipt()
+        self._apply_balance_effects()
         from notifications.services import NotificationService
         NotificationService.send_payment_confirmation(self)
         NotificationService.send_receipt_notification(receipt)
@@ -185,7 +215,9 @@ class Payment(models.Model):
         if self.status not in ('rejected', 'bounced', 'reversed'):
             return None
         from finance.accounting import post_payment_reversal
-        return post_payment_reversal(self)
+        voucher = post_payment_reversal(self)
+        self._apply_balance_effects()
+        return voucher
     
     def delete(self, *args, **kwargs):
         from finance.accounting import block_source_delete

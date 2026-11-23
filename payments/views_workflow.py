@@ -32,39 +32,6 @@ def _log(request, action, model, object_id, description):
     )
 
 
-def _apply_payment_effects(payment):
-    """Reflect a verified payment on its installment and booking."""
-    booking = payment.booking
-
-    if payment.installment:
-        installment = payment.installment
-        installment_total = installment.amount + installment.late_fee
-        remaining_before = installment_total - installment.paid_amount
-        if payment.amount > remaining_before:
-            payment.unallocated_amount = payment.amount - remaining_before
-            installment.paid_amount = installment_total
-        else:
-            installment.paid_amount += payment.amount
-
-        if installment.paid_amount >= installment_total:
-            installment.status = 'paid'
-            installment.paid_date = payment.payment_date
-        elif installment.paid_amount > 0:
-            installment.status = 'partial'
-        installment.save()
-
-    new_advance = booking.advance_paid + payment.amount
-    booking.advance_paid = min(new_advance, booking.total_amount)
-    if booking.remaining_balance <= 0:
-        booking.status = 'completed'
-    booking.save()
-
-    # Recalculate the installment plan so unpaid installments reflect
-    # the new remaining balance.
-    if hasattr(booking, 'installment_plan') and booking.installment_plan:
-        booking.installment_plan.recalculate()
-
-
 @login_required
 @role_required(*PAYMENT_VERIFIER_ROLES)
 def payment_verify_view(request, pk):
@@ -104,8 +71,6 @@ def payment_verify_view(request, pk):
             payment.verified_by = request.user
             payment.verified_at = timezone.now()
             payment.save()
-            _apply_payment_effects(payment)
-            payment.save(update_fields=['unallocated_amount'])
 
         description = f'Verified payment {payment.payment_id}'
         if self_verified:
@@ -168,23 +133,6 @@ def payment_reverse_view(request, pk):
 
                 payment.status = 'reversed'
                 payment.save()
-
-                # Reverse effects on installment and booking
-                if payment.installment:
-                    installment = payment.installment
-                    installment.paid_amount = max(installment.paid_amount - payment.amount, 0)
-                    if installment.paid_amount <= 0:
-                        installment.status = 'pending'
-                        installment.paid_date = None
-                    else:
-                        installment.status = 'partial'
-                    installment.save()
-
-                booking = payment.booking
-                booking.advance_paid = max(booking.advance_paid - payment.amount, 0)
-                if booking.status == 'completed' and booking.remaining_balance > 0:
-                    booking.status = 'active'
-                booking.save()
 
             _log(request, 'cancel', 'Payment', payment.payment_id, f'Reversed payment {payment.payment_id}')
             messages.success(request, f'Payment {payment.payment_id} reversed.')

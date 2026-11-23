@@ -14,12 +14,17 @@ from properties.serializers import PlotSerializer
 class InstallmentSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     remaining_amount = serializers.ReadOnlyField()
-    
+    pending_payment_amount = serializers.ReadOnlyField()
+    payment_pending_verification = serializers.ReadOnlyField()
+    display_status = serializers.ReadOnlyField()
+
     class Meta:
         model = Installment
         fields = ['id', 'installment_number', 'due_date', 'amount', 'late_fee',
-                  'paid_amount', 'remaining_amount', 'status', 'status_display',
-                  'paid_date', 'payment_allocation', 'created_at', 'updated_at']
+                  'paid_amount', 'remaining_amount', 'pending_payment_amount',
+                  'payment_pending_verification', 'display_status',
+                  'status', 'status_display', 'paid_date', 'payment_allocation',
+                  'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
@@ -87,6 +92,7 @@ class BookingSerializer(serializers.ModelSerializer):
     remaining_balance = serializers.ReadOnlyField()
     payment_progress = serializers.ReadOnlyField()
     customer_advances_held = serializers.ReadOnlyField()
+    pending_payment_amount = serializers.ReadOnlyField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     source_display = serializers.CharField(source='get_source_display', read_only=True)
     
@@ -95,13 +101,14 @@ class BookingSerializer(serializers.ModelSerializer):
         fields = ['id', 'booking_id', 'customer', 'customer_name', 'plot', 'plot_number',
                   'project_name', 'booking_date', 'total_amount', 'advance_paid',
                   'remaining_balance', 'payment_progress', 'customer_advances_held',
-                  'status', 'status_display',
+                  'pending_payment_amount', 'status', 'status_display',
                   'source', 'source_display', 'possession_date', 'is_possession_taken',
                   'delivery_date', 'delivered_by',
                   'notes', 'created_at', 'updated_at', 'created_by']
         read_only_fields = ['id', 'booking_id', 'booking_date', 'created_at',
-                           'updated_at', 'created_by', 'payment_progress',
-                           'customer_advances_held', 'delivery_date', 'delivered_by']
+                           'updated_at', 'created_by', 'advance_paid',
+                           'payment_progress', 'customer_advances_held',
+                           'delivery_date', 'delivered_by']
     
     def validate_total_amount(self, value):
         if value and value <= 0:
@@ -117,10 +124,13 @@ class BookingSerializer(serializers.ModelSerializer):
 class BookingCreateSerializer(serializers.ModelSerializer):
     idempotency_key = serializers.CharField(
         required=False, allow_null=True, allow_blank=True, validators=[])
+    pending_payment_amount = serializers.ReadOnlyField()
 
     class Meta:
         model = Booking
-        fields = ['customer', 'plot', 'total_amount', 'advance_paid', 'source', 'agent', 'notes', 'idempotency_key']
+        fields = ['customer', 'plot', 'total_amount', 'advance_paid',
+                  'pending_payment_amount', 'source', 'agent', 'notes',
+                  'idempotency_key']
 
     def validate_idempotency_key(self, value):
         if value:
@@ -205,6 +215,7 @@ class BookingDetailSerializer(serializers.ModelSerializer):
     remaining_balance = serializers.ReadOnlyField()
     payment_progress = serializers.ReadOnlyField()
     customer_advances_held = serializers.ReadOnlyField()
+    pending_payment_amount = serializers.ReadOnlyField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     source_display = serializers.CharField(source='get_source_display', read_only=True)
     
@@ -212,14 +223,16 @@ class BookingDetailSerializer(serializers.ModelSerializer):
         model = Booking
         fields = ['id', 'booking_id', 'customer', 'plot', 'plot_detail',
                   'booking_date', 'total_amount', 'advance_paid', 'remaining_balance',
-                  'payment_progress', 'customer_advances_held', 'status', 'status_display',
+                  'payment_progress', 'customer_advances_held',
+                  'pending_payment_amount', 'status', 'status_display',
                   'source', 'source_display',
                   'possession_date', 'is_possession_taken', 'delivery_date',
                   'delivered_by', 'notes',
                   'installment_plan', 'created_at', 'updated_at', 'created_by']
         read_only_fields = ['id', 'booking_id', 'booking_date', 'created_at',
-                           'updated_at', 'created_by', 'payment_progress',
-                           'customer_advances_held', 'delivery_date', 'delivered_by']
+                           'updated_at', 'created_by', 'advance_paid',
+                           'payment_progress', 'customer_advances_held',
+                           'delivery_date', 'delivered_by']
 
 
 # ─── TRANSFERS ───────────────────────────────────────────────────────────────────
