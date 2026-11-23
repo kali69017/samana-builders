@@ -322,7 +322,10 @@ class ReservationFlowTests(AuditBase):
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertTrue(Booking.objects.filter(plot=plot).exists())
         b = Booking.objects.get(plot=plot)
-        self.assertEqual(b.advance_paid, Decimal('50000'))
+        self.assertEqual(b.advance_paid, Decimal('0'))
+        payment = Payment.objects.get(booking=b)
+        self.assertEqual(payment.status, 'pending')
+        self.assertEqual(payment.amount, Decimal('50000'))
         plot.refresh_from_db()
         self.assertEqual(plot.status, 'booked')
         res.refresh_from_db()
@@ -341,12 +344,15 @@ class ReservationFlowTests(AuditBase):
         res.refresh_from_db()
         self.assertEqual(res.status, 'expired')
 
-    def test_reservation_token_amount_carries_to_advance(self):
+    def test_reservation_token_amount_creates_pending_payment(self):
         plot = self.new_plot('AP-024')
         res = self.make_reservation(plot=plot)
         resp = self.client.post(reverse('reservation-convert', args=[res.pk]), {}, format='json')
         b = Booking.objects.get(plot=plot)
-        self.assertEqual(b.advance_paid, res.token_amount)
+        self.assertEqual(b.advance_paid, Decimal('0'))
+        payment = Payment.objects.get(booking=b)
+        self.assertEqual(payment.status, 'pending')
+        self.assertEqual(payment.amount, res.token_amount)
 
     def test_reservation_with_negative_token_rejected(self):
         plot = self.new_plot('AP-025')
