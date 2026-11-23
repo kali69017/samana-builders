@@ -138,22 +138,31 @@ def post_payment(payment):
 
 
 def post_payment_reversal(payment):
-    """Post the exact inverse of a posted payment receipt voucher.
+    """Reverse a posted payment receipt using the correct head at reversal time.
 
-    The reversal is idempotent on ``('PaymentReversal', payment id)``. It uses
-    the original voucher lines, so a pre-delivery receipt reverses Customer
-    Advances and a post-delivery receipt reverses Revenue.
+    If the delivery journal is already posted, the customer money has moved from
+    Customer Advances to Revenue, so the reversal debits Revenue. Otherwise it
+    debits Customer Advances. The cash or bank line is the original receipt's
+    debit line. The reversal is idempotent on
+    ``('PaymentReversal', payment id)``.
     """
     original = Voucher.objects.filter(
         reference_type='Payment', reference_id=payment.pk, status='posted',
-    ).prefetch_related('lines__account_head').first()
+    ).first()
     if original is None:
         return None
+    cash_bank_line = original.lines.filter(debit__gt=0).select_related(
+        'account_head').first()
+    if cash_bank_line is None:
+        return None
+    delivery_posted = Voucher.objects.filter(
+        reference_type='BookingDelivery',
+        reference_id=payment.booking_id,
+        status='posted',
+    ).exists()
+    debit_head = revenue_head() if delivery_posted else customer_advance_head()
+    amount = cash_bank_line.debit
     inverse_types = {'CR': 'CP', 'BR': 'BP', 'CP': 'CR', 'BP': 'BR'}
-    lines = [
-        (line.account_head, line.credit, line.debit)
-        for line in original.lines.select_related('account_head').order_by('id')
-    ]
     return post_source_voucher(
         reference_type='PaymentReversal', reference_id=payment.pk,
         voucher_type=inverse_types.get(original.voucher_type, 'JV'),
@@ -162,7 +171,10 @@ def post_payment_reversal(payment):
             f'Reversal of Payment {payment.payment_id} - '
             f'{payment.get_status_display()}'
         ),
-        lines=lines,
+        lines=[
+            (debit_head, amount, Decimal('0.00')),
+            (cash_bank_line.account_head, Decimal('0.00'), amount),
+        ],
         user=payment.verified_by or payment.created_by,
     )
 

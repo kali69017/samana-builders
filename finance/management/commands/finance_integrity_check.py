@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Sum
 
+from bookings.models import Booking
 from finance.models import Voucher, VoucherLine
 from finance.accounting import customer_advance_head
 from payments.models import Payment, Refund
@@ -84,6 +85,61 @@ class Command(BaseCommand):
         expected_advances = expected_payments - expected_refunds
         advances_mismatch = advances_balance != expected_advances
 
+        bookings = {booking.pk: booking for booking in Booking.objects.all()}
+        payments = {payment.pk: payment for payment in Payment.objects.all()}
+        refunds = {refund.pk: refund for refund in Refund.objects.all()}
+        advances_by_booking = {}
+        revenue_by_booking = {}
+        linked_types = ('Payment', 'PaymentReversal', 'Refund', 'BookingDelivery')
+        for line in VoucherLine.objects.filter(
+                voucher__status='posted',
+                voucher__reference_type__in=linked_types,
+        ).select_related('voucher', 'account_head'):
+            reference_type = line.voucher.reference_type
+            reference_id = line.voucher.reference_id
+            booking = None
+            if reference_type in ('Payment', 'PaymentReversal'):
+                payment = payments.get(reference_id)
+                if payment is not None:
+                    booking = bookings.get(payment.booking_id)
+            elif reference_type == 'Refund':
+                refund = refunds.get(reference_id)
+                if refund is not None:
+                    booking = bookings.get(refund.booking_id)
+            else:
+                booking = bookings.get(reference_id)
+            if booking is None:
+                continue
+            net = line.credit - line.debit
+            if line.account_head_id == advances.pk:
+                advances_by_booking[booking.pk] = (
+                    advances_by_booking.get(booking.pk, Decimal('0.00')) + net)
+            elif line.account_head.code.startswith('4'):
+                revenue_by_booking[booking.pk] = (
+                    revenue_by_booking.get(booking.pk, Decimal('0.00')) + net)
+
+        booking_issues = []
+        for booking in bookings.values():
+            advances_amount = advances_by_booking.get(booking.pk, Decimal('0.00'))
+            revenue_amount = revenue_by_booking.get(booking.pk, Decimal('0.00'))
+            if advances_amount < 0:
+                booking_issues.append(
+                    f'{booking.booking_id}: Customer Advances debit balance '
+                    f'{abs(advances_amount)}')
+            expected_revenue = Decimal('0.00')
+            if booking.delivery_date is not None:
+                collected = Payment.objects.filter(
+                    booking=booking, status='verified',
+                ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+                refunded = Refund.objects.filter(
+                    booking=booking, status='processed',
+                ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+                expected_revenue = collected - refunded
+            if revenue_amount != expected_revenue:
+                booking_issues.append(
+                    f'{booking.booking_id}: Revenue {revenue_amount} does not '
+                    f'match delivered net collected {expected_revenue}')
+
         self.stdout.write(f'Posted debit total: {debit}')
         self.stdout.write(f'Posted credit total: {credit}')
         self.stdout.write(f'Difference: {debit - credit}')
@@ -101,9 +157,13 @@ class Command(BaseCommand):
         if advances_mismatch:
             self.stdout.write(
                 f'Customer Advances mismatch: {advances_balance - expected_advances}')
+        self.stdout.write(f'Booking advances/revenue issues: {len(booking_issues)}')
+        for issue in booking_issues:
+            self.stdout.write(f'  {issue}')
         if (
             debit != credit or unbalanced or root_lines
             or payment_issues or receipt_issues or advances_mismatch
+            or booking_issues
         ):
             raise CommandError('Finance integrity check failed.')
         self.stdout.write(self.style.SUCCESS('Finance integrity check passed.'))

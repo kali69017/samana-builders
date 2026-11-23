@@ -3,14 +3,17 @@ from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.core.management import call_command
+from django.db.models import Sum
 from django.test import TestCase
 from django.urls import reverse
+from io import StringIO
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from bookings.models import Booking
 from customers.models import Customer
-from finance.models import AccountHead, Voucher
+from finance.models import AccountHead, Voucher, VoucherLine
 from payments.models import Payment, Receipt
 from properties.models import Plot, Project
 
@@ -53,6 +56,21 @@ class PaymentPostingBase:
     def reversal_vouchers(self, payment):
         return Voucher.objects.filter(
             reference_type='PaymentReversal', reference_id=payment.pk)
+
+    def advances_balance(self):
+        agg = VoucherLine.objects.filter(
+            voucher__status='posted', account_head=self.advances,
+        ).aggregate(debit=Sum('debit'), credit=Sum('credit'))
+        return (agg['credit'] or Decimal('0.00')) - (agg['debit'] or Decimal('0.00'))
+
+    def revenue_balance(self):
+        agg = VoucherLine.objects.filter(
+            voucher__status='posted', account_head=self.revenue,
+        ).aggregate(debit=Sum('debit'), credit=Sum('credit'))
+        return (agg['credit'] or Decimal('0.00')) - (agg['debit'] or Decimal('0.00'))
+
+    def assert_integrity(self):
+        call_command('finance_integrity_check', stdout=StringIO())
 
 
 class PaymentPostingModelTests(PaymentPostingBase, TestCase):
@@ -117,21 +135,66 @@ class PaymentPostingModelTests(PaymentPostingBase, TestCase):
             self.booking.payments.get(status='verified').payment_id,
         )
 
-    def test_post_delivery_reversal_debits_revenue(self):
-        self.booking.delivery_date = date.today()
-        self.booking.status = 'completed'
-        self.booking.save()
-        payment = self.make_payment(status_value='verified')
-        self.assertEqual(
-            Voucher.objects.get(
-                reference_type='Payment', reference_id=payment.pk,
-            ).lines.get(credit__gt=0).account_head,
-            self.revenue,
-        )
+    def test_pre_delivery_payment_reversed_before_delivery_debits_advances(self):
+        payment = self.make_payment(status_value='verified', amount='100')
+        payment.status = 'reversed'
+        payment.save()
+        reversal = self.reversal_vouchers(payment).get()
+        self.assertEqual(reversal.lines.get(debit__gt=0).account_head, self.advances)
+        self.assertEqual(self.advances_balance(), Decimal('0.00'))
+        self.assertEqual(self.revenue_balance(), Decimal('0.00'))
+        self.assert_integrity()
+
+    def test_pre_delivery_payment_reversed_after_delivery_debits_revenue(self):
+        payment = self.make_payment(status_value='verified', amount='100')
+        self.booking.mark_delivered(self.user, date.today())
+        self.assertEqual(self.advances_balance(), Decimal('0.00'))
+        self.assertEqual(self.revenue_balance(), Decimal('100.00'))
         payment.status = 'reversed'
         payment.save()
         reversal = self.reversal_vouchers(payment).get()
         self.assertEqual(reversal.lines.get(debit__gt=0).account_head, self.revenue)
+        self.assertEqual(self.advances_balance(), Decimal('0.00'))
+        self.assertEqual(self.revenue_balance(), Decimal('0.00'))
+        self.assert_integrity()
+
+    def test_post_delivery_payment_reversed_debits_revenue(self):
+        pre_delivery = self.make_payment(status_value='verified', amount='100')
+        self.booking.mark_delivered(self.user, date.today())
+        post_payment = self.make_payment(status_value='verified', amount='100')
+        self.assertEqual(
+            Voucher.objects.get(
+                reference_type='Payment', reference_id=post_payment.pk,
+            ).lines.get(credit__gt=0).account_head,
+            self.revenue,
+        )
+        post_payment.status = 'reversed'
+        post_payment.save()
+        reversal = self.reversal_vouchers(post_payment).get()
+        self.assertEqual(reversal.lines.get(debit__gt=0).account_head, self.revenue)
+        self.assertEqual(self.advances_balance(), Decimal('0.00'))
+        self.assertEqual(self.revenue_balance(), Decimal('100.00'))
+        self.assert_integrity()
+
+    def test_bounced_after_delivery_debits_revenue(self):
+        payment = self.make_payment(status_value='verified', amount='100')
+        self.booking.mark_delivered(self.user, date.today())
+        payment.status = 'bounced'
+        payment.save()
+        reversal = self.reversal_vouchers(payment).get()
+        self.assertEqual(reversal.lines.get(debit__gt=0).account_head, self.revenue)
+        self.assertEqual(self.advances_balance(), Decimal('0.00'))
+        self.assert_integrity()
+
+    def test_rejected_after_delivery_debits_revenue(self):
+        payment = self.make_payment(status_value='verified', amount='100')
+        self.booking.mark_delivered(self.user, date.today())
+        payment.status = 'rejected'
+        payment.save()
+        reversal = self.reversal_vouchers(payment).get()
+        self.assertEqual(reversal.lines.get(debit__gt=0).account_head, self.revenue)
+        self.assertEqual(self.advances_balance(), Decimal('0.00'))
+        self.assert_integrity()
 
     def test_posted_payment_amount_cannot_change(self):
         payment = self.make_payment(status_value='verified')
