@@ -4,8 +4,8 @@
  * Drives the web-only expenses module through the rendered UI (`page` + admin
  * storageState). There is no DRF ViewSet for `Expense`, so every expense is
  * created/edited/approved/rejected/paid/deleted through the Django forms, and
- * the financial ledger side-effects are asserted against the finance DRF read
- * endpoint (`/api/account-transactions/`).
+ * the financial ledger side-effects are asserted against the Voucher API
+ * (`/api/vouchers/`).
  *
  * CONFIRMED BUGS — written RED on purpose (assert the SECURE behaviour, which
  * currently fails):
@@ -17,6 +17,7 @@
  */
 import { test, expect, Page } from '@playwright/test';
 import { loginViaApi } from '../helpers/auth';
+import { ledgerRowsFor } from '../helpers/ledger';
 
 const BASE_URL = 'http://127.0.0.1:8000';
 
@@ -37,7 +38,6 @@ async function csrf(page: Page): Promise<string> {
 
 // Tracked for afterAll cleanup (projects cascade their expenses).
 const createdProjectIds: number[] = [];
-const createdExpenseIds: number[] = [];
 
 async function createProject(page: Page, opts: { name?: string; status?: string } = {}): Promise<{ id: number; name: string }> {
   const name = opts.name ?? qa('QA-Exp');
@@ -76,10 +76,9 @@ async function getStatus(page: Page, pk: number): Promise<string> {
   return 'unknown';
 }
 
-/** Ledger rows for an expense (reference_type='Expense', reference_id=pk). */
+/** Ledger rows (Voucher API) for an expense (reference_type='Expense', reference_id=pk). */
 async function ledgerFor(page: Page, pk: number): Promise<any[]> {
-  const rows = (await (await page.request.get('/api/account-transactions/')).json()) as any[];
-  return rows.filter((r) => r.reference_type === 'Expense' && r.reference_id === pk);
+  return ledgerRowsFor(page.request, 'Expense', pk);
 }
 
 /**
@@ -115,7 +114,6 @@ async function newPendingExpense(
     description,
     amount,
   });
-  createdExpenseIds.push(eid);
   return { pid: project.id, eid, description };
 }
 
@@ -129,17 +127,7 @@ test.afterAll(async ({ request }) => {
   const token = state.cookies.find((c) => c.name === 'csrftoken')?.value ?? '';
   const header = { 'X-CSRFToken': token };
 
-  // Delete ledger rows orphaned by approved/paid/deleted expenses.
-  const rows = (await (await request.get('/api/account-transactions/')).json()) as any[];
-  for (const row of rows) {
-    if (row.reference_type === 'Expense' && createdExpenseIds.includes(row.reference_id)) {
-      try {
-        await request.delete(`/api/account-transactions/${row.id}/`, { headers: header });
-      } catch {
-        /* best-effort */
-      }
-    }
-  }
+  // Posted vouchers are immutable; there is no ledger cleanup to perform.
 
   // Delete created projects (cascades any remaining expenses).
   for (const id of createdProjectIds) {
@@ -177,7 +165,7 @@ test.describe('EXP — browser flows', () => {
     expect(ledger).toHaveLength(1);
     expect(ledger[0].amount).toBe('5001.50');
     expect(ledger[0].direction).toBe('out');
-    expect(ledger[0].transaction_type).toBe('project_cost');
+    expect(ledger[0].transaction_type).toBe('office_expense');
   });
 
   test('EXP-HP-04 — reject writes no ledger row', async ({ page }) => {

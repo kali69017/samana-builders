@@ -17,6 +17,7 @@
  */
 import { test, expect, Page } from '@playwright/test';
 import { loginViaApi } from '../helpers/auth';
+import { accountHeadByCode, ledgerRowsFor as ledgerRowsForRef } from '../helpers/ledger';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -39,7 +40,6 @@ const officeExpenseIds: number[] = [];
 const projectCostIds: number[] = [];
 const budgetIds: number[] = [];
 const investmentIds: number[] = [];
-const transactionIds: number[] = [];
 const ledgerRefs: Array<{ type: string; id: number }> = [];
 
 // ── fixtures (created via the authenticated API as quick setup) ──
@@ -97,10 +97,9 @@ async function createCost(
   return id;
 }
 
-// ── ledger reads (exact Decimal strings) ──
+// Ledger reads (Voucher API; exact Decimal strings)
 async function ledgerRowsFor(page: Page, refType: string, refId: number): Promise<any[]> {
-  const rows = (await (await page.request.get('/api/account-transactions/')).json()) as any[];
-  return rows.filter((r) => r.reference_type === refType && r.reference_id === refId);
+  return ledgerRowsForRef(page.request, refType, refId);
 }
 
 async function firstOfficeExpense(page: Page, officeId: number): Promise<any> {
@@ -157,20 +156,7 @@ test.afterAll(async ({ request }) => {
   const token = state.cookies.find((c) => c.name === 'csrftoken')?.value ?? '';
   const header = { 'X-CSRFToken': token };
 
-  // 1. Ledger rows: any matching reference, plus ad-hoc rows by id.
-  const rows = (await (await request.get('/api/account-transactions/')).json()) as any[];
-  for (const row of rows) {
-    const matched =
-      ledgerRefs.some((ref) => ref.type === row.reference_type && ref.id === row.reference_id) ||
-      transactionIds.includes(row.id);
-    if (matched) {
-      try {
-        await request.delete(`/api/account-transactions/${row.id}/`, { headers: header });
-      } catch {
-        /* best-effort */
-      }
-    }
-  }
+  // 1. Posted vouchers are immutable; there is no ledger cleanup to perform.
 
   // 2. Budgets + investments.
   for (const id of budgetIds) {
@@ -247,7 +233,7 @@ test.describe('FIN — browser flows (admin)', () => {
     expect(rows[0].amount).toBe('25000.00');
     expect(rows[0].direction).toBe('out');
     expect(rows[0].transaction_type).toBe('office_expense');
-    expect(rows[0].category).toBe(category.name);
+    expect(rows[0].narration).toContain(category.name);
     expect(rows[0].date).toBe(today());
   });
 
@@ -346,10 +332,10 @@ test.describe('FIN — browser flows (admin)', () => {
     await expect(page.getByText(project.name)).toBeVisible();
   });
 
-  test('FIN-HP-07 — ledger list: totals and filters', async ({ page }) => {
+  test('FIN-HP-07 - ledger list: totals and filters by account', async ({ page }) => {
     const office = await createOffice(page, qa('QA-HO'));
     const category = await createCategory(page, qa('QA-Rent'));
-    const inCategory = qa('QA-IN');
+    const project = await createProject(page, qa('QA-Proj'));
 
     await uiCreateOfficeExpense(page, {
       office: office.name,
@@ -362,22 +348,23 @@ test.describe('FIN — browser flows (admin)', () => {
     officeExpenseIds.push(exp.id);
     ledgerRefs.push({ type: 'OfficeExpense', id: exp.id });
 
-    // Ad-hoc money-in row so the ledger has both directions.
-    const inRes = await page.request.post('/api/account-transactions/', {
-      data: { date: today(), amount: '1000.00', direction: 'in', transaction_type: 'income', category: inCategory, reference_type: '' },
-      headers: { 'X-CSRFToken': await csrf(page) },
-    });
-    expect(inRes.status(), await inRes.text()).toBe(201);
-    transactionIds.push((await inRes.json()).id);
+    await uiCreateProjectCost(page, { project: project.name, amount: '40000.00', date: today() });
+    const costs = (await (await page.request.get(`/api/project-costs/?project=${project.id}`)).json()) as any[];
+    const cost = costs[0];
+    projectCostIds.push(cost.id);
+    ledgerRefs.push({ type: 'ProjectCost', id: cost.id });
+
+    const officeHead = await accountHeadByCode(page.request, '5.1.1');
 
     await page.goto('/finance/ledger/');
-    await expect(page.getByRole('heading', { name: 'Financial Ledger' })).toBeVisible();
-    await expect(page.getByText(category.name)).toBeVisible();
-    await expect(page.getByText(inCategory)).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Ledger' })).toBeVisible();
+    await expect(page.getByText(office.name)).toBeVisible();
+    await expect(page.getByText(project.name)).toBeVisible();
 
-    await page.goto('/finance/ledger/?type=office_expense');
-    await expect(page.getByText(category.name)).toBeVisible();
-    await expect(page.getByText(inCategory)).toHaveCount(0);
+    // The ledger filters by account head (the old transaction-type filter is gone).
+    await page.goto(`/finance/ledger/?head=${officeHead.id}`);
+    await expect(page.getByText(office.name)).toBeVisible();
+    await expect(page.getByText(project.name)).toHaveCount(0);
   });
 });
 

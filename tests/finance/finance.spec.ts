@@ -1,5 +1,6 @@
 import { test, expect, APIRequestContext, Page } from '@playwright/test';
 import { loginViaApi, ROLES } from '../helpers/auth';
+import { accountHeadByCode, ledgerRowsFor } from '../helpers/ledger';
 
 /**
  * Finance module E2E (specs/finance.md, 34 scenarios: FIN-HP-*, FIN-EC-*,
@@ -115,23 +116,25 @@ async function createCost(
   return (await res.json()).id as number;
 }
 
-// — ledger reads —
-
-async function listTransactions(request: APIRequestContext, transactionType: string): Promise<any[]> {
-  const res = await request.get(`/api/account-transactions/?transaction_type=${transactionType}`);
-  expect(res.status()).toBe(200);
-  return await res.json();
+/**
+ * Drive an office expense to paid through the API. The status field is read-only
+ * on the serializer, so a create payload alone does not guarantee a posted
+ * voucher; approve then pay does. Safe to call on an already-paid record.
+ */
+async function postOfficeExpense(ctx: Ctx, id: number): Promise<void> {
+  await ctx.request.post(`/api/office-expenses/${id}/approve/`, { headers: csrf(ctx.token) });
+  await ctx.request.post(`/api/office-expenses/${id}/pay/`, { headers: csrf(ctx.token) });
 }
 
-async function ledgerRowsFor(
-  request: APIRequestContext,
-  transactionType: string,
-  referenceType: string,
-  referenceId: number,
-): Promise<any[]> {
-  const rows = await listTransactions(request, transactionType);
-  return rows.filter((r) => r.reference_type === referenceType && r.reference_id === referenceId);
+/** Drive a project cost to paid. Safe to call on an already-paid record. */
+async function postProjectCost(ctx: Ctx, id: number): Promise<void> {
+  await ctx.request.post(`/api/project-costs/${id}/approve/`, { headers: csrf(ctx.token) });
+  await ctx.request.post(`/api/project-costs/${id}/pay/`, { headers: csrf(ctx.token) });
 }
+
+// Ledger reads (Voucher API)
+// The old transaction CRUD endpoint is removed. ledgerRowsFor reads posted
+// vouchers and adapts them to the row shape used by these assertions.
 
 // — cleanup registry (drained in afterEach as admin) —
 
@@ -143,15 +146,12 @@ function regObject(path: string): void {
   });
 }
 
-function regLedger(transactionType: string, referenceType: string, referenceId: number): void {
-  cleanups.push(async (ctx) => {
-    const rows = await ledgerRowsFor(ctx.request, transactionType, referenceType, referenceId);
-    for (const row of rows) {
-      await ctx.request.delete(`/api/account-transactions/${row.id}/`, {
-        headers: csrf(ctx.token),
-      });
-    }
-  });
+/**
+ * Auto-generated vouchers cannot be deleted, so there is no ledger cleanup.
+ * Kept as a documented no-op so call sites show which source was posted.
+ */
+function regLedger(_transactionType: string, _referenceType: string, _referenceId: number): void {
+  /* Vouchers are immutable; nothing to remove. */
 }
 
 test.beforeEach(() => {
@@ -296,12 +296,12 @@ test.describe('FIN-HP — happy paths', () => {
     regObject(`/api/office-expenses/${exp.id}/`);
     regLedger('office_expense', 'OfficeExpense', exp.id);
 
-    const rows = await ledgerRowsFor(request, 'office_expense', 'OfficeExpense', exp.id);
+    const rows = await ledgerRowsFor(request, 'OfficeExpense', exp.id);
     expect(rows.length).toBe(1);
     expect(rows[0].amount).toBe('25000.00');
     expect(rows[0].direction).toBe('out');
     expect(rows[0].transaction_type).toBe('office_expense');
-    expect(rows[0].category).toBe(categoryName);
+    expect(rows[0].narration).toContain(categoryName);
     expect(rows[0].date).toBe(today());
   });
 
@@ -335,7 +335,7 @@ test.describe('FIN-HP — happy paths', () => {
     await expect
       .poll(async () => (await (await request.get(`/api/office-expenses/${expenseId}/`)).json()).status)
       .toBe('approved');
-    expect(await ledgerRowsFor(request, 'office_expense', 'OfficeExpense', expenseId)).toHaveLength(0);
+    expect(await ledgerRowsFor(request, 'OfficeExpense', expenseId)).toHaveLength(0);
 
     // Pay (accept the JS confirm on the form).
     await page.goto('/finance/office-expenses/');
@@ -345,11 +345,11 @@ test.describe('FIN-HP — happy paths', () => {
       .poll(async () => (await (await request.get(`/api/office-expenses/${expenseId}/`)).json()).status)
       .toBe('paid');
 
-    expect(await ledgerRowsFor(request, 'office_expense', 'OfficeExpense', expenseId)).toHaveLength(1);
+    expect(await ledgerRowsFor(request, 'OfficeExpense', expenseId)).toHaveLength(1);
 
     // Double pay via API — still exactly one row (idempotent).
     await request.post(`/api/office-expenses/${expenseId}/pay/`, { headers: csrf(token) });
-    expect(await ledgerRowsFor(request, 'office_expense', 'OfficeExpense', expenseId)).toHaveLength(1);
+    expect(await ledgerRowsFor(request, 'OfficeExpense', expenseId)).toHaveLength(1);
   });
 
   test('FIN-HP-04 — Create project cost (default "paid") posts ledger immediately', async ({
@@ -371,7 +371,7 @@ test.describe('FIN-HP — happy paths', () => {
     regObject(`/api/project-costs/${cost.id}/`);
     regLedger('project_cost', 'ProjectCost', cost.id);
 
-    const rows = await ledgerRowsFor(request, 'project_cost', 'ProjectCost', cost.id);
+    const rows = await ledgerRowsFor(request, 'ProjectCost', cost.id);
     expect(rows.length).toBe(1);
     expect(rows[0].amount).toBe('40000.00');
     expect(rows[0].direction).toBe('out');
@@ -392,6 +392,7 @@ test.describe('FIN-HP — happy paths', () => {
     regObject(`/api/projects/${projectId}/`);
     regObject(`/api/project-costs/${costId}/`);
     regLedger('project_cost', 'ProjectCost', costId);
+    await postProjectCost(ctx, costId);
 
     // Set budget via UI.
     await page.goto(`/finance/projects/${projectId}/budget/`);
@@ -435,12 +436,12 @@ test.describe('FIN-HP — happy paths', () => {
     await expect(page.getByText(projectName)).toBeVisible();
   });
 
-  test('FIN-HP-07 — Ledger list: totals and filters', async ({ page, request }) => {
+  test('FIN-HP-07 - Ledger list: totals and filters by account', async ({ page, request }) => {
     const token = await apiLogin(request, 'admin');
     const ctx: Ctx = { request, token };
     const officeName = qa('QA-HO');
     const officeCategory = qa('QA-Rent');
-    const inCategory = qa('QA-IN');
+    const projectName = qa('QA-Proj');
     const officeId = await createOffice(ctx, officeName);
     const categoryId = await createCategory(ctx, officeCategory);
     const expenseId = await createExpense(ctx, {
@@ -450,34 +451,33 @@ test.describe('FIN-HP — happy paths', () => {
       date: today(),
       status: 'paid',
     });
+    const projectId = await createProject(ctx, projectName);
+    const costId = await createCost(ctx, {
+      project: projectId,
+      amount: '40000.00',
+      date: today(),
+      status: 'paid',
+    });
     regObject(`/api/offices/${officeId}/`);
     regObject(`/api/expense-categories/${categoryId}/`);
     regObject(`/api/office-expenses/${expenseId}/`);
-    regLedger('office_expense', 'OfficeExpense', expenseId);
+    regObject(`/api/projects/${projectId}/`);
+    regObject(`/api/project-costs/${costId}/`);
+    regLedger('project_cost', 'ProjectCost', costId);
+    await postOfficeExpense(ctx, expenseId);
+    await postProjectCost(ctx, costId);
 
-    // Ad-hoc money-in row (no reference) so the ledger has both directions.
-    const inRes = await request.post('/api/account-transactions/', {
-      data: {
-        date: today(),
-        amount: '1000.00',
-        direction: 'in',
-        transaction_type: 'income',
-        category: inCategory,
-      },
-      headers: csrf(token),
-    });
-    expect(inRes.status(), await inRes.text()).toBe(201);
-    const inRow = await inRes.json();
-    regObject(`/api/account-transactions/${inRow.id}/`);
+    const officeHead = await accountHeadByCode(request, '5.1.1');
 
     await page.goto('/finance/ledger/');
-    await expect(page.getByRole('heading', { name: 'Financial Ledger' })).toBeVisible();
-    await expect(page.getByText(officeCategory)).toBeVisible();
-    await expect(page.getByText(inCategory)).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Ledger' })).toBeVisible();
+    await expect(page.getByText(officeName)).toBeVisible();
+    await expect(page.getByText(projectName)).toBeVisible();
 
-    await page.goto('/finance/ledger/?type=office_expense');
-    await expect(page.getByText(officeCategory)).toBeVisible();
-    await expect(page.getByText(inCategory)).toHaveCount(0);
+    // The ledger filters by account head (the old transaction-type filter is gone).
+    await page.goto(`/finance/ledger/?head=${officeHead.id}`);
+    await expect(page.getByText(officeName)).toBeVisible();
+    await expect(page.getByText(projectName)).toHaveCount(0);
   });
 });
 
@@ -506,8 +506,9 @@ test.describe('FIN-EC — edge cases (admin)', () => {
     regObject(`/api/expense-categories/${categoryId}/`);
     regObject(`/api/office-expenses/${expenseId}/`);
     regLedger('office_expense', 'OfficeExpense', expenseId);
+    await postOfficeExpense(ctx, expenseId);
 
-    expect(await ledgerRowsFor(request, 'office_expense', 'OfficeExpense', expenseId)).toHaveLength(1);
+    expect(await ledgerRowsFor(request, 'OfficeExpense', expenseId)).toHaveLength(1);
 
     await uiEditExpense(page, expenseId, { status: 'draft' });
 
@@ -515,10 +516,10 @@ test.describe('FIN-EC — edge cases (admin)', () => {
     expect(exp.status).toBe('draft');
     // KNOWN BUG (finance_analysis §5): demoting a paid expense does NOT void its
     // ledger row — money stays booked out while the object is no longer paid.
-    expect(await ledgerRowsFor(request, 'office_expense', 'OfficeExpense', expenseId)).toHaveLength(1);
+    expect(await ledgerRowsFor(request, 'OfficeExpense', expenseId)).toHaveLength(1);
   });
 
-  test('FIN-EC-02 — Delete paid ProjectCost leaves orphaned AccountTransaction', async ({ request }) => {
+  test('FIN-EC-02 - Delete paid ProjectCost is refused; the posted voucher remains', async ({ request }) => {
     const token = await apiLogin(request, 'admin');
     const ctx: Ctx = { request, token };
     const projectId = await createProject(ctx, qa('QA-Proj'));
@@ -531,23 +532,23 @@ test.describe('FIN-EC — edge cases (admin)', () => {
     regObject(`/api/projects/${projectId}/`);
     regObject(`/api/project-costs/${costId}/`);
     regLedger('project_cost', 'ProjectCost', costId);
+    await postProjectCost(ctx, costId);
 
-    expect(await ledgerRowsFor(request, 'project_cost', 'ProjectCost', costId)).toHaveLength(1);
+    expect(await ledgerRowsFor(request, 'ProjectCost', costId)).toHaveLength(1);
 
     // Delete via the HTML view (management_or_above) — admin is superuser.
     const del = await request.post(`/finance/project-costs/${costId}/delete/`, {
       headers: csrf(token),
     });
-    expect(del.status()).toBe(200);
+    // A source with a posted voucher cannot be deleted; the view redirects back.
+    expect(del.status()).toBe(302);
 
-    // KNOWN BUG (finance_analysis §5): the cost is gone, but the ledger row
-    // survives (reference_id is a plain int, no FK cascade) — phantom spend.
     const costs = await request.get(`/api/project-costs/?project=${projectId}`);
-    expect((await costs.json()).filter((c: any) => c.id === costId)).toHaveLength(0);
-    expect(await ledgerRowsFor(request, 'project_cost', 'ProjectCost', costId)).toHaveLength(1);
+    expect((await costs.json()).filter((c: any) => c.id === costId)).toHaveLength(1);
+    expect(await ledgerRowsFor(request, 'ProjectCost', costId)).toHaveLength(1);
   });
 
-  test('FIN-EC-03 — Editing a paid office expense re-dates/re-amounts the historical ledger row', async ({
+  test('FIN-EC-03 - Editing a paid office expense leaves the posted voucher unchanged', async ({
     page,
     request,
   }) => {
@@ -557,52 +558,63 @@ test.describe('FIN-EC — edge cases (admin)', () => {
     const categoryName = qa('QA-Rent');
     const officeId = await createOffice(ctx, officeName);
     const categoryId = await createCategory(ctx, categoryName);
+    const expenseDate = today();
     const expenseId = await createExpense(ctx, {
       office: officeId,
       category: categoryId,
       amount: '25000.00',
-      date: today(),
+      date: expenseDate,
       status: 'paid',
     });
     regObject(`/api/offices/${officeId}/`);
     regObject(`/api/expense-categories/${categoryId}/`);
     regObject(`/api/office-expenses/${expenseId}/`);
     regLedger('office_expense', 'OfficeExpense', expenseId);
+    await postOfficeExpense(ctx, expenseId);
 
     await uiEditExpense(page, expenseId, { amount: '50000.00', date: '2020-01-01' });
 
-    // KNOWN BUG (finance_analysis §5): update_or_create silently rewrites the
-    // historical ledger row's amount/date — no immutability for paid records.
-    const rows = await ledgerRowsFor(request, 'office_expense', 'OfficeExpense', expenseId);
+    // The source row changes, but the posted voucher is immutable and keeps the
+    // original amount and date.
+    const exp = await (await request.get(`/api/office-expenses/${expenseId}/`)).json();
+    expect(exp.amount).toBe('50000.00');
+    expect(exp.expense_date).toBe('2020-01-01');
+
+    const rows = await ledgerRowsFor(request, 'OfficeExpense', expenseId);
     expect(rows.length).toBe(1);
-    expect(rows[0].amount).toBe('50000.00');
-    expect(rows[0].date).toBe('2020-01-01');
+    expect(rows[0].amount).toBe('25000.00');
+    expect(rows[0].date).toBe(expenseDate);
   });
 
-  test('FIN-EC-04 — Editing a paid project cost re-dates/re-amounts the historical ledger row', async ({
+  test('FIN-EC-04 - Editing a paid project cost leaves the posted voucher unchanged', async ({
     page,
     request,
   }) => {
     const token = await apiLogin(request, 'admin');
     const ctx: Ctx = { request, token };
     const projectId = await createProject(ctx, qa('QA-Proj'));
+    const costDate = today();
     const costId = await createCost(ctx, {
       project: projectId,
       amount: '40000.00',
-      date: today(),
+      date: costDate,
       status: 'paid',
     });
     regObject(`/api/projects/${projectId}/`);
     regObject(`/api/project-costs/${costId}/`);
     regLedger('project_cost', 'ProjectCost', costId);
+    await postProjectCost(ctx, costId);
 
     await uiEditCost(page, costId, { amount: '90000.00', date: '2020-01-01' });
 
-    // KNOWN BUG (finance_analysis §5): historical project-cost ledger row rewritten.
-    const rows = await ledgerRowsFor(request, 'project_cost', 'ProjectCost', costId);
+    const cost = await (await request.get(`/api/project-costs/${costId}/`)).json();
+    expect(cost.amount).toBe('90000.00');
+    expect(cost.cost_date).toBe('2020-01-01');
+
+    const rows = await ledgerRowsFor(request, 'ProjectCost', costId);
     expect(rows.length).toBe(1);
-    expect(rows[0].amount).toBe('90000.00');
-    expect(rows[0].date).toBe('2020-01-01');
+    expect(rows[0].amount).toBe('40000.00');
+    expect(rows[0].date).toBe(costDate);
   });
 
   test('FIN-EC-07 — Negative total_budget → IntegrityError / HTTP 500 (no form/serializer validation)', async ({
@@ -695,6 +707,7 @@ test.describe('FIN-EC — edge cases (admin)', () => {
     });
     regObject(`/api/project-costs/${costId}/`);
     regLedger('project_cost', 'ProjectCost', costId);
+    await postProjectCost(ctx, costId);
 
     const budgets = await request.get('/api/project-budgets/');
     const budget = (await budgets.json()).find((b: any) => b.project === projectId);
@@ -733,7 +746,7 @@ test.describe('FIN-EC — edge cases (admin)', () => {
     expect(obGone.status()).toBe(404);
   });
 
-  test('FIN-EC-11 — Zero amount rejected at all layers (defense-in-depth)', async ({ request }) => {
+  test('FIN-EC-11 - Zero amount rejected at expense layers (defense-in-depth)', async ({ request }) => {
     const token = await apiLogin(request, 'admin');
     const ctx: Ctx = { request, token };
     const officeId = await createOffice(ctx, qa('QA-HO'));
@@ -747,13 +760,6 @@ test.describe('FIN-EC — edge cases (admin)', () => {
       headers: csrf(token),
     });
     expect(exp.status()).toBe(400);
-
-    // API transaction amount=0 → 400.
-    const tx = await request.post('/api/account-transactions/', {
-      data: { date: today(), amount: '0', direction: 'in', transaction_type: 'income' },
-      headers: csrf(token),
-    });
-    expect(tx.status()).toBe(400);
 
     // HTML expense amount=0 → re-render (200) and no row persisted.
     const html = await request.post('/finance/office-expenses/create/', {
@@ -772,7 +778,7 @@ test.describe('FIN-EC — edge cases (admin)', () => {
     expect(await exps.json()).toHaveLength(0);
   });
 
-  test('FIN-EC-12 — Deleted category leaves expense.category=None and stale ledger category string', async ({
+  test('FIN-EC-12 - Deleted category leaves expense.category=None and the voucher narration intact', async ({
     request,
   }) => {
     const token = await apiLogin(request, 'admin');
@@ -800,10 +806,10 @@ test.describe('FIN-EC — edge cases (admin)', () => {
     expect(exp.category).toBeNull();
     expect(exp.category_name).toBeNull();
 
-    // KNOWN BUG / accepted: the ledger's denormalized category string is stale.
-    const rows = await ledgerRowsFor(request, 'office_expense', 'OfficeExpense', expenseId);
+    // The voucher narration keeps the category name captured when it was posted.
+    const rows = await ledgerRowsFor(request, 'OfficeExpense', expenseId);
     expect(rows.length).toBe(1);
-    expect(rows[0].category).toBe(categoryName);
+    expect(rows[0].narration).toContain(categoryName);
   });
 });
 
@@ -842,7 +848,7 @@ test.describe('FIN-EC — approval bypass (accounts)', () => {
 
     // KNOWN BUG (finance_analysis §5): a below-management finance user can post
     // money out of the ledger by setting status=paid on create — no approve gate.
-    const rows = await ledgerRowsFor(request, 'office_expense', 'OfficeExpense', exp.id);
+    const rows = await ledgerRowsFor(request, 'OfficeExpense', exp.id);
     expect(rows.length).toBe(1);
     expect(rows[0].amount).toBe('100000.00');
   });
@@ -867,7 +873,7 @@ test.describe('FIN-EC — approval bypass (accounts)', () => {
 
     // KNOWN BUG (finance_analysis §5): ProjectCost defaults to paid and posts to
     // the ledger immediately — no approval path exists at all.
-    const rows = await ledgerRowsFor(request, 'project_cost', 'ProjectCost', cost.id);
+    const rows = await ledgerRowsFor(request, 'ProjectCost', cost.id);
     expect(rows.length).toBe(1);
     expect(rows[0].amount).toBe('200000.00');
   });
@@ -885,7 +891,7 @@ test.describe('FIN-SEC — negative & security (API)', () => {
     for (const role of ['customer', 'sales', 'hr'] as Role[]) {
       const ctx = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:8000' });
       await apiLogin(ctx, role);
-      for (const path of ['/api/office-expenses/', '/api/account-transactions/']) {
+      for (const path of ['/api/office-expenses/', '/api/vouchers/']) {
         const res = await ctx.get(path);
         // CONFIRMED BUG: docs/qa/findings-confirmed.md F3
         expect(res.status(), `${role} GET ${path} should be 403`).toBe(403);
@@ -971,7 +977,7 @@ test.describe('FIN-SEC — negative & security (API)', () => {
     expect(appRes.status(), `paid→approved should be refused, got ${appRes.status()}`).toBe(400);
   });
 
-  test('FIN-SEC-04 — Ledger integrity gaps misstate financial reports', async ({ request }) => {
+  test('FIN-SEC-04 - Posted vouchers survive a refused source delete', async ({ request }) => {
     const token = await apiLogin(request, 'admin');
     const ctx: Ctx = { request, token };
     const projectId = await createProject(ctx, qa('QA-Proj'));
@@ -984,15 +990,15 @@ test.describe('FIN-SEC — negative & security (API)', () => {
     regObject(`/api/projects/${projectId}/`);
     regObject(`/api/project-costs/${costId}/`);
     regLedger('project_cost', 'ProjectCost', costId);
+    await postProjectCost(ctx, costId);
 
-    // Reproduce an orphan: delete the paid cost via the HTML view.
+    // The delete is refused because the cost has a posted voucher.
     await request.post(`/finance/project-costs/${costId}/delete/`, { headers: csrf(token) });
 
-    // KNOWN BUG (finance_analysis §5): the phantom `out` row still inflates total_out.
-    const out = await request.get('/api/account-transactions/?direction=out&transaction_type=project_cost');
-    const outRows = await out.json();
-    const orphan = outRows.find((r: any) => r.reference_type === 'ProjectCost' && r.reference_id === costId);
-    expect(orphan, 'orphaned ProjectCost ledger row should still exist').toBeTruthy();
+    // The voucher is still present and still balances; no phantom orphan can exist.
+    const rows = await ledgerRowsFor(request, 'ProjectCost', costId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].debit).toBe(rows[0].credit);
   });
 
   test('FIN-SEC-05 — Non-finance staff write to finance API → 403 (control assertion)', async ({
@@ -1104,7 +1110,7 @@ test.describe('FIN-API — API contract', () => {
     regObject(`/api/office-expenses/${exp.id}/`);
     regLedger('office_expense', 'OfficeExpense', exp.id);
 
-    const rows = await ledgerRowsFor(request, 'office_expense', 'OfficeExpense', exp.id);
+    const rows = await ledgerRowsFor(request, 'OfficeExpense', exp.id);
     expect(rows.length).toBe(1);
     expect(rows[0].amount).toBe('25000.00');
   });
@@ -1134,7 +1140,7 @@ test.describe('FIN-API — API contract', () => {
     expect(body.status).toBe('approved');
 
     // No ledger row is posted by approve alone.
-    expect(await ledgerRowsFor(request, 'office_expense', 'OfficeExpense', expenseId)).toHaveLength(0);
+    expect(await ledgerRowsFor(request, 'OfficeExpense', expenseId)).toHaveLength(0);
   });
 
   test('FIN-API-04 — POST /api/office-expenses/{id}/pay/ (posts ledger, idempotent)', async ({
@@ -1161,11 +1167,11 @@ test.describe('FIN-API — API contract', () => {
     });
     expect(res.status()).toBe(200);
     expect((await res.json()).status).toBe('paid');
-    expect(await ledgerRowsFor(request, 'office_expense', 'OfficeExpense', expenseId)).toHaveLength(1);
+    expect(await ledgerRowsFor(request, 'OfficeExpense', expenseId)).toHaveLength(1);
 
     // Idempotent: a second pay still leaves exactly one row.
     await request.post(`/api/office-expenses/${expenseId}/pay/`, { headers: csrf(token) });
-    expect(await ledgerRowsFor(request, 'office_expense', 'OfficeExpense', expenseId)).toHaveLength(1);
+    expect(await ledgerRowsFor(request, 'OfficeExpense', expenseId)).toHaveLength(1);
   });
 
   test('FIN-API-05 — GET/POST /api/project-costs/', async ({ request }) => {
@@ -1183,7 +1189,7 @@ test.describe('FIN-API — API contract', () => {
     regObject(`/api/project-costs/${cost.id}/`);
     regLedger('project_cost', 'ProjectCost', cost.id);
 
-    expect(await ledgerRowsFor(request, 'project_cost', 'ProjectCost', cost.id)).toHaveLength(1);
+    expect(await ledgerRowsFor(request, 'ProjectCost', cost.id)).toHaveLength(1);
 
     const byProject = await (await request.get(`/api/project-costs/?project=${projectId}`)).json();
     expect(byProject.every((c: any) => c.project === projectId)).toBe(true);
@@ -1236,39 +1242,58 @@ test.describe('FIN-API — API contract', () => {
     expect(del.status()).toBe(204);
   });
 
-  test('FIN-API-07 — GET/POST /api/account-transactions/ (direction validation + filters)', async ({
+  test('FIN-API-07 - GET/POST/DELETE /api/vouchers/ (validation, post, immutable)', async ({
     request,
   }) => {
     const token = await apiLogin(request, 'admin');
-    const category = qa('QA-TX');
+    const officeExpenses = await accountHeadByCode(request, '5.1.1');
+    const cash = await accountHeadByCode(request, '1.1.1.1');
 
-    const res = await request.post('/api/account-transactions/', {
-      data: { date: today(), amount: '1000.00', direction: 'in', transaction_type: 'income', category },
+    // List returns vouchers with the ledger-relevant fields and posted lines.
+    const list = await (await request.get('/api/vouchers/')).json();
+    const vouchers = Array.isArray(list) ? list : (list.results ?? []);
+    if (vouchers.length) {
+      expect(vouchers[0]).toHaveProperty('voucher_number');
+      expect(vouchers[0]).toHaveProperty('voucher_type');
+      expect(vouchers[0]).toHaveProperty('status');
+      expect(vouchers[0]).toHaveProperty('reference_type');
+      expect(vouchers[0]).toHaveProperty('reference_id');
+      expect(vouchers[0]).toHaveProperty('lines');
+    }
+
+    // Unbalanced journal -> 400.
+    const unbalanced = await request.post('/api/vouchers/', {
+      data: {
+        voucher_type: 'JV',
+        date: today(),
+        narration: 'QA unbalanced',
+        lines: [
+          { account_head: officeExpenses.id, debit: '1000.00', credit: '0.00' },
+          { account_head: cash.id, debit: '0.00', credit: '500.00' },
+        ],
+      },
       headers: csrf(token),
     });
-    expect(res.status(), await res.text()).toBe(201);
-    const tx = await res.json();
-    regObject(`/api/account-transactions/${tx.id}/`);
+    expect(unbalanced.status(), await unbalanced.text()).toBe(400);
 
-    const byType = await (await request.get('/api/account-transactions/?transaction_type=income')).json();
-    expect(byType.every((t: any) => t.transaction_type === 'income')).toBe(true);
-
-    const byDirection = await (await request.get('/api/account-transactions/?direction=in')).json();
-    expect(byDirection.every((t: any) => t.direction === 'in')).toBe(true);
-
-    // Invalid direction → 400.
-    const bad = await request.post('/api/account-transactions/', {
-      data: { date: today(), amount: '1000.00', direction: 'sideways', transaction_type: 'income' },
+    // Negative amount -> 400.
+    const negative = await request.post('/api/vouchers/', {
+      data: {
+        voucher_type: 'JV',
+        date: today(),
+        narration: 'QA negative',
+        lines: [
+          { account_head: officeExpenses.id, debit: '-1.00', credit: '0.00' },
+          { account_head: cash.id, debit: '0.00', credit: '-1.00' },
+        ],
+      },
       headers: csrf(token),
     });
-    expect(bad.status()).toBe(400);
+    expect(negative.status(), await negative.text()).toBe(400);
 
-    // amount <= 0 → 400.
-    const zero = await request.post('/api/account-transactions/', {
-      data: { date: today(), amount: '0', direction: 'in', transaction_type: 'income' },
-      headers: csrf(token),
-    });
-    expect(zero.status()).toBe(400);
+    // Vouchers cannot be deleted (405 on the detail route).
+    const del = await request.delete('/api/vouchers/999999/', { headers: csrf(token) });
+    expect(del.status()).toBe(405);
   });
 
   test('FIN-API-08 — GET/POST /api/project-budgets/ (negative total_budget → 500)', async ({ request }) => {

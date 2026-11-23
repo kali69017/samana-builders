@@ -142,7 +142,7 @@ async function createBookingViaApi(
   req: APIRequestContext,
   token: string,
   f: BaseFixture,
-  opts: { totalAmount?: string; advance?: string; notes?: string; source?: string } = {},
+  opts: { totalAmount?: string; advance?: string; notes?: string; source?: string; verifyAdvance?: boolean } = {},
 ): Promise<any> {
   const totalAmount = opts.totalAmount ?? TOTAL_COST;
   const advance = opts.advance ?? ADVANCE;
@@ -162,6 +162,15 @@ async function createBookingViaApi(
   const booking = (list as any[]).find((b) => b.plot_number === f.plotNumber);
   expect(booking, 'booking found by plot_number').toBeTruthy();
   created.bookings.push(booking.id);
+  // The advance is recorded as a pending Payment. Most fixtures want the money
+  // applied, so verify it here unless the test is explicitly about the pending
+  // maker-checker state.
+  if (advance !== '0' && advance !== '0.00' && opts.verifyAdvance !== false) {
+    const pending = (await getPayments(req, booking.id)).find((p) => p.status === 'pending');
+    expect(pending, 'pending advance payment').toBeTruthy();
+    await verifyPayment(req, token, pending.id);
+    return await getBooking(req, booking.id);
+  }
   return booking;
 }
 
@@ -185,6 +194,15 @@ async function getPayments(req: APIRequestContext, bookingId: number): Promise<a
 
 async function reversePayment(req: APIRequestContext, token: string, paymentId: number): Promise<void> {
   await req.post(`/payments/${paymentId}/reverse/`, { form: {}, headers: csrf(token) });
+}
+
+async function verifyPayment(req: APIRequestContext, token: string, paymentId: number): Promise<void> {
+  const res = await req.post(`/payments/${paymentId}/verify/`, {
+    form: {},
+    headers: csrf(token),
+    maxRedirects: 0,
+  });
+  expect(res.status(), 'verify payment').toBe(302);
 }
 
 async function cancelBookingWeb(
@@ -273,7 +291,7 @@ test.describe('HP — happy path', () => {
   test.describe('booking lifecycle (admin/management UI)', () => {
     test.use({ storageState: 'tests/.auth/admin.json' });
 
-    test('BOOK-HP-01 — Create booking: auto BKG id, plot booked, verified Payment + Receipt, advance_paid set', async ({
+    test('BOOK-HP-01 - Create booking: auto BKG id, plot booked, pending advance verified later', async ({
       page,
       request,
     }) => {
@@ -297,13 +315,22 @@ test.describe('HP — happy path', () => {
       expect(booking.booking_id).toMatch(/^BKG-\d{5}$/);
       expect(booking.status).toBe('pending');
       expect(booking.total_amount).toBe(TOTAL_COST);
-      expect(booking.advance_paid).toBe(ADVANCE);
+      // Maker-checker: the advance is a pending payment until it is verified.
+      expect(booking.advance_paid).toBe('0.00');
 
       const plot = await getPlot(request, f.plotId);
       expect(plot.status).toBe('booked');
 
-      const pays = await getPayments(request, booking.id);
-      const verified = pays.filter((p) => p.status === 'verified');
+      const pendingPays = await getPayments(request, booking.id);
+      expect(pendingPays).toHaveLength(1);
+      expect(pendingPays[0].status).toBe('pending');
+      expect(pendingPays[0].amount).toBe(ADVANCE);
+      expect(await (await request.get(`/api/receipts/?payment=${pendingPays[0].id}`)).json()).toHaveLength(0);
+
+      await verifyPayment(request, token, pendingPays[0].id);
+      expect((await getBooking(request, booking.id)).advance_paid).toBe(ADVANCE);
+
+      const verified = (await getPayments(request, booking.id)).filter((p) => p.status === 'verified');
       expect(verified.length).toBe(1);
       expect(verified[0].amount).toBe(ADVANCE);
       const receipts = await (await request.get(`/api/receipts/?payment=${verified[0].id}`)).json();
@@ -1046,21 +1073,28 @@ test.describe('SEC — negative & security', () => {
 // API — API contract
 // ═══════════════════════════════════════════════════════════════════════════════════
 test.describe('API — API contract', () => {
-  test('BOOK-API-01 — POST /api/bookings/ create: plot booked + verified Payment + Receipt + BKG id', async ({
+  test('BOOK-API-01 - POST /api/bookings/ create: plot booked, pending advance, verify posts Receipt', async ({
     request,
   }) => {
     const token = await apiLogin(request, 'admin');
     const f = await createBaseFixture(request, token);
-    const booking = await createBookingViaApi(request, token, f);
+    const booking = await createBookingViaApi(request, token, f, { verifyAdvance: false });
 
     expect(booking.booking_id).toMatch(/^BKG-\d{5}$/);
     expect(booking.status).toBe('pending');
+    expect(booking.advance_paid).toBe('0.00');
     expect((await getPlot(request, f.plotId)).status).toBe('booked');
 
-    const pays = await getPayments(request, booking.id);
-    const verified = pays.filter((p) => p.status === 'verified');
+    const pending = (await getPayments(request, booking.id)).find((p) => p.status === 'pending');
+    expect(pending).toBeTruthy();
+    expect(pending.amount).toBe(ADVANCE);
+    expect(await (await request.get(`/api/receipts/?payment=${pending.id}`)).json()).toHaveLength(0);
+
+    await verifyPayment(request, token, pending.id);
+
+    expect((await getBooking(request, booking.id)).advance_paid).toBe(ADVANCE);
+    const verified = (await getPayments(request, booking.id)).filter((p) => p.status === 'verified');
     expect(verified.length).toBe(1);
-    expect(verified[0].amount).toBe(ADVANCE);
     const receipts = await (await request.get(`/api/receipts/?payment=${verified[0].id}`)).json();
     expect(receipts.length).toBe(1);
   });

@@ -1,5 +1,6 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
 import { loginViaApi, ROLES } from '../helpers/auth';
+import { countVouchersFor } from '../helpers/ledger';
 
 type Role = keyof typeof ROLES;
 
@@ -138,8 +139,7 @@ async function findReceipts(request: APIRequestContext, paymentId: number): Prom
   return (await request.get(`/api/receipts/?payment=${paymentId}`)).json();
 }
 async function countLedgerRefund(request: APIRequestContext, refundId: number): Promise<number> {
-  const rows = await (await request.get('/api/account-transactions/?transaction_type=refund')).json();
-  return rows.filter((r: any) => r.reference_type === 'Refund' && r.reference_id === refundId).length;
+  return countVouchersFor(request, 'Refund', refundId);
 }
 
 // ================================================================================

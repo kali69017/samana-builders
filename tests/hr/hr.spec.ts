@@ -1,5 +1,6 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
 import { loginViaApi } from '../helpers/auth';
+import { ledgerRowsFor } from '../helpers/ledger';
 
 /**
  * Samana ERP — HR module test suite.
@@ -13,7 +14,7 @@ import { loginViaApi } from '../helpers/auth';
  *
  * Note on cleanup: `cleanup()` re-logs as `admin` (superuser) and deletes the objects the
  * test created (payroll run → slips/payments cascade; employee → salaries/leaves/attendance
- * cascade; ledger rows are matched by reference_id before the run is deleted). Confirmed-bug
+ * cascade). Posted vouchers are immutable and stay in the ledger. Confirmed-bug
  * tests assert the *correct* behaviour, so they fail (RED) before reaching cleanup — those
  * fixtures leak into the shared dev DB by design.
  */
@@ -117,14 +118,16 @@ async function getRunPaymentIds(request: APIRequestContext, runId: number): Prom
   return payments.filter((p) => slipIds.includes(p.slip)).map((p) => p.id);
 }
 
-async function deleteLedgerForPayments(request: APIRequestContext, token: string, paymentIds: number[]) {
-  if (!paymentIds.length) return;
-  const rows = (await (await request.get('/api/account-transactions/?transaction_type=payroll')).json()) as any[];
-  for (const row of rows) {
-    if (row.reference_type === 'SalaryPayment' && paymentIds.includes(row.reference_id)) {
-      await del(request, token, `/api/account-transactions/${row.id}/`);
-    }
-  }
+/**
+ * Vouchers are immutable and have no delete endpoint, so payroll cleanup leaves
+ * the posted salary vouchers in place. Kept as a documented no-op.
+ */
+async function deleteLedgerForPayments(
+  _request: APIRequestContext,
+  _token: string,
+  _paymentIds: number[],
+): Promise<void> {
+  /* nothing to remove */
 }
 
 interface CleanupOpts {
@@ -244,12 +247,11 @@ test.describe('HR — Happy Path (HP)', () => {
     const aPayment = payments.find((p) => p.slip === aSlip.id);
     expect(aPayment.amount).toBe('50000.00');
 
-    const txs = (await (await request.get('/api/account-transactions/?transaction_type=payroll')).json()) as any[];
-    const matches = txs.filter((t) => t.reference_type === 'SalaryPayment' && t.reference_id === aPayment.id);
+    const matches = await ledgerRowsFor(request, 'SalaryPayment', aPayment.id);
     expect(matches).toHaveLength(1);
     expect(matches[0].amount).toBe('50000.00');
     expect(matches[0].direction).toBe('out');
-    expect(matches[0].category).toBe('Salary');
+    expect(matches[0].narration).toContain('Salary payment');
 
     const run = (await (await request.get(`/api/payroll-runs/${runId}/`)).json()) as any;
     expect(run.status).toBe('paid');
@@ -1029,10 +1031,10 @@ test.describe('HR — API Contract (API)', () => {
     const payment = (await pay.json()) as any;
     expect(payment.amount).toBe('50000.00');
 
-    // perform_create posts exactly one ledger row.
-    const txs = (await (await request.get('/api/account-transactions/?transaction_type=payroll')).json()) as any[];
-    const matches = txs.filter((t) => t.reference_type === 'SalaryPayment' && t.reference_id === payment.id);
-    expect(matches).toHaveLength(1);
+    // perform_create posts exactly one ledger row. Voucher reads are finance-only,
+    // so switch to the admin session for the read.
+    await loginViaApi(request, 'admin');
+    expect(await ledgerRowsFor(request, 'SalaryPayment', payment.id)).toHaveLength(1);
 
     await cleanup(request, {
       runIds: [run.id],
@@ -1102,9 +1104,9 @@ test.describe('HR — API Contract (API)', () => {
 
     const payments = (await (await request.get('/api/salary-payments/')).json()) as any[];
     const aPayment = payments.find((p) => p.employee_name === a.full_name);
-    const txs = (await (await request.get('/api/account-transactions/?transaction_type=payroll')).json()) as any[];
-    const matches = txs.filter((t) => t.reference_type === 'SalaryPayment' && t.reference_id === aPayment.id);
-    expect(matches).toHaveLength(1);
+    // Voucher reads are finance-only, so switch to the admin session for the read.
+    await loginViaApi(request, 'admin');
+    expect(await ledgerRowsFor(request, 'SalaryPayment', aPayment.id)).toHaveLength(1);
 
     await cleanup(request, {
       runIds: [run.id],

@@ -4,8 +4,8 @@
  * Covers the 32 scenarios from specs/expenses.md (EXP-HP-*, EXP-EC-*, EXP-SEC-*,
  * EXP-API-*). Expenses are a web-only module (no DRF ViewSet), so fixtures are
  * created by driving the Django forms via `page.request` / `request` POSTs (with
- * CSRF) and verified against the DRF finance read endpoints (account-transactions,
- * audit-logs) plus the rendered HTML.
+ * CSRF) and verified against the Voucher API (`/api/vouchers/`) plus the
+ * rendered HTML and audit-logs.
  *
  * CONFIRMED BUGS — written RED on purpose (assert the SECURE behaviour, which
  * currently fails):
@@ -16,6 +16,7 @@
  * The dev server must be running on http://127.0.0.1:8000 with DJANGO_DEBUG=True.
  */
 import { test, expect, Page, APIRequestContext } from '@playwright/test';
+import { ledgerRowsFor } from '../helpers/ledger';
 
 const ADMIN_SS = 'tests/.auth/admin.json';
 const ACCOUNTS_SS = 'tests/.auth/accounts.json';
@@ -143,10 +144,9 @@ async function getStatus(ctx: APIRequestContext, pk: number): Promise<string> {
   return 'unknown';
 }
 
-/** Ledger rows for an expense (reference_type='Expense', reference_id=pk). */
+/** Ledger rows (Voucher API) for an expense (reference_type='Expense', reference_id=pk). */
 async function ledgerFor(ctx: APIRequestContext, pk: number): Promise<any[]> {
-  const rows = (await (await ctx.get('/api/account-transactions/')).json()) as any[];
-  return rows.filter((r) => r.reference_type === 'Expense' && r.reference_id === pk);
+  return ledgerRowsFor(ctx, 'Expense', pk);
 }
 
 /** AuditLog rows for a given model + object id. */
@@ -216,7 +216,7 @@ test.describe('EXP — happy path (HP)', () => {
     expect(ledger).toHaveLength(1);
     expect(ledger[0].amount).toBe('5001.50');
     expect(ledger[0].direction).toBe('out');
-    expect(ledger[0].transaction_type).toBe('project_cost');
+    expect(ledger[0].transaction_type).toBe('office_expense');
 
     const logs = await auditFor(page.request, 'Expense', eid);
     expect(logs.some((l) => l.action === 'verify')).toBe(true);

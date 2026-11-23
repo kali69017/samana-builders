@@ -1,5 +1,6 @@
 import { test, expect, APIRequestContext, Page } from '@playwright/test';
 import { loginViaApi, ROLES } from '../helpers/auth';
+import { countVouchersFor } from '../helpers/ledger';
 
 type Role = keyof typeof ROLES;
 
@@ -126,7 +127,7 @@ async function seedFixture(
   createdProjects.push(project.id);
   const plot = await mustPost(request, token, '/api/plots/', { plot_number: `B-${tag}`, project: project.id, size_marla: 5, price: totalAmount });
   createdPlots.push(plot.id);
-  // advance_paid: 0 → BookingViewSet.perform_create records no upfront verified Payment.
+  // advance_paid: 0 -> BookingViewSet.perform_create records no upfront Payment.
   await mustPost(request, token, '/api/bookings/', { customer: customerId, plot: plot.id, total_amount: totalAmount, advance_paid: 0 });
   const bookings = await (await request.get(`/api/bookings/?customer=${customerId}`)).json();
   const booking = bookings[0];
@@ -180,8 +181,7 @@ async function findReceipts(request: APIRequestContext, paymentId: number): Prom
   return (await request.get(`/api/receipts/?payment=${paymentId}`)).json();
 }
 async function countLedgerRefund(request: APIRequestContext, refundId: number): Promise<number> {
-  const rows = await (await request.get('/api/account-transactions/?transaction_type=refund')).json();
-  return rows.filter((r: any) => r.reference_type === 'Refund' && r.reference_id === refundId).length;
+  return countVouchersFor(request, 'Refund', refundId);
 }
 
 /** Accept the native confirm() dialogs fired by verify/reject/bounce/reverse buttons. */
