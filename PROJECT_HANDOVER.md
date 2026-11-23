@@ -1,12 +1,14 @@
 # Samana Builders ERP - Project Handover
 
-Date: 2026-11-22. Originally written 2026-11-16.
+Date: 2026-11-23. Originally written 2026-11-16.
 
 This document covers the customer-liability accounting change, manual voucher deletion, customer do-not-message controls, and the operating rules needed to run the ERP safely.
 
-## Current production state, 2026-11-22
+## Current production state, 2026-11-23
 
-- Production release commit: `40446b4`.
+- Production release commit: `58408d9`.
+- Local residual review fixes are committed on `main` but are not pushed or deployed. They are waiting for explicit approval.
+- The residual full suite has not been run yet. It is waiting for explicit instruction.
 - The production database was wiped on 2026-11-22.
 - Only the `superadmin` user remains. Its profile role is `super_admin`.
 - 29 seeded account heads, 103 migrations, 308 auth permissions and 77 content types remain.
@@ -37,7 +39,8 @@ This document covers the customer-liability accounting change, manual voucher de
 | View vouchers and ledger | Yes | Yes | Yes | Yes | No | No | No |
 | Create or edit draft vouchers | Yes | Yes | Yes | Yes | No | No | No |
 | Post or unlock vouchers | Yes | Yes | Yes | No | No | No | No |
-| Record payments and refunds | Yes | Yes | Yes | Yes | No | No | No |
+| Record a pending payment | Yes | Yes | Yes | Yes | Yes | No | No |
+| Record refunds | Yes | Yes | Yes | Yes | No | No | No |
 | Verify payments | Yes | Yes | No | Yes | No | No | No |
 | View properties list and detail | Yes | Yes | Yes | Yes | Yes | Yes | Project Manager yes; Contractor no |
 | View milestones | Yes | Yes | Yes | Yes | Yes | Yes | Project Manager and Contractor yes |
@@ -382,3 +385,71 @@ The restored production snapshot has Payment vouchers that credit Accounts Recei
 - Delivered-booking payments and refunds move to Revenue instead of Customer Advances.
 
 Run the conversion on the restored scratch database before `finance_integrity_check`. The empty database and the clean production start need no conversion.
+
+## 2026-11-23: Residual review fixes
+
+### Payment creation and verification
+
+- The Record New Payment web form and `POST /api/payments/` now create `pending` payments with no `verified_by` and no `verified_at`.
+- A pending payment creates no receipt, no voucher and no notification.
+- Verification remains only in the verify action. The maker-checker rules and the super_admin self-verification exception are unchanged.
+- Sales may create a pending payment from the web form and the API. Sales still cannot verify payments or open the payment list.
+- Web and API creation tests cover management, sales, accounts, admin and super_admin. All five roles get a pending payment.
+
+### Reversal accounting
+
+- `post_payment_reversal` decides the debit head when the reversal is posted.
+- If a delivery journal is posted, the reversal debits Plot Sales Revenue and credits the original cash or bank account.
+- If the booking is not delivered, the reversal debits Customer Advances & Bookings.
+- The reversal is still idempotent on `('PaymentReversal', payment id)`.
+- `fix_payment_postings` uses the same reversal function. `post_refund` already chose its head at posting time and had no ordering bug.
+
+### Integrity checks
+
+`finance_integrity_check` now also checks that no booking has a debit Customer Advances balance and that Revenue linked to each booking equals delivered net collected. Undelivered bookings must have zero linked Revenue.
+
+Fresh-database scenario result, with integrity passing after every step:
+
+| Step | Collected | Customer advances | Recognized revenue | Expenses | Profit |
+|---|---:|---:|---:|---:|---:|
+| 0 baseline | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| 1 pending pre-delivery payment 700 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| 2 verify pre-delivery payment | 700.00 | 700.00 | 0.00 | 0.00 | 0.00 |
+| 3 deliver | 700.00 | 0.00 | 700.00 | 0.00 | 700.00 |
+| 4 reverse pre-delivery payment after delivery | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| 5 second payment 500 after delivery | 500.00 | 0.00 | 500.00 | 0.00 | 500.00 |
+| 6 refund 200 after delivery | 500.00 | 0.00 | 300.00 | 0.00 | 300.00 |
+
+### Peripheral reporting
+
+- `/api/company-settings/summary/`, the AI grounding context and the AI insights page now use `finance.reporting`.
+- The names are `collected`, `customer_advances_held`, `recognized_revenue`, `expenses` and `profit`.
+- The old summary keys `revenue` and `net_profit` were removed. No frontend or template consumer was found. Internal tests and the release probe were updated.
+
+### Posted payment immutability
+
+After a receipt voucher exists, amount, booking, cash or bank account, payment date and payment method are locked in the model, queryset update, serializer, web form and Django admin. Notes, reference and cheque number remain editable.
+
+### AccountTransaction cleanup
+
+- The unused `AccountTransactionViewSet`, its serializer and their imports were removed.
+- The model and table remain.
+- `/api/account-transactions/` stays HTTP 404.
+
+### Local commits
+
+- `0671959`: create payments pending until verification.
+- `e528d85`: decide payment reversal head at reversal time.
+- `f341439`: use reporting service in peripheral consumers.
+- `fc36431`: lock payment date and method after posting.
+- `3fdefd6`: remove unused account transaction API code.
+
+### Verification and remaining points
+
+- Focused tests for each change passed.
+- `makemigrations --check --dry-run`: no changes detected.
+- The fresh-database scenario above passed `finance_integrity_check` after every step.
+- The full suite was not run after these changes, by explicit instruction.
+- Booking create auto advance in `core/views.py` and `bookings/api_views.py`, and the installment `mark_paid` API action, still create verified payments outside the verify action. They are reported and unchanged.
+- Demo and test scripts also create verified payments directly. They are not production creation paths.
+- The temporary database cleanup list is in `release-report/stage6-temp-db-cleanup.txt`. Nothing was deleted.

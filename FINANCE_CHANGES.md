@@ -664,3 +664,77 @@ This reverses the earlier no-delete rule for a narrow case. Only manual vouchers
 - System vouchers remain undeletable and must be corrected at the source record.
 - A deletion snapshot is written to `VoucherDeletionLog` with no foreign key to the voucher.
 - The voucher number is retired and a gap remains.
+
+## 2026-11-23: Residual review fixes
+
+### Payment creation is pending
+
+- The Record New Payment web form and the `POST /api/payments/` create path now create `pending` payments with no `verified_by` and no `verified_at`.
+- Verification remains only in the verify action, with the maker-checker rules and the super_admin self-verification exception.
+- Sales can create a pending payment from the web form and the API. Sales still cannot verify payments or open the payment list.
+- A pending payment creates no receipt, no voucher and no notification. Those effects apply on the verified transition.
+- Tests cover web and API creation for management, sales, accounts, admin and super_admin. Every role gets a pending payment.
+- Remaining verified-payment creation points outside the verify action are reported below and were not changed in this stage.
+
+### Reversal head is decided when reversing
+
+- `post_payment_reversal` no longer copies the original receipt lines.
+- If the booking has a posted delivery journal, the reversal debits Plot Sales Revenue and credits the original cash or bank account.
+- If the booking is not delivered, the reversal debits Customer Advances & Bookings.
+- The cash or bank account is taken from the original receipt's debit line.
+- The reversal remains idempotent on `('PaymentReversal', payment id)`.
+- `fix_payment_postings` uses `post_payment_reversal`, so it follows the same rule.
+- `post_refund` already selected its debit head at posting time. No ordering bug was found there.
+
+### New integrity checks
+
+`finance_integrity_check` now also checks:
+
+- No booking has a debit balance in Customer Advances & Bookings.
+- For every delivered booking, Revenue linked to that booking equals verified payments minus processed refunds.
+- For every undelivered booking, Revenue linked to that booking is zero.
+
+The check passed after every step of this fresh-database scenario:
+
+| Step | Collected | Customer advances | Recognized revenue | Expenses | Profit |
+|---|---:|---:|---:|---:|---:|
+| 0 baseline | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| 1 pending pre-delivery payment 700 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| 2 verify the pre-delivery payment | 700.00 | 700.00 | 0.00 | 0.00 | 0.00 |
+| 3 deliver | 700.00 | 0.00 | 700.00 | 0.00 | 700.00 |
+| 4 reverse the pre-delivery payment after delivery | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| 5 second payment 500 after delivery | 500.00 | 0.00 | 500.00 | 0.00 | 500.00 |
+| 6 refund 200 after delivery | 500.00 | 0.00 | 300.00 | 0.00 | 300.00 |
+
+### Peripheral reporting
+
+- `/api/company-settings/summary/` now uses `finance.reporting`.
+- The AI grounding context in `ai/services.py` and the AI insights page use `finance.reporting`.
+- The response and context names are `collected`, `customer_advances_held`, `recognized_revenue`, `expenses` and `profit`.
+- The old `revenue` and `net_profit` summary keys were removed. No frontend or template consumer was found. The only callers found were internal tests and the release probe.
+- The AI grounding text no longer calls booking advance paid total revenue.
+
+### Posted payment immutability
+
+After a receipt voucher exists, these fields are locked in the model, queryset update, serializer, web form and Django admin:
+
+- amount
+- booking
+- cash or bank account
+- payment date
+- payment method
+
+Notes, reference and cheque number remain editable.
+
+### AccountTransaction API cleanup
+
+- The unused `AccountTransactionViewSet`, its serializer and their imports were removed.
+- The `AccountTransaction` model and database table remain.
+- `/api/account-transactions/` stays HTTP 404.
+
+### Verification state
+
+- Focused tests for each change passed.
+- `makemigrations --check --dry-run`: no changes detected.
+- A fresh migrated database completed the scenario above with `finance_integrity_check` passing after every step.
+- The full suite was not run after these changes, by explicit instruction. It is waiting for the user's go-ahead.
