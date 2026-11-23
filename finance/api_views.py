@@ -3,11 +3,11 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import (
-    AccountTransaction, AccountHead, Office, ExpenseCategory, OfficeExpense,
+    AccountHead, Office, ExpenseCategory, OfficeExpense,
     ProjectBudget, ProjectCost, ProjectInvestment, Voucher,
 )
 from .serializers import (
-    AccountTransactionSerializer, AccountHeadSerializer, OfficeSerializer,
+    AccountHeadSerializer, OfficeSerializer,
     ExpenseCategorySerializer, OfficeExpenseSerializer, ProjectBudgetSerializer,
     ProjectCostSerializer, ProjectInvestmentSerializer, VoucherSerializer,
     VoucherAuditLogSerializer,
@@ -32,28 +32,6 @@ class IsFinanceOrAbove(permissions.BasePermission):
             return True
         role = getattr(getattr(request.user, 'profile', None), 'role', None)
         return role in ['super_admin', 'admin', 'management', 'accounts']
-
-
-class AccountTransactionViewSet(viewsets.ModelViewSet):
-    queryset = AccountTransaction.objects.select_related('employee').all()
-    serializer_class = AccountTransactionSerializer
-    permission_classes = [IsFinanceOrAbove]
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        transaction_type = self.request.query_params.get('transaction_type')
-        direction = self.request.query_params.get('direction')
-        date_from = self.request.query_params.get('date_from')
-        date_to = self.request.query_params.get('date_to')
-        if transaction_type:
-            qs = qs.filter(transaction_type=transaction_type)
-        if direction:
-            qs = qs.filter(direction=direction)
-        if date_from:
-            qs = qs.filter(date__gte=date_from)
-        if date_to:
-            qs = qs.filter(date__lte=date_to)
-        return qs
 
 
 class OfficeViewSet(viewsets.ModelViewSet):

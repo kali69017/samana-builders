@@ -2,34 +2,10 @@ from decimal import Decimal
 
 from rest_framework import serializers
 from .models import (
-    AccountTransaction, AccountHead, Office, ExpenseCategory, OfficeExpense,
+    AccountHead, Office, ExpenseCategory, OfficeExpense,
     ProjectBudget, ProjectCost, ProjectInvestment, Voucher, VoucherAuditLog,
     VoucherLine,
 )
-
-
-class AccountTransactionSerializer(serializers.ModelSerializer):
-    transaction_type_display = serializers.CharField(source='get_transaction_type_display', read_only=True)
-    direction_display = serializers.CharField(source='get_direction_display', read_only=True)
-    employee_name = serializers.CharField(source='employee.full_name', read_only=True, allow_null=True)
-
-    def validate_amount(self, value):
-        if value is not None and value <= 0:
-            raise serializers.ValidationError('Amount must be greater than 0')
-        return value
-
-    def validate_direction(self, value):
-        if value not in ('in', 'out'):
-            raise serializers.ValidationError("Direction must be 'in' or 'out'.")
-        return value
-
-    class Meta:
-        model = AccountTransaction
-        fields = ['id', 'date', 'amount', 'direction', 'direction_display',
-                  'transaction_type', 'transaction_type_display', 'category',
-                  'reference_type', 'reference_id', 'employee', 'employee_name',
-                  'description', 'created_at']
-        read_only_fields = ['id', 'created_at']
 
 
 class OfficeSerializer(serializers.ModelSerializer):
