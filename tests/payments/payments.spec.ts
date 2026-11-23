@@ -300,6 +300,9 @@ test.describe('PAY-HP', () => {
         maxRedirects: 0,
       });
       const payment = (await getPayments(request, fx.bookingId))[0];
+      await request.post(`/payments/${payment.id}/verify/`, {
+        headers: { 'X-CSRFToken': token }, maxRedirects: 0,
+      });
       const receipt = (await findReceipts(request, payment.id))[0];
 
       // Detail page as `accounts` (payments_access allows it).
