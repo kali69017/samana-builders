@@ -3,9 +3,13 @@ chart of accounts, and the FIN-EC-03 paid-expense warning."""
 from datetime import date
 from decimal import Decimal
 from io import BytesIO
+from unittest import mock
 
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.db import connection
+from django.db.models.query import QuerySet
+from django.db.transaction import TransactionManagementError
+from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 
 from core.models import UserProfile
@@ -211,6 +215,49 @@ class AccountHeadUiTests(AccountingUiBase):
     def test_sales_denied_tree(self):
         self.login(self.sales)
         self.assertEqual(self.client.get(reverse('finance_account_heads')).status_code, 302)
+
+
+class AccountHeadEditTransactionTests(TransactionTestCase):
+    """A normal account-head edit must lock the row inside a transaction.
+
+    PostgreSQL raises TransactionManagementError when select_for_update()
+    runs outside a transaction. SQLite hides that mistake, so this test adds
+    the same guard around the query. TransactionTestCase is used because
+    TestCase wraps the whole test in an atomic block.
+    """
+
+    def setUp(self):
+        self.finance = User.objects.create_user('uiedit', 'edit@example.com', 'pass12345')
+        UserProfile.objects.create(user=self.finance, role='accounts')
+        self.bank = AccountHead.objects.get(system_role='bank_default')
+
+    def test_edit_head_name_uses_a_transaction(self):
+        original_select_for_update = QuerySet.select_for_update
+
+        def guarded_select_for_update(queryset, *args, **kwargs):
+            if not connection.in_atomic_block:
+                raise TransactionManagementError(
+                    'select_for_update cannot be used outside of a transaction.'
+                )
+            return original_select_for_update(queryset, *args, **kwargs)
+
+        self.client.force_login(self.finance)
+        with mock.patch.object(
+            QuerySet, 'select_for_update', guarded_select_for_update,
+        ):
+            resp = self.client.post(
+                reverse('finance_account_head_edit', args=[self.bank.pk]),
+                {
+                    'name': 'Bank Renamed',
+                    'parent': self.bank.parent_id,
+                    'account_kind': 'bank',
+                    'is_active': 'on',
+                },
+            )
+
+        self.assertEqual(resp.status_code, 302)
+        self.bank.refresh_from_db()
+        self.assertEqual(self.bank.name, 'Bank Renamed')
 
 
 class PaidExpenseWarningTests(AccountingUiBase):

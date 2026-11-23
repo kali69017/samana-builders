@@ -547,21 +547,21 @@ class AccountHead(models.Model):
                     AccountHead.objects.filter(pk=parent.pk).update(is_leaf=False)
             return
 
-        old = AccountHead.objects.select_for_update().get(pk=self.pk)
-        self._root_guard(old, update_fields)
-        if old.parent_id is None:
-            self.nature = 'debit' if self.code == '1' else (
-                'debit' if self.code == '5' else 'credit'
-            )
-            super().save(*args, **kwargs)
-            return
-
-        if old.parent_id != self.parent_id:
-            if self.voucher_lines.exists():
-                raise ValidationError(
-                    {'parent': 'The parent cannot be changed after ledger entries exist.'}
+        with transaction.atomic():
+            old = AccountHead.objects.select_for_update().get(pk=self.pk)
+            self._root_guard(old, update_fields)
+            if old.parent_id is None:
+                self.nature = 'debit' if self.code == '1' else (
+                    'debit' if self.code == '5' else 'credit'
                 )
-            with transaction.atomic():
+                super().save(*args, **kwargs)
+                return
+
+            if old.parent_id != self.parent_id:
+                if self.voucher_lines.exists():
+                    raise ValidationError(
+                        {'parent': 'The parent cannot be changed after ledger entries exist.'}
+                    )
                 parent = AccountHead.objects.select_for_update().get(pk=self.parent_id)
                 if parent.level + self._subtree_height() > 4:
                     raise ValidationError(
@@ -577,10 +577,10 @@ class AccountHead(models.Model):
                     AccountHead.objects.filter(pk=parent.pk).update(is_leaf=False)
                 if old.parent_id and not old.parent.children.exists():
                     AccountHead.objects.filter(pk=old.parent_id).update(is_leaf=True)
-            return
+                return
 
-        self.nature = self.root.nature if self.parent_id else self.nature
-        super().save(*args, **kwargs)
+            self.nature = self.root.nature if self.parent_id else self.nature
+            super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
         if self.parent_id is None:
