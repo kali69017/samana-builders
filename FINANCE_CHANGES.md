@@ -674,11 +674,8 @@ This reverses the earlier no-delete rule for a narrow case. Only manual vouchers
 - Sales can create a pending payment from the web form and the API. Sales still cannot verify payments or open the payment list.
 - A pending payment creates no receipt, no voucher and no notification. Those effects apply on the verified transition.
 - Tests cover web and API creation for management, sales, accounts, admin and super_admin. Every role gets a pending payment.
-- Remaining verified-payment creation points outside the verify action were not changed in this stage:
-  - Web booking create auto advance in `core/views.py`.
-  - Booking API create auto advance in `bookings/api_views.py`.
-  - Installment `mark_paid` API action in `bookings/api_views.py`.
-  - Demo and test scripts that insert verified payments directly.
+- At this point web booking create, API booking create and installment `mark_paid` still created verified payments. They were fixed later in the `2026-11-23: Booking and installment maker-checker` section below.
+- Demo and test scripts that insert verified payments directly are not production creation paths.
 
 ### Reversal head is decided when reversing
 
@@ -742,3 +739,63 @@ Notes, reference and cheque number remain editable.
 - `makemigrations --check --dry-run`: no changes detected.
 - A fresh migrated database completed the scenario above with `finance_integrity_check` passing after every step.
 - The full suite was not run after these changes, by explicit instruction. It is waiting for the user's go-ahead.
+
+## 2026-11-23: Booking and installment maker-checker
+
+### Booking creation
+
+- The Record New Booking web form and `POST /api/bookings/` create a pending `Payment` for the requested advance.
+- The stored `Booking.advance_paid` is zero until that payment is verified.
+- The requested advance is still used to set the installment plan down payment.
+- No receipt, payment voucher or payment notification is created at booking time.
+- The booking-created notification still queues at booking create. It is separate from payment and receipt notifications.
+- Reservation conversion now creates a pending payment for the token and stores `advance_paid` as zero.
+
+### Installment mark paid
+
+- The web and API mark-paid actions create a pending `Payment` for the installment.
+- They do not change `paid_amount`, `status` or `paid_date` on the installment.
+- A second pending payment for the same installment is refused.
+- The installment shows `Payment pending verification` while the payment is pending.
+
+### Balance recomputation
+
+- `Booking.recalculate_advance_paid()` sums verified payments, subtracts approved or processed refunds, and caps the result at the booking total.
+- `Installment.recalculate_paid_amount()` sums verified payments linked to the installment and sets paid, partial or pending status.
+- `Payment._handle_verified_transition()` and `Payment.post_reversal()` now apply these balance effects.
+- Web verify, API verify, web reverse and API bounce no longer duplicate the balance effects.
+- Rejecting or bouncing a pending payment leaves the booking advance and installment unchanged.
+
+### Booking update API
+
+- `advance_paid` is read only on booking update. It can only change through the payment workflow.
+
+### Display
+
+- The booking detail page shows the pending verification amount.
+- The booking detail installment table and the installment plan detail table show a Pending column and the pending verification status.
+
+### Before and after numbers
+
+Sample booking: total 1,000,000.00, advance 200,000.00, two installments of 400,000.00, undelivered.
+
+| Step | Booking advance | Pending payment | Sales Report | Receivables | Dashboard collected | Dashboard advances | Installment paid | Installment pending |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Old behavior at create | 200,000.00 | 0.00 | 1,000,000.00 | 800,000.00 | 200,000.00 | 200,000.00 | 0.00 | 0.00 |
+| New behavior at create | 0.00 | 200,000.00 | 1,000,000.00 | 1,000,000.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| After advance verify | 200,000.00 | 0.00 | 1,000,000.00 | 800,000.00 | 200,000.00 | 200,000.00 | 0.00 | 0.00 |
+| Installment pending | 200,000.00 | 400,000.00 | 1,000,000.00 | 800,000.00 | 200,000.00 | 200,000.00 | 0.00 | 400,000.00 |
+| Installment verified | 600,000.00 | 0.00 | 1,000,000.00 | 400,000.00 | 600,000.00 | 600,000.00 | 400,000.00 | 0.00 |
+
+The Sales Report does not change because it uses `Booking.total_amount` only. Receivables and dashboard collected and customer advances move only when a payment is verified.
+
+### Verification
+
+- New tests cover booking create for web and API, five roles, installment mark paid for web and API, pending display, reject, bounce, model-level verify and model-level reversal.
+- Existing payment, booking, audit, reporting and finance tests were updated to the new pending behavior.
+- `finance` suite: 277 tests, OK.
+- `makemigrations --check --dry-run`: no changes detected.
+- A fresh migrated database scenario passed `finance_integrity_check` after booking create, advance verify, installment pending, installment verify, delivery and reversal.
+- Playwright ledger specs were migrated to `/api/vouchers/`. No Playwright test was run, by instruction.
+- Full suite: 1,298 tests, OK, 0 failures, 0 errors.
+- The PowerShell wrapper reported exit code 1 because it surfaced the Django test database message from stderr. The Django output was `Ran 1298 tests in 900.927s` and `OK`.

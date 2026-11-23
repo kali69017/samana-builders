@@ -451,6 +451,77 @@ After a receipt voucher exists, amount, booking, cash or bank account, payment d
 - `makemigrations --check --dry-run`: no changes detected.
 - The fresh-database scenario above passed `finance_integrity_check` after every step.
 - The full suite was not run after these changes, by explicit instruction.
-- Booking create auto advance in `core/views.py` and `bookings/api_views.py`, and the installment `mark_paid` API action, still create verified payments outside the verify action. They are reported and unchanged.
+- Booking create and installment mark paid now create pending payments. See the next section.
 - Demo and test scripts also create verified payments directly. They are not production creation paths.
 - The temporary database cleanup list is in `release-report/stage6-temp-db-cleanup.txt`. Nothing was deleted.
+
+## 2026-11-23: Booking and installment maker-checker
+
+### Booking create
+
+- The web and API booking create paths create a pending `Payment` for the requested advance.
+- `Booking.advance_paid` stays zero until that payment is verified.
+- The requested advance is still used for the installment plan down payment.
+- No receipt, payment voucher or payment notification is created at booking time.
+- The booking-created notification still queues separately at booking create.
+- Reservation conversion now creates a pending token payment and stores `advance_paid` as zero.
+
+### Installment mark paid
+
+- The web and API mark-paid actions create a pending `Payment` for the installment.
+- The installment stays pending with zero paid amount until that payment is verified.
+- The installment displays `Payment pending verification` while the payment is pending.
+- A second pending payment for the same installment is refused.
+
+### Balances and reversals
+
+- `Booking.recalculate_advance_paid()` sums verified payments, subtracts approved or processed refunds, and caps at the booking total.
+- `Installment.recalculate_paid_amount()` sums verified payments linked to the installment.
+- Verification and reversal now apply these balance effects inside the `Payment` model, so web, API and Django admin transitions use the same rule.
+- Reject and bounce of a pending payment leave the booking advance and installment unchanged.
+- Reversal after delivery still debits revenue and does not make customer advances negative.
+
+### Display
+
+- The booking detail page shows a Pending Verification amount.
+- The booking detail installment table and installment plan detail table show a Pending column and the pending verification status.
+
+### Before and after numbers
+
+Sample booking: total 1,000,000.00, advance 200,000.00, two installments of 400,000.00, undelivered.
+
+| Step | Booking advance | Pending payment | Sales Report | Receivables | Dashboard collected | Dashboard advances | Installment paid | Installment pending |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Old behavior at create | 200,000.00 | 0.00 | 1,000,000.00 | 800,000.00 | 200,000.00 | 200,000.00 | 0.00 | 0.00 |
+| New behavior at create | 0.00 | 200,000.00 | 1,000,000.00 | 1,000,000.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| After advance verify | 200,000.00 | 0.00 | 1,000,000.00 | 800,000.00 | 200,000.00 | 200,000.00 | 0.00 | 0.00 |
+| Installment pending | 200,000.00 | 400,000.00 | 1,000,000.00 | 800,000.00 | 200,000.00 | 200,000.00 | 0.00 | 400,000.00 |
+| Installment verified | 600,000.00 | 0.00 | 1,000,000.00 | 400,000.00 | 600,000.00 | 600,000.00 | 400,000.00 | 0.00 |
+
+The Sales Report does not change because it uses `Booking.total_amount` only. The other figures move only when a payment is verified.
+
+### Scenario and verification
+
+Fresh migrated database, with `finance_integrity_check` passing after every step:
+
+- Booking with a 200,000.00 advance pending: collected 0.00, advances 0.00, revenue 0.00.
+- Advance verified: collected 200,000.00, advances 200,000.00, revenue 0.00.
+- Installment 400,000.00 pending: collected 200,000.00, advances 200,000.00, revenue 0.00.
+- Installment verified: collected 600,000.00, advances 600,000.00, revenue 0.00.
+- Delivery: collected 600,000.00, advances 0.00, revenue 600,000.00.
+- Pre-delivery advance reversed after delivery: collected 400,000.00, advances 0.00, revenue 400,000.00.
+
+### Local commits
+
+- `385a644`: align suite with pending payment creation.
+- `a27fcdc`: make booking and installment advances pending.
+- `54d31c6`: cover booking and installment maker checker.
+- `378a03e`: migrate Playwright ledger specs to the Voucher API.
+- `188280d`: expect pending reservation token payment.
+
+### Remaining
+
+- Full suite: 1,298 tests, OK, 0 failures, 0 errors.
+- The PowerShell wrapper reported exit code 1 because it surfaced the Django test database message from stderr. The Django output was `Ran 1298 tests in 900.927s` and `OK`.
+- Playwright is not run, by instruction.
+- Demo and test scripts that insert verified payments directly are not production creation paths.
