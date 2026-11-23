@@ -42,6 +42,14 @@ class AccountingUiBase(TestCase):
         v.post(self.finance)
         return v
 
+    def posted_cash_receipt(self):
+        bank = AccountHead.objects.get(system_role='bank_default')
+        v = Voucher.objects.create(voucher_type='CR', date=date.today(), created_by=self.finance)
+        VoucherLine.objects.create(voucher=v, account_head=self.cash, debit=Decimal('100'))
+        VoucherLine.objects.create(voucher=v, account_head=bank, credit=Decimal('100'))
+        v.post(self.finance)
+        return v, bank
+
 
 class LedgerReportUiTests(AccountingUiBase):
     def test_finance_can_view_ledger_report(self):
@@ -74,6 +82,36 @@ class LedgerReportUiTests(AccountingUiBase):
         })
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'Cash')
+
+    def test_ledger_shows_contra_account_column(self):
+        _voucher, bank = self.posted_cash_receipt()
+        self.login(self.finance)
+        resp = self.client.get(reverse('finance_ledger'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'Contra Account')
+        self.assertContains(resp, f'{bank.code} - {bank.name}')
+
+    def test_ledger_shows_contra_account_for_single_account(self):
+        _voucher, bank = self.posted_cash_receipt()
+        self.login(self.finance)
+        resp = self.client.get(reverse('finance_ledger'), {'head': self.cash.pk})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'Contra Account')
+        self.assertContains(resp, f'{bank.code} - {bank.name}')
+
+    def test_ledger_shows_all_contra_accounts_for_multi_account_voucher(self):
+        bank = AccountHead.objects.get(system_role='bank_default')
+        revenue = AccountHead.objects.get(system_role='revenue')
+        v = Voucher.objects.create(voucher_type='CR', date=date.today(), created_by=self.finance)
+        VoucherLine.objects.create(voucher=v, account_head=self.cash, debit=Decimal('100'))
+        VoucherLine.objects.create(voucher=v, account_head=bank, credit=Decimal('60'))
+        VoucherLine.objects.create(voucher=v, account_head=revenue, credit=Decimal('40'))
+        v.post(self.finance)
+        self.login(self.finance)
+        resp = self.client.get(reverse('finance_ledger'), {'head': self.cash.pk})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, f'{bank.code} - {bank.name}')
+        self.assertContains(resp, f'{revenue.code} - {revenue.name}')
 
     def test_sales_denied_ledger(self):
         self.login(self.sales)
@@ -110,10 +148,27 @@ class LedgerReportUiTests(AccountingUiBase):
         header = [c.value for c in ws[1]]
         self.assertNotIn('Ledger balance', header)
         self.assertEqual(header, [
-            'Date', 'Voucher', 'Type', 'Account', 'Narration', 'Debit', 'Credit'])
+            'Date', 'Voucher', 'Type', 'Account', 'Contra Account', 'Narration',
+            'Debit', 'Credit'])
         # No stray empty column: every populated row is exactly header-width.
         widths = {len(r) for r in ws.iter_rows(values_only=True) if any(r)}
         self.assertEqual(widths, {len(header)})
+
+    def test_excel_export_shows_contra_account(self):
+        _voucher, bank = self.posted_cash_receipt()
+        self.login(self.finance)
+        resp = self.client.get(reverse('finance_ledger_export_excel'))
+        from openpyxl import load_workbook
+        ws = load_workbook(BytesIO(resp.content)).active
+        header = [c.value for c in ws[1]]
+        contra_index = header.index('Contra Account')
+        account_index = header.index('Account')
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if row[account_index] == f'{self.cash.code} {self.cash.name}':
+                self.assertEqual(row[contra_index], f'{bank.code} - {bank.name}')
+                break
+        else:
+            self.fail('Cash row not found in the ledger export')
 
     def test_pdf_export(self):
         self.posted_voucher()

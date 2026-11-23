@@ -516,6 +516,13 @@ def _ledger_from_request(request):
     }
 
 
+def _contra_account_text(contra_accounts):
+    """Render contra accounts as a comma-separated code and name string."""
+    return ', '.join(
+        f'{head.code} - {head.name}' for head in contra_accounts
+    )
+
+
 @login_required
 @finance_or_above
 def finance_home_view(request):
@@ -545,15 +552,19 @@ def ledger_export_excel_view(request):
     # A running balance is only meaningful for a single account / roll-up, so the
     # column is omitted in the all-accounts view (same rule as ledger.html).
     has_head = report['head'] is not None
-    header = ['Date', 'Voucher', 'Type', 'Account', 'Narration', 'Debit', 'Credit']
+    header = [
+        'Date', 'Voucher', 'Type', 'Account', 'Contra Account', 'Narration',
+        'Debit', 'Credit',
+    ]
     if has_head:
         header.append('Ledger balance')
     ws.append(header)
     for row in report['rows']:
         values = [
             row['date'].strftime('%Y-%m-%d'), row['voucher_number'], row['voucher_type'],
-            f"{row['account'].code} {row['account'].name}", row['narration'],
-            float(row['debit']), float(row['credit']),
+            f"{row['account'].code} {row['account'].name}",
+            _contra_account_text(row['contra_accounts']),
+            row['narration'], float(row['debit']), float(row['credit']),
         ]
         if has_head:
             values.append(float(row['balance']))
@@ -564,7 +575,7 @@ def ledger_export_excel_view(request):
     def footer(label, value, column):
         """Write a `label / value` summary row padded to the header width."""
         row = [''] * width
-        row[4] = label
+        row[5] = label
         row[column] = value
         ws.append(row)
 
@@ -572,9 +583,9 @@ def ledger_export_excel_view(request):
         footer('Opening balance', float(report['opening_balance']), width - 1)
         footer('Ledger balance', float(report['closing_balance']), width - 1)
     else:
-        footer('Posting lines', len(report['rows']), 5)
-    footer('Total debit', float(report['total_debit']), 5)
-    footer('Total credit', float(report['total_credit']), 6)
+        footer('Posting lines', len(report['rows']), 6)
+    footer('Total debit', float(report['total_debit']), 6)
+    footer('Total credit', float(report['total_credit']), 7)
     response = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = 'attachment; filename="ledger.xlsx"'

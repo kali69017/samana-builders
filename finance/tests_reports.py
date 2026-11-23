@@ -59,6 +59,49 @@ class LedgerReportTest(TestCase):
         self.assertEqual(report['total_debit'], Decimal('300'))
         self.assertEqual(report['closing_balance'], Decimal('300'))
 
+    def test_contra_accounts_for_cash_receipt(self):
+        bank = AccountHead.objects.get(system_role='bank_default')
+        self._voucher(
+            date(2026, 1, 1),
+            [(self.cash, '100', '0'), (bank, '0', '100')],
+            vtype='CR',
+        )
+        report = build_ledger_report()
+        rows = report['rows']
+        self.assertEqual(len(rows), 2)
+        cash_row = next(row for row in rows if row['account'] == self.cash)
+        bank_row = next(row for row in rows if row['account'] == bank)
+        self.assertEqual([head.pk for head in cash_row['contra_accounts']], [bank.pk])
+        self.assertEqual([head.pk for head in bank_row['contra_accounts']], [self.cash.pk])
+        self.assertEqual(report['total_debit'], Decimal('100'))
+        self.assertEqual(report['total_credit'], Decimal('100'))
+
+    def test_contra_accounts_include_every_other_account(self):
+        bank = AccountHead.objects.get(system_role='bank_default')
+        revenue = AccountHead.objects.get(system_role='revenue')
+        self._voucher(
+            date(2026, 1, 1),
+            [(self.cash, '100', '0'), (bank, '0', '60'), (revenue, '0', '40')],
+            vtype='CR',
+        )
+        report = build_ledger_report()
+        rows = report['rows']
+        cash_row = next(row for row in rows if row['account'] == self.cash)
+        bank_row = next(row for row in rows if row['account'] == bank)
+        revenue_row = next(row for row in rows if row['account'] == revenue)
+        self.assertEqual(
+            {head.pk for head in cash_row['contra_accounts']},
+            {bank.pk, revenue.pk},
+        )
+        self.assertEqual(
+            {head.pk for head in bank_row['contra_accounts']},
+            {self.cash.pk, revenue.pk},
+        )
+        self.assertEqual(
+            {head.pk for head in revenue_row['contra_accounts']},
+            {self.cash.pk, bank.pk},
+        )
+
     def test_draft_vouchers_excluded(self):
         self._voucher(date(2026, 1, 1), [(self.cash, '100', '0'), (self.capital, '0', '100')])
         self._voucher(date(2026, 1, 2), [(self.cash, '999', '0'), (self.capital, '0', '999')], post=False)

@@ -28,12 +28,35 @@ def _leaf_ids(head):
     return leaves
 
 
+def _contra_accounts_by_voucher(voucher_ids):
+    """Map each voucher id to the distinct account heads posted on it.
+
+    A ledger row shows the other accounts on the same voucher as its contra
+    accounts. The row's own account is removed when the row is built.
+    """
+    contra = {}
+    if not voucher_ids:
+        return contra
+    lines = (
+        VoucherLine.objects.filter(voucher_id__in=voucher_ids)
+        .select_related('account_head')
+        .order_by('voucher_id', 'id')
+    )
+    for line in lines:
+        heads = contra.setdefault(line.voucher_id, [])
+        if all(head.pk != line.account_head_id for head in heads):
+            heads.append(line.account_head)
+    for heads in contra.values():
+        heads.sort(key=lambda head: head.code)
+    return contra
+
+
 def build_ledger_report(head=None, date_from=None, date_to=None):
     """Return a ledger report dict for ``head`` (leaf) or its roll-up (parent).
 
     Keys: ``head``, ``nature``, ``rows`` (date, voucher_number, voucher_type,
-    account, narration, debit, credit, balance), ``opening_balance``,
-    ``total_debit``, ``total_credit``, ``closing_balance``.
+    account, contra_accounts, narration, debit, credit, balance),
+    ``opening_balance``, ``total_debit``, ``total_credit``, ``closing_balance``.
     """
     if head is not None:
         head_ids = _leaf_ids(head)
@@ -61,7 +84,10 @@ def build_ledger_report(head=None, date_from=None, date_to=None):
         lines = lines.filter(voucher__date__gte=date_from)
     if date_to:
         lines = lines.filter(voucher__date__lte=date_to)
-    lines = lines.order_by('voucher__date', 'voucher__id', 'id')
+    lines = list(lines.order_by('voucher__date', 'voucher__id', 'id'))
+    contra_by_voucher = _contra_accounts_by_voucher(
+        {line.voucher_id for line in lines}
+    )
 
     rows = []
     running = opening
@@ -77,6 +103,10 @@ def build_ledger_report(head=None, date_from=None, date_to=None):
             'voucher_number': line.voucher.voucher_number,
             'voucher_type': line.voucher.get_voucher_type_display(),
             'account': line.account_head,
+            'contra_accounts': [
+                head for head in contra_by_voucher.get(line.voucher_id, [])
+                if head.pk != line.account_head_id
+            ],
             'narration': line.narration or line.voucher.narration,
             'debit': line.debit,
             'credit': line.credit,
