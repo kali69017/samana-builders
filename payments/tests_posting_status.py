@@ -4,6 +4,7 @@ from decimal import Decimal
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.db.models import Sum
 from django.test import TestCase
 from django.urls import reverse
@@ -13,6 +14,9 @@ from rest_framework.test import APITestCase
 
 from bookings.models import Booking
 from customers.models import Customer
+from finance.accounting import (
+    customer_advance_head, post_source_voucher, revenue_head,
+)
 from finance.models import AccountHead, Voucher, VoucherLine
 from payments.forms import PaymentForm
 from payments.models import Payment, Receipt
@@ -196,6 +200,36 @@ class PaymentPostingModelTests(PaymentPostingBase, TestCase):
         self.assertEqual(reversal.lines.get(debit__gt=0).account_head, self.revenue)
         self.assertEqual(self.advances_balance(), Decimal('0.00'))
         self.assert_integrity()
+
+    def test_integrity_fails_on_booking_advances_debit_balance(self):
+        payment = self.make_payment(status_value='verified', amount='100')
+        post_source_voucher(
+            reference_type='PaymentReversal', reference_id=payment.pk,
+            voucher_type='CP', date=date.today(),
+            narration='Test advances debit balance',
+            lines=[
+                (customer_advance_head(), Decimal('150'), Decimal('0.00')),
+                (self.cash, Decimal('0.00'), Decimal('150')),
+            ],
+            user=self.user,
+        )
+        with self.assertRaises(CommandError):
+            call_command('finance_integrity_check', stdout=StringIO())
+
+    def test_integrity_fails_when_delivered_revenue_differs(self):
+        self.booking.mark_delivered(self.user, date.today())
+        post_source_voucher(
+            reference_type='BookingDelivery', reference_id=self.booking.pk,
+            voucher_type='JV', date=date.today(),
+            narration='Test revenue mismatch',
+            lines=[
+                (self.cash, Decimal('50'), Decimal('0.00')),
+                (revenue_head(), Decimal('0.00'), Decimal('50')),
+            ],
+            user=self.user,
+        )
+        with self.assertRaises(CommandError):
+            call_command('finance_integrity_check', stdout=StringIO())
 
     def test_posted_payment_amount_cannot_change(self):
         payment = self.make_payment(status_value='verified')
