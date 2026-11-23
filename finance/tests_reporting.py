@@ -4,6 +4,7 @@ from decimal import Decimal
 from django.contrib.auth.models import User
 from django.db.models import Sum
 from django.test import TestCase
+from django.urls import reverse
 
 from bookings.models import Booking
 from customers.models import Customer
@@ -135,4 +136,50 @@ class ReportingServiceTests(TestCase):
             (advance_lines['credit'] or Decimal('0.00'))
             - (advance_lines['debit'] or Decimal('0.00')),
         )
+
+    def test_company_settings_summary_uses_reporting_service(self):
+        Payment.objects.create(
+            booking=self.booking, received_into=self.cash, amount=Decimal('100'),
+            payment_date=date.today(), payment_method='cash',
+            payment_type='advance', status='verified', created_by=self.user,
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('company-settings-summary'))
+        self.assertEqual(response.status_code, 200)
+        metrics = get_financial_metrics(date(2000, 1, 1), date.today())
+        self.assertEqual(response.data['collected'], float(metrics.collected))
+        self.assertEqual(
+            response.data['customer_advances_held'],
+            float(metrics.customer_advances_held),
+        )
+        self.assertEqual(
+            response.data['recognized_revenue'],
+            float(metrics.recognized_revenue),
+        )
+        self.assertEqual(response.data['expenses'], float(metrics.expenses))
+        self.assertEqual(response.data['profit'], float(metrics.profit))
+        self.assertNotIn('revenue', response.data)
+        self.assertNotIn('net_profit', response.data)
+
+    def test_ai_grounding_uses_reporting_service(self):
+        from ai.services import _erp_context_blurb
+        blurb = _erp_context_blurb()
+        self.assertIn('Collected:', blurb)
+        self.assertIn('Customer advances held:', blurb)
+        self.assertIn('Recognized revenue:', blurb)
+        self.assertIn('Expenses:', blurb)
+        self.assertIn('Profit:', blurb)
+        self.assertNotIn('Total revenue (advance paid)', blurb)
+
+    def test_ai_insights_context_uses_reporting_service(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('ai_insights_page'))
+        self.assertEqual(response.status_code, 200)
+        for key in (
+            'collected', 'customer_advances_held', 'recognized_revenue',
+            'expenses', 'profit',
+        ):
+            self.assertIn(key, response.context)
+        self.assertNotIn('total_revenue', response.context)
+        self.assertNotIn('monthly_revenue', response.context)
 

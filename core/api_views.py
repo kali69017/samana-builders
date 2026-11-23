@@ -1,8 +1,11 @@
+from datetime import date
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from django.db.models import Count, Sum
+from django.utils import timezone
+from finance.reporting import get_financial_metrics
 from .models import UserProfile, AuditLog, Lead, LeadNote, Agent, CompanySettings
 from .serializers import (UserSerializer, UserCreateSerializer,
                            UserProfileSerializer, AuditLogSerializer,
@@ -338,11 +341,8 @@ class CompanySettingsViewSet(viewsets.GenericViewSet):
         from customers.models import Customer
         from properties.models import Plot, Project
         from payments.models import Payment
-        from expenses.models import Expense
 
-        revenue = Booking.objects.aggregate(t=Sum('advance_paid'))['t'] or 0
-        expenses = Expense.objects.aggregate(t=Sum('amount'))['t'] or 0
-
+        metrics = get_financial_metrics(date(2000, 1, 1), timezone.localdate())
         return Response({
             'total_customers': Customer.objects.count(),
             'total_projects': Project.objects.exclude(status='inactive').count(),
@@ -351,7 +351,9 @@ class CompanySettingsViewSet(viewsets.GenericViewSet):
             'total_bookings': Booking.objects.count(),
             'active_bookings': Booking.objects.filter(status='active').count(),
             'pending_payments': Payment.objects.filter(status='pending').count(),
-            'revenue': float(revenue),
-            'expenses': float(expenses),
-            'net_profit': float(revenue) - float(expenses),
+            'collected': float(metrics.collected),
+            'customer_advances_held': float(metrics.customer_advances_held),
+            'recognized_revenue': float(metrics.recognized_revenue),
+            'expenses': float(metrics.expenses),
+            'profit': float(metrics.profit),
         })

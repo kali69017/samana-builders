@@ -8,9 +8,12 @@ down, and makes the API endpoints testable without network access.
 """
 import json
 import time
+from datetime import date
 
 from django.conf import settings
 from django.utils import timezone
+
+from finance.reporting import get_financial_metrics
 
 from .models import AiInteractionLog
 
@@ -130,7 +133,7 @@ def _erp_context_blurb():
     from payments.models import Payment
     from django.db.models import Sum
 
-    total_revenue = Booking.objects.aggregate(t=Sum('advance_paid'))['t'] or 0
+    metrics = get_financial_metrics(date(2000, 1, 1), timezone.localdate())
     pending_payments = Payment.objects.filter(status='pending').count()
     overdue_installments = Installment.objects.filter(status='overdue').count()
     overdue_amount = Installment.objects.filter(status='overdue').aggregate(
@@ -149,7 +152,11 @@ def _erp_context_blurb():
         f"Total customers: {Customer.objects.count()}\n"
         f"Active projects: {Project.objects.exclude(status='inactive').count()}\n"
         f"Total bookings: {Booking.objects.count()}\n"
-        f"Total revenue (advance paid): Rs. {total_revenue:,.0f}\n"
+        f"Collected: Rs. {metrics.collected:,.0f}\n"
+        f"Customer advances held: Rs. {metrics.customer_advances_held:,.0f}\n"
+        f"Recognized revenue: Rs. {metrics.recognized_revenue:,.0f}\n"
+        f"Expenses: Rs. {metrics.expenses:,.0f}\n"
+        f"Profit: Rs. {metrics.profit:,.0f}\n"
         f"Pending payments awaiting verification: {pending_payments}\n"
         f"Overdue installments: {overdue_installments} totaling Rs. {overdue_amount:,.0f}\n"
         f"Available plots: {available_plots}, booked plots: {booked_plots}\n"

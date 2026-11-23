@@ -127,7 +127,7 @@ def r3_idor_pii_read_open():
         ('leads', '/api/leads/', ['phone']),
         ('agents', '/api/agents/', ['cnic']),
         ('receipts', '/api/receipts/', ['amount']),
-        ('company-settings-summary', '/api/company-settings/summary/', ['revenue']),
+        ('company-settings-summary', '/api/company-settings/summary/', ['collected']),
     ]
     lines = []
     for name, path, keys in endpoints:

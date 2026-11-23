@@ -395,26 +395,18 @@ test.describe('CORE-EC', () => {
 
     test('CORE-EC-05 — Revenue chart vs advance_paid divergence', async ({ request }) => {
       await loginViaApi(request, 'accounts');
-      const bookings = unwrapList(await (await request.get('/api/bookings/')).json());
-      const advanceSum = bookings.reduce((s, b) => s + Number(b.advance_paid), 0);
-
       const payments = unwrapList(await (await request.get('/api/payments/')).json());
       const verifiedSum = payments
         .filter((p) => p.status === 'verified')
         .reduce((s, p) => s + Number(p.amount), 0);
 
-      // Headline (company-settings summary) is Σ advance_paid.
+      // Headline and trend both come from finance.reporting.
       const summary = await (await request.get('/api/company-settings/summary/')).json();
-      expect(summary.revenue).toBeCloseTo(advanceSum, 0);
+      expect(summary.collected).toBeCloseTo(verifiedSum, 0);
 
-      // The revenue-trend endpoint is sourced from verified Payment.amount,
-      // grouped by year (no date filter) — its total pins the divergence.
       const trend = await (await request.get('/dashboard/revenue-trend/?period=year')).json();
       const trendSum = (trend.amounts ?? []).reduce((s: number, a: number) => s + a, 0);
-      expect(trendSum).toBeCloseTo(verifiedSum, 0);
-
-      // Documented inconsistency: when the two totals differ, headline uses
-      // advance_paid while the chart/report use payments. No equality is forced.
+      expect(trendSum).toBeCloseTo(summary.recognized_revenue, 0);
     });
   });
 

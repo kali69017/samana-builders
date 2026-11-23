@@ -2618,10 +2618,8 @@ def ai_insights_page_view(request):
 
     today = timezone.localdate()
     month_start = today.replace(day=1)
-    total_revenue = Booking.objects.aggregate(total=Sum('advance_paid'))['total'] or 0
-    monthly_revenue = Booking.objects.filter(
-        booking_date__gte=month_start
-    ).aggregate(total=Sum('advance_paid'))['total'] or 0
+    metrics_all = get_financial_metrics(date(2000, 1, 1), today)
+    metrics_month = get_financial_metrics(month_start, today)
     pending_payments = Payment.objects.filter(status='pending').count()
     overdue_count = Installment.objects.filter(status='overdue').count()
     overdue_amount = Installment.objects.filter(status='overdue').aggregate(
@@ -2637,8 +2635,13 @@ def ai_insights_page_view(request):
     context = {
         'ai_enabled': bool(getattr(settings, 'AI_ENABLED', False)),
         'ai_configured': bool(getattr(settings, 'OPENROUTER_API_KEY', '')),
-        'total_revenue': total_revenue,
-        'monthly_revenue': monthly_revenue,
+        'collected': metrics_all.collected,
+        'customer_advances_held': metrics_all.customer_advances_held,
+        'recognized_revenue': metrics_all.recognized_revenue,
+        'expenses': metrics_all.expenses,
+        'profit': metrics_all.profit,
+        'monthly_collected': metrics_month.collected,
+        'monthly_recognized_revenue': metrics_month.recognized_revenue,
         'pending_payments': pending_payments,
         'overdue_count': overdue_count,
         'overdue_amount': overdue_amount,
