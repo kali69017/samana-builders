@@ -16,7 +16,9 @@ from bookings.models import (
 )
 from core.models import UserProfile, Agent
 from customers.models import Customer, CustomerNominee, CustomerLedgerEntry, format_cnic, format_phone
-from finance.models import Office, ExpenseCategory, OfficeExpense, ProjectBudget, ProjectCost
+from finance.models import (
+    AccountHead, Office, ExpenseCategory, OfficeExpense, ProjectBudget, ProjectCost,
+)
 from hr.models import Department, Employee, EmployeeSalary, PayrollRun, SalaryComponent, Attendance, Leave
 from payments.models import Payment, Receipt, Refund, PaymentAllocation
 from properties.models import Project, Plot, PriceHistory
@@ -372,19 +374,24 @@ class PermissionEdgeTests(APITestCase):
         self.plot = Plot.objects.create(plot_number='P-1', project=self.project, size_marla=Decimal('5'),
                                         price=Decimal('1000000'))
 
-    def test_sales_cannot_create_payment(self):
+    def test_sales_can_create_pending_payment(self):
         sales = User.objects.create_user('sales', 's@example.com', 'pass12345')
         UserProfile.objects.create(user=sales, role='sales')
         self.client.force_authenticate(user=sales)
+        cash = AccountHead.objects.get(system_role='cash_default')
         customer = Customer.objects.create(first_name='C', last_name='K', phone='+92-300-1112222',
                                            cnic='35202-7777777-7', created_by=self.admin)
         booking = Booking.objects.create(customer=customer, plot=self.plot, total_amount=Decimal('1000000'),
                                          created_by=self.admin)
         resp = self.client.post(reverse('payment-list'), {
-            'booking': booking.pk, 'amount': '10000', 'payment_date': date.today().isoformat(),
+            'booking': booking.pk, 'received_into': cash.pk, 'amount': '10000',
+            'payment_date': date.today().isoformat(),
             'payment_method': 'cash', 'payment_type': 'installment',
         }, format='json')
-        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        payment = Payment.objects.get(payment_id=resp.data['payment_id'])
+        self.assertEqual(payment.status, 'pending')
+        self.assertIsNone(payment.verified_by)
 
     def test_sales_cannot_create_office_expense(self):
         sales = User.objects.create_user('sales2', 's2@example.com', 'pass12345')

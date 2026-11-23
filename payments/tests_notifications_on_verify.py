@@ -176,7 +176,7 @@ class NotificationOnVerifyWebTests(NotificationOnVerifyBase, TestCase):
         self.client = Client()
         self.client.login(username='notify', password='pass123456')
 
-    def test_web_create_queues_one_set(self):
+    def test_web_create_is_pending_then_verify_queues_one_set(self):
         response = self.client.post(reverse('payment_create'), {
             'booking': self.booking.pk,
             'received_into': self.cash.pk,
@@ -187,6 +187,12 @@ class NotificationOnVerifyWebTests(NotificationOnVerifyBase, TestCase):
         })
         self.assertEqual(response.status_code, 302)
         payment = Payment.objects.get(booking=self.booking)
+        self.assertEqual(payment.status, 'pending')
+        self.assertFalse(Receipt.objects.filter(payment=payment).exists())
+        self.assertEqual(self.counts(payment), {})
+        response = self.client.post(reverse('payment_verify', args=[payment.pk]))
+        self.assertEqual(response.status_code, 302)
+        payment.refresh_from_db()
         self.assertEqual(payment.status, 'verified')
         self.assertEqual(Receipt.objects.filter(payment=payment).count(), 1)
         self.assertEqual(sum(self.counts(payment).values()), 5)

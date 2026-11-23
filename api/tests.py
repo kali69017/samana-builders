@@ -429,7 +429,8 @@ class CompanySettingsApiTests(ApiBaseTestCase):
     def test_dashboard_summary(self):
         resp = self.client.get(reverse('company-settings-summary'))
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertIn('revenue', resp.data)
+        self.assertIn('recognized_revenue', resp.data)
+        self.assertIn('collected', resp.data)
         self.assertIn('total_customers', resp.data)
 
 
@@ -458,13 +459,16 @@ class PermissionApiTests(ApiBaseTestCase):
         UserProfile.objects.create(user=self.sales, role='sales')
         self.client.force_authenticate(user=self.sales)
 
-    def test_sales_cannot_create_payment(self):
+    def test_sales_can_create_pending_payment(self):
         resp = self.client.post(reverse('payment-list'), {
             'booking': self.booking.pk, 'received_into': self.cash.pk, 'amount': '100000',
             'payment_date': date.today().isoformat(), 'payment_method': 'cash',
             'payment_type': 'installment',
         }, format='json')
-        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        payment = Payment.objects.get(payment_id=resp.data['payment_id'])
+        self.assertEqual(payment.status, 'pending')
+        self.assertIsNone(payment.verified_by)
 
     def test_sales_cannot_read_customers(self):
         # Hardening (F3): the customer API carries PII (CNIC/phone/email) and is

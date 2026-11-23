@@ -351,7 +351,8 @@ class CompanySettingsEdgeTests(ApiEdgeBase):
     def test_summary_endpoint(self):
         resp = self.client.get(reverse('company-settings-summary'))
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertIn('revenue', resp.data)
+        self.assertIn('recognized_revenue', resp.data)
+        self.assertIn('collected', resp.data)
 
 
 # ─── AUTH ────────────────────────────────────────────────────────────────────
