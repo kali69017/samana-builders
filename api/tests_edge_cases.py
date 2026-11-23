@@ -264,11 +264,19 @@ class InstallmentEdgeTests(ApiEdgeBase):
         inst = self.plan.installments.first()
         self.assertEqual(inst.remaining_amount, Decimal('1000000'))
 
-    def test_mark_paid_updates_booking(self):
+    def test_mark_paid_updates_booking_after_verification(self):
         inst = self.plan.installments.first()
         before = self.booking.advance_paid
         resp = self.client.post(reverse('installment-mark-paid', args=[inst.pk]),
                                 {'paid_date': date.today().isoformat()}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.advance_paid, before)
+        payment = Payment.objects.get(installment=inst, status='pending')
+        resp = self.client.post(
+            reverse('payment-verify', args=[payment.pk]),
+            {'action': 'verify'}, format='json',
+        )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.booking.refresh_from_db()
         self.assertGreater(self.booking.advance_paid, before)

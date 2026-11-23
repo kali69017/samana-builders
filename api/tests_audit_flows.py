@@ -9,6 +9,7 @@ from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -50,8 +51,16 @@ class AuditBase(APITestCase):
         )
         self.booking = Booking.objects.create(
             customer=self.customer, plot=self.plot, total_amount=Decimal('1000000'),
-            advance_paid=Decimal('100000'), status='confirmed', created_by=self.admin,
+            advance_paid=Decimal('0'), status='confirmed', created_by=self.admin,
         )
+        Payment.objects.create(
+            booking=self.booking, received_into=self.cash,
+            amount=Decimal('100000'), payment_date=date.today(),
+            payment_method='cash', payment_type='advance',
+            status='verified', verified_by=self.admin,
+            verified_at=timezone.now(), created_by=self.admin,
+        )
+        self.booking.refresh_from_db()
 
     def new_plot(self, number='AP-002', price='800000', status='available'):
         return Plot.objects.create(
@@ -141,8 +150,8 @@ class CustomerBookingPlotFlowTests(AuditBase):
             status='verified', created_by=self.admin,
         )
         self.customer.refresh_from_db()
-        # owed 2,000,000; verified payments = 50,000 (advance is not a payment row)
-        self.assertEqual(self.customer.current_balance, Decimal('1950000'))
+        # owed 2,000,000; verified payments = base 100,000 + 50,000
+        self.assertEqual(self.customer.current_balance, Decimal('1850000'))
 
     def test_customer_full_name_property(self):
         self.assertEqual(self.customer.full_name, 'Audit Customer')
@@ -599,7 +608,7 @@ class PaymentFlowTests(AuditBase):
     def test_full_payment_completes_booking(self):
         b = Booking.objects.create(
             customer=self.customer, plot=self.new_plot('AP-040'),
-            total_amount=Decimal('100000'), advance_paid=Decimal('50000'),
+            total_amount=Decimal('50000'), advance_paid=Decimal('0'),
             status='confirmed', created_by=self.admin,
         )
         p = Payment.objects.create(
@@ -891,78 +900,85 @@ class AuditLogFlowTests(AuditBase):
         self.assertTrue(AuditLog.objects.filter(model_name='Booking', action='cancel').exists())
 
 
-# ─── UPFRONT ADVANCE LEDGER CONSISTENCY ─────────────────────────────────────
-class UpfrontAdvanceLedgerTests(AuditBase):
-    """A booking created with an upfront advance must record that money as a
-    real verified Payment with a receipt — so the ledger, receipts, and
-    customer payment history agree with booking.advance_paid."""
+# ─── UPFRONT ADVANCE MAKER-CHECKER CONSISTENCY ──────────────────────────────
+class UpfrontAdvanceMakerCheckerTests(AuditBase):
+    """An upfront advance is a pending payment until someone verifies it."""
 
-    def test_api_booking_advance_creates_verified_payment(self):
-        from payments.models import Payment
-        plot = self.new_plot('AP-060')
-        resp = self.client.post(reverse('booking-list'), {
+    def create_api_booking(self, number, advance='250000'):
+        plot = self.new_plot(number)
+        response = self.client.post(reverse('booking-list'), {
             'customer': self.customer.pk, 'plot': plot.pk,
-            'total_amount': '1000000', 'advance_paid': '250000',
+            'total_amount': '1000000', 'advance_paid': advance,
             'source': 'walk_in',
         }, format='json')
-        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-        b = Booking.objects.get(plot=plot)
-        p = Payment.objects.filter(booking=b, status='verified').first()
-        self.assertIsNotNone(p)
-        self.assertEqual(p.amount, Decimal('250000'))
-        self.assertEqual(p.payment_type, 'down_payment')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        return Booking.objects.get(plot=plot)
 
-    def test_api_booking_advance_creates_receipt(self):
-        from payments.models import Payment, Receipt
-        plot = self.new_plot('AP-061')
-        self.client.post(reverse('booking-list'), {
-            'customer': self.customer.pk, 'plot': plot.pk,
-            'total_amount': '1000000', 'advance_paid': '250000',
-            'source': 'walk_in',
-        }, format='json')
-        b = Booking.objects.get(plot=plot)
-        p = Payment.objects.get(booking=b)
-        self.assertTrue(p.receipts.exists())
-        self.assertTrue(p.receipt_generated)
+    def verify(self, payment):
+        response = self.client.post(
+            reverse('payment-verify', args=[payment.pk]),
+            {'action': 'verify'}, format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_api_booking_advance_creates_pending_payment(self):
+        booking = self.create_api_booking('AP-060')
+        payment = Payment.objects.get(booking=booking)
+        self.assertEqual(payment.status, 'pending')
+        self.assertEqual(payment.amount, Decimal('250000'))
+        self.assertEqual(payment.payment_type, 'down_payment')
+        self.assertIsNone(payment.verified_by)
+        self.assertEqual(booking.advance_paid, Decimal('0'))
+
+    def test_api_booking_advance_has_no_receipt_or_voucher_until_verified(self):
+        from finance.models import Voucher
+        booking = self.create_api_booking('AP-061')
+        payment = Payment.objects.get(booking=booking)
+        self.assertFalse(payment.receipts.exists())
+        self.assertFalse(Voucher.objects.filter(
+            reference_type='Payment', reference_id=payment.pk).exists())
+        self.verify(payment)
+        payment.refresh_from_db()
+        booking.refresh_from_db()
+        self.assertEqual(payment.status, 'verified')
+        self.assertEqual(payment.receipts.count(), 1)
+        self.assertEqual(Voucher.objects.filter(
+            reference_type='Payment', reference_id=payment.pk,
+            status='posted').count(), 1)
+        self.assertEqual(booking.advance_paid, Decimal('250000'))
 
     def test_api_booking_zero_advance_creates_no_payment(self):
-        from payments.models import Payment
-        plot = self.new_plot('AP-062')
-        self.client.post(reverse('booking-list'), {
-            'customer': self.customer.pk, 'plot': plot.pk,
-            'total_amount': '1000000', 'advance_paid': '0',
-            'source': 'walk_in',
-        }, format='json')
-        b = Booking.objects.get(plot=plot)
-        self.assertFalse(Payment.objects.filter(booking=b).exists())
+        booking = self.create_api_booking('AP-062', advance='0')
+        self.assertFalse(Payment.objects.filter(booking=booking).exists())
 
-    def test_api_booking_advance_keeps_customer_balance_consistent(self):
-        from payments.models import Payment
-        plot = self.new_plot('AP-063')
-        self.client.post(reverse('booking-list'), {
-            'customer': self.customer.pk, 'plot': plot.pk,
-            'total_amount': '1000000', 'advance_paid': '250000',
-            'source': 'walk_in',
-        }, format='json')
-        b = Booking.objects.get(plot=plot)
-        paid_sum = sum(p.amount for p in Payment.objects.filter(
-            booking=b, status='verified'))
-        self.assertEqual(b.advance_paid, paid_sum)
-        self.assertEqual(b.remaining_balance, Decimal('750000'))
+    def test_api_booking_advance_stays_out_of_balance_until_verified(self):
+        booking = self.create_api_booking('AP-063')
+        self.assertEqual(booking.advance_paid, Decimal('0'))
+        self.assertEqual(booking.remaining_balance, Decimal('1000000'))
+        payment = Payment.objects.get(booking=booking)
+        self.verify(payment)
+        booking.refresh_from_db()
+        self.assertEqual(booking.advance_paid, Decimal('250000'))
+        self.assertEqual(booking.remaining_balance, Decimal('750000'))
 
-    def test_web_booking_advance_creates_payment_and_receipt(self):
-        from payments.models import Payment
+    def test_web_booking_advance_creates_pending_payment(self):
         plot = self.new_plot('AP-064')
         # Web views need a real session login, not DRF token auth.
         self.client.force_login(self.admin)
-        resp = self.client.post('/bookings/create/', {
+        response = self.client.post('/bookings/create/', {
             'customer': self.customer.pk, 'plot': plot.pk,
             'total_amount': '1000000', 'advance_paid': '100000',
             'source': 'walk_in',
         })
-        self.assertIn(resp.status_code, (200, 302))
-        b = Booking.objects.get(plot=plot)
-        p = Payment.objects.filter(booking=b, status='verified').first()
-        self.assertIsNotNone(p)
-        self.assertEqual(p.amount, Decimal('100000'))
-        self.assertTrue(p.receipts.exists())
+        self.assertIn(response.status_code, (200, 302))
+        booking = Booking.objects.get(plot=plot)
+        payment = Payment.objects.get(booking=booking)
+        self.assertEqual(payment.status, 'pending')
+        self.assertEqual(payment.amount, Decimal('100000'))
+        self.assertEqual(booking.advance_paid, Decimal('0'))
+        self.assertFalse(payment.receipts.exists())
+        self.verify(payment)
+        payment.refresh_from_db()
+        booking.refresh_from_db()
+        self.assertEqual(booking.advance_paid, Decimal('100000'))
+        self.assertTrue(payment.receipts.exists())

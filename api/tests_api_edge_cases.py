@@ -98,7 +98,7 @@ class InstallmentApiEdgeTests(ApiEdgeBase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(len(resp.data), 3)
 
-    def test_installment_mark_paid_creates_partial(self):
+    def test_installment_mark_paid_creates_partial_after_verification(self):
         plan = InstallmentPlan.objects.create(booking=self.booking, total_installments=1,
                                               installment_amount=Decimal('1000000'),
                                               down_payment_amount=Decimal('0'),
@@ -109,7 +109,17 @@ class InstallmentApiEdgeTests(ApiEdgeBase):
                                 {'paid_amount': '400000'}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         inst.refresh_from_db()
+        self.assertEqual(inst.status, 'pending')
+        self.assertEqual(inst.paid_amount, Decimal('0'))
+        payment = Payment.objects.get(installment=inst, status='pending')
+        resp = self.client.post(
+            reverse('payment-verify', args=[payment.pk]),
+            {'action': 'verify'}, format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        inst.refresh_from_db()
         self.assertEqual(inst.status, 'partial')
+        self.assertEqual(inst.paid_amount, Decimal('400000'))
 
 
 # ─── CUSTOMER API ────────────────────────────────────────────────────────────

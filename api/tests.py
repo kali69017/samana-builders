@@ -236,6 +236,14 @@ class InstallmentApiTests(ApiBaseTestCase):
         resp = self.client.post(reverse('installment-mark-paid', args=[inst.pk]), {'paid_date': date.today().isoformat()}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         inst.refresh_from_db()
+        self.assertEqual(inst.status, 'pending')
+        payment = Payment.objects.get(installment=inst, status='pending')
+        resp = self.client.post(
+            reverse('payment-verify', args=[payment.pk]),
+            {'action': 'verify'}, format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        inst.refresh_from_db()
         self.assertEqual(inst.status, 'paid')
 
     def test_installment_filter_by_plan(self):

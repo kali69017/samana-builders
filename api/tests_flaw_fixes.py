@@ -160,12 +160,25 @@ class InstallmentMarkPaidTests(FlawFixBase):
         self.plan.auto_generate()
         self.inst = self.plan.installments.first()
 
-    def test_mark_paid_creates_payment_row(self):
+    def verify(self, payment):
+        return self.client.post(
+            reverse('payment-verify', args=[payment.pk]),
+            {'action': 'verify'}, format='json',
+        )
+
+    def test_mark_paid_creates_pending_payment_then_verify_marks_it_paid(self):
         resp = self.client.post(reverse('installment-mark-paid', args=[self.inst.pk]),
                                 {'paid_date': date.today().isoformat()}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertTrue(Payment.objects.filter(
-            booking=self.booking, installment=self.inst, status='verified').exists())
+        payment = Payment.objects.get(booking=self.booking, installment=self.inst)
+        self.assertEqual(payment.status, 'pending')
+        self.inst.refresh_from_db()
+        self.assertEqual(self.inst.paid_amount, Decimal('0'))
+        self.verify(payment)
+        payment.refresh_from_db()
+        self.inst.refresh_from_db()
+        self.assertEqual(payment.status, 'verified')
+        self.assertEqual(self.inst.paid_amount, self.inst.amount)
 
     def test_mark_paid_negative_rejected(self):
         resp = self.client.post(reverse('installment-mark-paid', args=[self.inst.pk]),
@@ -177,21 +190,33 @@ class InstallmentMarkPaidTests(FlawFixBase):
                                 {'paid_amount': '99999999'}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_mark_paid_partial_sets_partial_status(self):
+    def test_mark_paid_partial_sets_partial_status_after_verify(self):
         resp = self.client.post(reverse('installment-mark-paid', args=[self.inst.pk]),
                                 {'paid_amount': '400000'}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.inst.refresh_from_db()
+        self.assertEqual(self.inst.status, 'pending')
+        self.assertEqual(self.inst.paid_amount, Decimal('0'))
+        payment = Payment.objects.get(booking=self.booking, installment=self.inst)
+        self.verify(payment)
+        self.inst.refresh_from_db()
         self.assertEqual(self.inst.status, 'partial')
         self.assertEqual(self.inst.paid_amount, Decimal('400000'))
 
-    def test_mark_paid_full_completes_booking(self):
+    def test_mark_paid_full_completes_booking_after_verify(self):
         # down_payment 2M + 3 installments of 1M = 5M total
-        self.booking.advance_paid = Decimal('2000000')
-        self.booking.save()
+        Payment.objects.create(
+            booking=self.booking, received_into=self.cash,
+            amount=Decimal('2000000'), payment_date=date.today(),
+            payment_method='cash', payment_type='down_payment',
+            status='verified', verified_by=self.admin,
+            created_by=self.admin,
+        )
         for inst in self.plan.installments.all():
             self.client.post(reverse('installment-mark-paid', args=[inst.pk]),
                              {'paid_date': date.today().isoformat()}, format='json')
+            payment = Payment.objects.get(installment=inst, status='pending')
+            self.verify(payment)
         self.booking.refresh_from_db()
         self.assertEqual(self.booking.status, 'completed')
         self.assertEqual(self.booking.advance_paid, self.booking.total_amount)
@@ -429,11 +454,15 @@ class ReservationConversionTests(FlawFixBase):
         reservation.refresh_from_db()
         self.assertEqual(reservation.status, 'converted')
 
-    def test_convert_sets_advance_from_token(self):
+    def test_convert_creates_pending_payment_from_token(self):
         reservation = self.make_reservation()
         resp = self.client.post(reverse('reservation-convert', args=[reservation.pk]), format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(Decimal(str(resp.data['advance_paid'])), Decimal('500000'))
+        self.assertEqual(Decimal(str(resp.data['advance_paid'])), Decimal('0'))
+        booking = Booking.objects.get(pk=resp.data['id'])
+        payment = Payment.objects.get(booking=booking)
+        self.assertEqual(payment.status, 'pending')
+        self.assertEqual(payment.amount, reservation.token_amount)
 
     def test_convert_non_active_reservation_rejected(self):
         reservation = self.make_reservation(status='expired')

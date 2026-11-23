@@ -655,14 +655,13 @@ class AccountTransactionTests(MoneyBase):
 class MoneyConsistencyTests(MoneyBase):
     """The money must always add up across booking, plan, payments, receipts."""
 
-    def test_advance_equals_verified_payments_plus_initial(self):
-        initial = self.booking.advance_paid
+    def test_advance_equals_verified_payments_only(self):
         p1 = self.make_payment(amount='20000', status='pending')
         p2 = self.make_payment(amount='30000', status='pending')
         self.verify(p1)
         self.verify(p2)
         self.booking.refresh_from_db()
-        self.assertEqual(self.booking.advance_paid, initial + Decimal('50000'))
+        self.assertEqual(self.booking.advance_paid, Decimal('50000'))
 
     def test_receipts_match_verified_payments(self):
         p1 = self.make_payment(amount='20000', status='pending')
