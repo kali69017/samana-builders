@@ -443,6 +443,7 @@ After a receipt voucher exists, amount, booking, cash or bank account, payment d
 - `f341439`: use reporting service in peripheral consumers.
 - `fc36431`: lock payment date and method after posting.
 - `3fdefd6`: remove unused account transaction API code.
+- `e1df71f`: cover integrity check failure paths.
 
 ### Verification and remaining points
 

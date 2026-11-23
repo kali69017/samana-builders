@@ -674,7 +674,11 @@ This reverses the earlier no-delete rule for a narrow case. Only manual vouchers
 - Sales can create a pending payment from the web form and the API. Sales still cannot verify payments or open the payment list.
 - A pending payment creates no receipt, no voucher and no notification. Those effects apply on the verified transition.
 - Tests cover web and API creation for management, sales, accounts, admin and super_admin. Every role gets a pending payment.
-- Remaining verified-payment creation points outside the verify action are reported below and were not changed in this stage.
+- Remaining verified-payment creation points outside the verify action were not changed in this stage:
+  - Web booking create auto advance in `core/views.py`.
+  - Booking API create auto advance in `bookings/api_views.py`.
+  - Installment `mark_paid` API action in `bookings/api_views.py`.
+  - Demo and test scripts that insert verified payments directly.
 
 ### Reversal head is decided when reversing
 
