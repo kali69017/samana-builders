@@ -213,6 +213,14 @@ class PaymentAdminPermissionTests(MakerCheckerBase, TestCase):
         self.assertTrue(self.model_admin.has_view_permission(request))
         self.assertTrue(self.model_admin.has_change_permission(request))
 
+    def test_posted_payment_admin_readonly_fields(self):
+        accounts = self.make_user('admin_readonly_accounts', 'accounts')
+        payment = self.make_payment(status_value='verified')
+        request = self.request_for(accounts)
+        readonly = self.model_admin.get_readonly_fields(request, payment)
+        for field in ('amount', 'booking', 'received_into', 'payment_date', 'payment_method'):
+            self.assertIn(field, readonly)
+
 
 class PaymentCreationStatusTests(MakerCheckerBase, TestCase):
     ROLES = [

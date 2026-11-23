@@ -66,6 +66,10 @@ class PaymentForm(forms.ModelForm):
                 changed = True
             if 'received_into' in cleaned and cleaned['received_into'].pk != self.instance.received_into_id:
                 changed = True
+            if 'payment_date' in cleaned and cleaned['payment_date'] != self.instance.payment_date:
+                changed = True
+            if 'payment_method' in cleaned and cleaned['payment_method'] != self.instance.payment_method:
+                changed = True
             if changed:
                 raise forms.ValidationError(
                     'A posted payment cannot be changed. '

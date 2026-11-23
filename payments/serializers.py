@@ -165,7 +165,9 @@ class PaymentSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         if self.instance and self.instance.pk and self.instance._posted_receipt_exists():
-            protected = {'amount', 'booking', 'received_into'} & set(attrs)
+            protected = {
+                'amount', 'booking', 'received_into', 'payment_date', 'payment_method',
+            } & set(attrs)
             if protected:
                 raise serializers.ValidationError(
                     'A posted payment cannot be changed. '

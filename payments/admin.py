@@ -58,7 +58,9 @@ class PaymentAdmin(admin.ModelAdmin):
     def get_readonly_fields(self, request, obj=None):
         readonly = list(super().get_readonly_fields(request, obj))
         if obj and obj.pk and obj._posted_receipt_exists():
-            readonly.extend(['amount', 'booking', 'received_into'])
+            readonly.extend([
+                'amount', 'booking', 'received_into', 'payment_date', 'payment_method',
+            ])
         return readonly
 
     def _is_payment_verifier(self, request):

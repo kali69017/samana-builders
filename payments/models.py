@@ -10,6 +10,7 @@ class PaymentQuerySet(models.QuerySet):
     def update(self, **kwargs):
         protected = {
             'amount', 'booking', 'booking_id', 'received_into', 'received_into_id',
+            'payment_date', 'payment_method',
         } & set(kwargs)
         if protected:
             from django.core.exceptions import ValidationError
@@ -104,10 +105,16 @@ class Payment(models.Model):
     def _assert_posted_payment_immutable(self, previous):
         if not previous or not self._posted_receipt_exists():
             return
+        new_payment_date = self.payment_date
+        if isinstance(new_payment_date, str):
+            from django.utils.dateparse import parse_date
+            new_payment_date = parse_date(new_payment_date)
         if (
             previous['amount'] != self.amount
             or previous['booking_id'] != self.booking_id
             or previous['received_into_id'] != self.received_into_id
+            or previous['payment_date'] != new_payment_date
+            or previous['payment_method'] != self.payment_method
         ):
             from django.core.exceptions import ValidationError
             raise ValidationError(
@@ -120,7 +127,8 @@ class Payment(models.Model):
         previous_status = None
         if self.pk:
             previous = Payment.objects.filter(pk=self.pk).values(
-                'status', 'amount', 'booking_id', 'received_into_id').first()
+                'status', 'amount', 'booking_id', 'received_into_id',
+                'payment_date', 'payment_method').first()
             if previous:
                 previous_status = previous['status']
                 self._assert_posted_payment_immutable(previous)

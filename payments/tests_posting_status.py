@@ -1,4 +1,4 @@
-from datetime import date
+﻿from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth.models import User
@@ -14,6 +14,7 @@ from rest_framework.test import APITestCase
 from bookings.models import Booking
 from customers.models import Customer
 from finance.models import AccountHead, Voucher, VoucherLine
+from payments.forms import PaymentForm
 from payments.models import Payment, Receipt
 from properties.models import Plot, Project
 
@@ -224,12 +225,43 @@ class PaymentPostingModelTests(PaymentPostingBase, TestCase):
         with self.assertRaises(ValidationError):
             payment.save()
 
+    def test_posted_payment_date_cannot_change(self):
+        payment = self.make_payment(status_value='verified')
+        payment.payment_date = date.today() - timedelta(days=1)
+        with self.assertRaises(ValidationError):
+            payment.save()
+
+    def test_posted_payment_method_cannot_change(self):
+        payment = self.make_payment(status_value='verified')
+        payment.payment_method = 'bank_transfer'
+        with self.assertRaises(ValidationError):
+            payment.save()
+
+    def test_posted_payment_form_blocks_date_and_method(self):
+        payment = self.make_payment(status_value='verified')
+        form = PaymentForm(instance=payment, data={
+            'booking': self.booking.pk,
+            'received_into': self.bank.pk,
+            'amount': '100',
+            'payment_date': (date.today() - timedelta(days=1)).isoformat(),
+            'payment_method': 'bank_transfer',
+            'payment_type': 'advance',
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn('posted payment', str(form.non_field_errors()).lower())
+
     def test_queryset_update_blocks_posted_payment_fields(self):
         payment = self.make_payment(status_value='verified')
-        with self.assertRaises(ValidationError):
-            Payment.objects.filter(pk=payment.pk).update(amount=Decimal('200'))
+        for kwargs in (
+            {'amount': Decimal('200')},
+            {'payment_date': date.today() - timedelta(days=1)},
+            {'payment_method': 'bank_transfer'},
+        ):
+            with self.assertRaises(ValidationError):
+                Payment.objects.filter(pk=payment.pk).update(**kwargs)
         payment.refresh_from_db()
         self.assertEqual(payment.amount, Decimal('100'))
+        self.assertEqual(payment.payment_method, 'cash')
 
 
 class PaymentPostingAPITests(PaymentPostingBase, APITestCase):
@@ -305,3 +337,16 @@ class PaymentPostingAPITests(PaymentPostingBase, APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         payment.refresh_from_db()
         self.assertEqual(payment.amount, Decimal('100'))
+
+    def test_api_update_blocks_posted_payment_date_and_method(self):
+        payment = self.create_pending_api_payment()
+        self.client.post(
+            reverse('payment-verify', args=[payment.pk]), {'action': 'verify'}, format='json')
+        for payload in (
+            {'payment_date': (date.today() - timedelta(days=1)).isoformat()},
+            {'payment_method': 'bank_transfer'},
+        ):
+            response = self.client.patch(
+                reverse('payment-detail', args=[payment.pk]), payload, format='json')
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
