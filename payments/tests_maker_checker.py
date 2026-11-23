@@ -11,7 +11,8 @@ from rest_framework.test import APIClient
 from bookings.models import Booking
 from core.models import AuditLog, UserProfile
 from customers.models import Customer
-from finance.models import AccountHead
+from finance.models import AccountHead, Voucher
+from notifications.models import NotificationLog
 from payments.admin import PaymentAdmin
 from payments.models import Payment
 from properties.models import Plot, Project
@@ -211,3 +212,79 @@ class PaymentAdminPermissionTests(MakerCheckerBase, TestCase):
         self.assertTrue(self.model_admin.has_module_permission(request))
         self.assertTrue(self.model_admin.has_view_permission(request))
         self.assertTrue(self.model_admin.has_change_permission(request))
+
+
+class PaymentCreationStatusTests(MakerCheckerBase, TestCase):
+    ROLES = [
+        ('super_admin', True),
+        ('admin', False),
+        ('management', False),
+        ('accounts', False),
+        ('sales', False),
+    ]
+
+    def setUp(self):
+        super().setUp()
+        self.client = Client()
+
+    def test_web_create_is_pending_for_each_role(self):
+        for index, (role, superuser) in enumerate(self.ROLES):
+            user = self.make_user(f'create_web_{role}', role, superuser=superuser)
+            self.client.force_login(user)
+            amount = 100 + index
+            note = f'create-web-{role}'
+            response = self.client.post(reverse('payment_create'), {
+                'booking': self.booking.pk,
+                'received_into': self.cash.pk,
+                'amount': str(amount),
+                'payment_date': date.today().isoformat(),
+                'payment_method': 'cash',
+                'payment_type': 'advance',
+                'notes': note,
+            })
+            self.assertEqual(response.status_code, 302, role)
+            payment = Payment.objects.get(booking=self.booking, notes=note)
+            self.assertEqual(payment.amount, Decimal(str(amount)), role)
+            self.assertEqual(payment.status, 'pending', role)
+            self.assertIsNone(payment.verified_by, role)
+            self.assertIsNone(payment.verified_at, role)
+            self.assertFalse(payment.receipts.exists(), role)
+            self.assertFalse(Voucher.objects.filter(
+                reference_type='Payment', reference_id=payment.pk).exists(), role)
+            self.assertFalse(NotificationLog.objects.filter(
+                related_payment_id=payment.payment_id).exists(), role)
+
+
+class PaymentCreationAPICreationTests(MakerCheckerBase, TestCase):
+    ROLES = PaymentCreationStatusTests.ROLES
+
+    def setUp(self):
+        super().setUp()
+        self.client = APIClient()
+
+    def test_api_create_is_pending_for_each_role(self):
+        for index, (role, superuser) in enumerate(self.ROLES):
+            user = self.make_user(f'create_api_{role}', role, superuser=superuser)
+            self.client.force_authenticate(user=user)
+            amount = 200 + index
+            note = f'create-api-{role}'
+            response = self.client.post(reverse('payment-list'), {
+                'booking': self.booking.pk,
+                'received_into': self.cash.pk,
+                'amount': str(amount),
+                'payment_date': date.today().isoformat(),
+                'payment_method': 'cash',
+                'payment_type': 'advance',
+                'notes': note,
+            }, format='json')
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED, role)
+            payment = Payment.objects.get(booking=self.booking, notes=note)
+            self.assertEqual(payment.amount, Decimal(str(amount)), role)
+            self.assertEqual(payment.status, 'pending', role)
+            self.assertIsNone(payment.verified_by, role)
+            self.assertIsNone(payment.verified_at, role)
+            self.assertFalse(payment.receipts.exists(), role)
+            self.assertFalse(Voucher.objects.filter(
+                reference_type='Payment', reference_id=payment.pk).exists(), role)
+            self.assertFalse(NotificationLog.objects.filter(
+                related_payment_id=payment.payment_id).exists(), role)

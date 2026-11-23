@@ -146,7 +146,7 @@ async function countLedgerRefund(request: APIRequestContext, refundId: number): 
 // PAY-HP — happy path
 // ================================================================================
 test.describe('PAY-HP', () => {
-  test('PAY-HP-01 — Record payment (web) verifies immediately', async ({ request }) => {
+  test('PAY-HP-01 — Record payment (web) creates pending, then verify applies effects', async ({ request }) => {
     const token = await login(request, 'admin');
     const fx = await seedFixture(request, token); // total 1,000,000, 1 installment 500,000
 
@@ -161,6 +161,17 @@ test.describe('PAY-HP', () => {
     });
     expect(res.status()).toBe(302);
 
+    const pending = (await getPayments(request, fx.bookingId))[0];
+    expect(pending.status).toBe('pending');
+    expect(pending.verified_by_name).toBeNull();
+    expect(await findReceipts(request, pending.id)).toHaveLength(0);
+    expect((await getBooking(request, fx.bookingId)).advance_paid).toBe('0.00');
+
+    const verify = await request.post(`/payments/${pending.id}/verify/`, {
+      headers: { 'X-CSRFToken': token }, maxRedirects: 0,
+    });
+    expect(verify.status()).toBe(302);
+
     const b = await getBooking(request, fx.bookingId);
     expect(b.advance_paid).toBe('300000.00');
     const inst = await getInstallment(request, fx.installmentId!);
@@ -169,7 +180,7 @@ test.describe('PAY-HP', () => {
 
     const pays = await getPayments(request, fx.bookingId);
     expect(pays).toHaveLength(1);
-    expect(pays[0].status).toBe('verified'); // NOT pending
+    expect(pays[0].status).toBe('verified');
     expect(pays[0].receipt_generated).toBe(true);
 
     const receipts = await findReceipts(request, pays[0].id);
@@ -483,6 +494,12 @@ test.describe('PAY-EC', () => {
       maxRedirects: 0,
     });
     expect(res.status()).toBe(302);
+    const pending = (await getPayments(request, fx.bookingId))[0];
+    expect(pending.status).toBe('pending');
+    expect((await getBooking(request, fx.bookingId)).advance_paid).toBe('0.00');
+    await request.post(`/payments/${pending.id}/verify/`, {
+      headers: { 'X-CSRFToken': token }, maxRedirects: 0,
+    });
     // Server caps advance_paid at total_amount (no negative remaining balance).
     expect((await getBooking(request, fx.bookingId)).advance_paid).toBe('1000000.00');
   });

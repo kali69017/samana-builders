@@ -97,10 +97,12 @@ class PaymentViewTest(TestCase):
         self.assertEqual(Payment.objects.count(), 1)
 
         payment = Payment.objects.get()
-        self.assertEqual(payment.status, 'verified')
+        self.assertEqual(payment.status, 'pending')
+        self.assertIsNone(payment.verified_by)
+        self.assertFalse(payment.receipts.exists())
 
         self.booking.refresh_from_db()
-        self.assertEqual(self.booking.advance_paid, Decimal('100000'))
+        self.assertEqual(self.booking.advance_paid, Decimal('0'))
 
 
 class ReceiptTest(TestCase):

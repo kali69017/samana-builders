@@ -16,7 +16,7 @@ from bookings.models import Booking, InstallmentPlan, Installment
 from core.models import AuditLog, Agent, CompanySettings, UserProfile
 from customers.models import Customer, CustomerNominee
 from expenses.models import Expense
-from finance.models import AccountHead
+from finance.models import AccountHead, Voucher
 from hr.models import Department, Designation, Employee
 from notifications.models import NotificationLog, NotificationPreference
 from payments.models import Payment, Receipt
@@ -247,7 +247,7 @@ class WebFormSubmitTests(WebBase):
         # 100K - 75K actual advance = 25K spread over 12 installments
         self.assertEqual(total, Decimal('24999.96'))
 
-    def test_payment_create_form_marks_verified(self):
+    def test_payment_create_form_creates_pending_payment(self):
         resp = self.client.post('/payments/create/', {
             'booking': self.booking.pk, 'received_into': self.cash.pk, 'amount': '20000',
             'payment_date': date.today().isoformat(),
@@ -256,8 +256,14 @@ class WebFormSubmitTests(WebBase):
         self.assertIn(resp.status_code, (200, 302))
         p = Payment.objects.filter(booking=self.booking, amount=Decimal('20000')).first()
         self.assertIsNotNone(p)
-        self.assertEqual(p.status, 'verified')
-        self.assertTrue(p.receipts.exists())
+        self.assertEqual(p.status, 'pending')
+        self.assertIsNone(p.verified_by)
+        self.assertIsNone(p.verified_at)
+        self.assertFalse(p.receipts.exists())
+        self.assertFalse(Voucher.objects.filter(
+            reference_type='Payment', reference_id=p.pk).exists())
+        self.assertFalse(NotificationLog.objects.filter(
+            related_payment_id=p.payment_id).exists())
 
     def test_payment_create_form_duplicate_blocked(self):
         self.client.post('/payments/create/', {

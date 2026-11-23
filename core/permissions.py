@@ -27,6 +27,7 @@ HR_MANAGEMENT_ROLES = (SUPER_ADMIN, ADMIN, MANAGEMENT, HR)
 PAYROLL_ROLES = (SUPER_ADMIN, ADMIN, MANAGEMENT, HR, ACCOUNTS)
 # Payment verification is maker-checker: accounts, admin and super_admin only.
 PAYMENT_VERIFIER_ROLES = (SUPER_ADMIN, ADMIN, ACCOUNTS)
+PAYMENT_CREATE_ROLES = (SUPER_ADMIN, ADMIN, MANAGEMENT, ACCOUNTS, SALES)
 # Roles with ordinary ERP view access. Limited view-only roles are added below.
 BASE_VIEW_ROLES = (
     SUPER_ADMIN, ADMIN, MANAGEMENT, ACCOUNTS, SALES, HR, STAFF,
@@ -198,6 +199,21 @@ def payments_access(view_func):
         messages.error(request, 'You do not have permission to access this page.')
         return redirect('dashboard')
     return wrapper
+
+def payment_create_access(view_func):
+    """Allow recording a pending payment, including sales."""
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect('login')
+        if request.user.is_superuser:
+            return view_func(request, *args, **kwargs)
+        if hasattr(request.user, 'profile') and request.user.profile.role in PAYMENT_CREATE_ROLES:
+            return view_func(request, *args, **kwargs)
+        messages.error(request, 'You do not have permission to access this page.')
+        return redirect('dashboard')
+    return wrapper
+
 
 def hr_required(view_func):
     """Allow HR management: super_admin, admin, management and HR roles."""

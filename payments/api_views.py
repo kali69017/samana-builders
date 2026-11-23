@@ -22,6 +22,10 @@ class IsStaffReadAdminWrite(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             from core.permissions import user_role_allows
             return user_role_allows(request, ('super_admin', 'admin', 'management', 'accounts'))
+        if request.method == 'POST' and getattr(view, 'action', None) == 'create':
+            from core.permissions import user_role_allows
+            return user_role_allows(
+                request, ('super_admin', 'admin', 'management', 'accounts', 'sales'))
         if request.user.is_superuser:
             return True
         if hasattr(request.user, 'profile'):

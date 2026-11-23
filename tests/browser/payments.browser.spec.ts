@@ -206,7 +206,18 @@ test.describe('PAY-BR-HP', () => {
     await page.getByRole('button', { name: 'Receive Payment' }).click();
 
     await expect(page).toHaveURL(/\/payments\/$/);
-    await expect(page.getByText(/recorded successfully/)).toBeVisible();
+    await expect(page.getByText(/pending verification/)).toBeVisible();
+
+    const pending = (await getPayments(request, fx.bookingId))[0];
+    expect(pending.status).toBe('pending');
+    expect(pending.verified_by_name).toBeNull();
+    expect((await getBooking(request, fx.bookingId)).advance_paid).toBe('0.00');
+    expect(await findReceipts(request, pending.id)).toHaveLength(0);
+
+    await page.goto(`/payments/${pending.id}/`);
+    acceptDialogs(page);
+    await page.getByRole('button', { name: 'Verify' }).click();
+    await expect(page.getByText('Verified', { exact: true }).first()).toBeVisible();
 
     // Cross-table verification (exact Decimal strings).
     const pays = await getPayments(request, fx.bookingId);

@@ -19,7 +19,7 @@ from .forms import UserForm, UserProfileForm, CreateUserForm, UserEditForm, Rest
 from .permissions import (
     role_required, super_admin_required, admin_or_above,
     management_or_above, finance_or_above, payments_access, get_user_role,
-    PROPERTY_VIEW_ROLES, AI_VIEW_ROLES,
+    payment_create_access, PROPERTY_VIEW_ROLES, AI_VIEW_ROLES,
 )
 from customers.models import Customer, CustomerNominee
 from properties.models import Project, Plot
@@ -1814,7 +1814,7 @@ def _find_existing_payment(idempotency_key):
 
 
 @login_required
-@payments_access
+@payment_create_access
 @transaction.atomic
 @never_cache
 def payment_create_view(request):
@@ -1840,9 +1840,9 @@ def payment_create_view(request):
                 return redirect('payment_detail', pk=existing.pk)
             payment.idempotency_key = idem_key or None
             payment.created_by = request.user
-            payment.status = 'verified'
-            payment.verified_by = request.user
-            payment.verified_at = timezone.now()
+            payment.status = 'pending'
+            payment.verified_by = None
+            payment.verified_at = None
 
             # ── VALIDATION: installment must belong to this booking ──────────
             if payment.installment:
@@ -1873,44 +1873,6 @@ def payment_create_view(request):
             try:
                 with transaction.atomic():
                     payment.save()
-
-                    # Update installment if linked
-                    if payment.installment:
-                        installment = payment.installment
-                        installment_total = installment.amount + installment.late_fee
-                        remaining_before = installment_total - installment.paid_amount
-                    
-                        # Track overpayment
-                        overpayment = 0
-                        if payment.amount > remaining_before:
-                            overpayment = payment.amount - remaining_before
-                            payment.unallocated_amount = overpayment
-                            payment.save(update_fields=['unallocated_amount'])
-                            installment.paid_amount = installment_total
-                        else:
-                            installment.paid_amount += payment.amount
-                    
-                        if installment.paid_amount >= installment_total:
-                            installment.status = 'paid'
-                            installment.paid_date = payment.payment_date
-                        elif installment.paid_amount > 0:
-                            installment.status = 'partial'
-                        installment.save()
-
-                    # Update booking advance (capped at total_amount)
-                    booking = payment.booking
-                    new_advance = booking.advance_paid + payment.amount
-                    if new_advance > booking.total_amount:
-                        new_advance = booking.total_amount
-                    booking.advance_paid = new_advance
-                    if booking.remaining_balance <= 0:
-                        booking.status = 'completed'
-                    booking.save()
-
-                    # Recalculate the installment plan so unpaid installments
-                    # reflect the new remaining balance.
-                    if hasattr(booking, 'installment_plan') and booking.installment_plan:
-                        booking.installment_plan.recalculate()
 
             except IntegrityError:
                 existing = _find_existing_payment(idem_key)
@@ -1945,9 +1907,11 @@ def payment_create_view(request):
                 description=f'Created payment {payment.payment_id} for booking {payment.booking.booking_id}'
             )
 
-            receipt = payment.receipts.order_by('id').first()
-            receipt_number = receipt.receipt_number if receipt else 'not generated'
-            messages.success(request, f'Payment {payment.payment_id} recorded successfully! Receipt {receipt_number}.')
+            messages.success(
+                request,
+                f'Payment {payment.payment_id} recorded as pending verification.')
+            if get_user_role(request) == 'sales':
+                return redirect('dashboard')
             return redirect('payments')
     else:
         form = PaymentForm(initial={'idempotency_key': uuid4().hex})
